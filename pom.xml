@@ -1,46 +1,345 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.1</version>
+        <version>3.5.7</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
+    <packaging>pom</packaging>
     <groupId>com.mygroup</groupId>
     <artifactId>csmall</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>csmall</name>
     <description>csmall</description>
-    <url/>
-    <licenses>
-        <license/>
-    </licenses>
-    <developers>
-        <developer/>
-    </developers>
-    <scm>
-        <connection/>
-        <developerConnection/>
-        <tag/>
-        <url/>
-    </scm>
+
+    <modules>
+        <!--聚合执行命令会因为leaf存在失败-->
+        <module>mall-leaf</module>                   <!-- ID生成服务：分布式ID生成器，为系统提供全局唯一ID -->
+        <module>mall-sso</module>                    <!-- 单点登录服务：统一身份认证和登录 -->
+        <module>mall-common</module>                 <!-- 公共组件服务：包含通用配置、工具类、异常处理等 -->
+        <module>mall-ams</module>                    <!-- 后台管理服务：管理员账户、角色权限管理 -->
+        <module>mall-pojo</module>                   <!-- 数据模型服务：存放实体类、DTO、VO等数据传输对象 -->
+        <module>mall-resource</module>               <!-- 资源服务：文件上传、图片管理等静态资源处理 -->
+        <module>mall-product</module>                <!-- 商品服务：商品信息管理，包括SPU/SKU、品牌、分类等 -->
+        <module>mall-ums</module>                    <!-- 用户管理服务：普通用户账户、收货地址、积分等管理 -->
+        <module>mall-front</module>                  <!-- 前端服务：面向用户的功能接口，商品展示、分类浏览等 -->
+        <module>mall-order</module>                  <!-- 订单服务：购物车、订单处理、支付流程管理 -->
+        <module>mall-search</module>                 <!-- 搜索服务：基于Elasticsearch的商品搜索功能 -->
+        <module>mall-seckill</module>                <!-- 秒杀服务：限时抢购、促销活动功能 -->
+        <module>mall-gateway-server</module>         <!-- API网关服务：统一入口、路由转发、鉴权等 -->
+    </modules>
+
+
     <properties>
         <java.version>17</java.version>
+        <mall-pojo.version>1.0.0</mall-pojo.version>
+        <mall-common.version>1.0.0</mall-common.version>
+        <mall-mapper.version>1.0.0</mall-mapper.version>
+        <mall-service.version>1.0.0</mall-service.version>
+        <mall-product-service.version>1.0.0</mall-product-service.version>
+        <spring-cloud.version>2023.0.3</spring-cloud.version> <!-- 修改：使用兼容Spring Boot 3.5.7的Spring Cloud版本 -->
+        <spring-cloud-alibaba.version>2023.0.3.0</spring-cloud-alibaba.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
+        <spring-boot.version>3.5.7</spring-boot.version> <!-- 修改：统一为3.5.7，保持版本一致性 -->
+        <spring-boot-configuration-processor.version>3.5.7</spring-boot-configuration-processor.version> <!-- 修改：与Spring Boot主版本保持一致 -->
+        <spring-security-jwt.version>3.3.0</spring-security-jwt.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
+        <mybatis-spring-boot.version>3.0.3</mybatis-spring-boot.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
+        <mybaits-plus.version>3.5.8</mybaits-plus.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
+        <pagehelper-spring-boot.version>1.4.8</pagehelper-spring-boot.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
+        <mysql.version>8.4.0</mysql.version> <!-- 修改：使用最新稳定版本 -->
+        <lombok.version>1.18.34</lombok.version> <!-- 修改：使用最新稳定版本 -->
+        <knife4j-spring-boot.version>4.5.0</knife4j-spring-boot.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
+        <spring-rabbit-test.version>3.5.7</spring-rabbit-test.version> <!-- 修改：与Spring Boot主版本保持一致 -->
+        <spring-security-test.version>6.5.0</spring-security-test.version> <!-- 修改：与Spring Boot主版本保持一致 -->
+        <fastjson.version>2.0.53</fastjson.version> <!-- 修改：使用FastJSON 2.x最新稳定版本 -->
+        <druid.version>1.2.24</druid.version> <!-- 修改：使用最新稳定版本 -->
+        <jjwt.version>0.12.6</jjwt.version> <!-- 修改：使用最新稳定版本 -->
+        <redisson.version>3.37.0</redisson.version> <!-- 修改：使用最新稳定版本 -->
     </properties>
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc</artifactId>
-        </dependency>
 
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
+
+    <!-- 依赖管理 -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- 公共模块 -->
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-common</artifactId>
+                <version>${mall-common.version}</version>
+            </dependency>
+            <!-- POJO模块 -->
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-pojo</artifactId>
+                <version>${mall-pojo.version}</version>
+            </dependency>
+            <!-- 添加其他项目内模块的依赖声明 -->
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-ams</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-front</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-gateway-server</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-leaf</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-order</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-product</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-resource</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-search</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-seckill</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-sso</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-ums</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <!-- Mapper模块 -->
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-mapper</artifactId>
+                <version>${mall-mapper.version}</version>
+            </dependency>
+            <!-- Service模块 -->
+            <dependency>
+                <groupId>com.mygroup</groupId>
+                <artifactId>mall-service</artifactId>
+                <version>${mall-service.version}</version>
+            </dependency>
+            <!-- Product Service模块 -->
+            <dependency>
+                <groupId>com.mygroup.mall</groupId>
+                <artifactId>mall-product-service</artifactId>
+                <version>${mall-product-service.version}</version>
+            </dependency>
+            <!-- Lombok -->
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+            </dependency>
+            <!-- MySQL -->
+            <dependency>
+                <groupId>mysql</groupId>
+                <artifactId>mysql-connector-java</artifactId>
+                <version>${mysql.version}</version>
+                <scope>runtime</scope>
+            </dependency>
+            <!-- Alibaba Druid -->
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>druid</artifactId>
+                <version>${druid.version}</version>
+            </dependency>
+            <!-- MyBatis Spring Boot：数据访问层MyBatis编程 -->
+            <dependency>
+                <groupId>org.mybatis.spring.boot</groupId>
+                <artifactId>mybatis-spring-boot-starter</artifactId>
+                <version>${mybatis-spring-boot.version}</version>
+            </dependency>
+            <!-- MyBatis Plus Spring Boot：MyBatis增强 -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-boot-starter</artifactId>
+                <version>${mybaits-plus.version}</version>
+            </dependency>
+            <!-- MyBatis Plus Generator：代码生成器 -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-generator</artifactId>
+                <version>${mybaits-plus.version}</version>
+            </dependency>
+            <!-- PageHelper Spring Boot：MyBatis分页 -->
+            <dependency>
+                <groupId>com.github.pagehelper</groupId>
+                <artifactId>pagehelper-spring-boot-starter</artifactId>
+                <version>${pagehelper-spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Boot：基础框架 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Boot Web：WEB应用 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-web</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Boot Freemarker：MyBaits Plus Generator的辅助项 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-freemarker</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Boot Validation：验证请求参数 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-validation</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Boot Security：认证授权 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-security</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Boot Oauth2：认证授权 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-oauth2-client</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Boot配置处理器 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-configuration-processor</artifactId>
+                <version>${spring-boot-configuration-processor.version}</version>
+            </dependency>
+            <!-- Spring Security JWT -->
+            <dependency>
+                <groupId>org.springframework.security</groupId>
+                <artifactId>spring-security-jwt</artifactId>
+                <version>${spring-security-jwt.version}</version>
+            </dependency>
+            <!-- Knife4j Spring Boot：在线API -->
+            <dependency>
+                <groupId>com.github.xiaoymin</groupId>
+                <artifactId>knife4j-spring-boot-starter</artifactId>
+                <version>${knife4j-spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Boot Data Redis：缓存 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-data-redis</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Boot Data MongoDB：缓存 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-data-mongodb</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Boot Data Elasticsearch：文档搜索 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Boot AMQP：消息队列 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-amqp</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Boot Actuator：健康监测 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-actuator</artifactId>
+                <version>${spring-boot.version}</version>
+            </dependency>
+            <!-- Spring Cloud家族 -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Spring Cloud Alibaba -->
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>${spring-cloud-alibaba.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Alibaba FastJson -->
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>fastjson</artifactId>
+                <version>${fastjson.version}</version>
+            </dependency>
+            <!-- JJWT -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <!-- Spring Boot Test：测试 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-test</artifactId>
+                <version>${spring-boot.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <!-- Spring Rabbit Test：消息队列测试 -->
+            <dependency>
+                <groupId>org.springframework.amqp</groupId>
+                <artifactId>spring-rabbit-test</artifactId>
+                <version>${spring-rabbit-test.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <!-- Spring Security Test：Security测试 -->
+            <dependency>
+                <groupId>org.springframework.security</groupId>
+                <artifactId>spring-security-test</artifactId>
+                <version>${spring-security-test.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson</artifactId>
+                <version>${redisson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.seata</groupId>
+                <artifactId>seata-serializer-kryo</artifactId>
+                <version>1.4.2</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+
 
     <build>
         <plugins>
