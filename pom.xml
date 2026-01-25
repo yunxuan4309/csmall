@@ -16,20 +16,22 @@
     <name>csmall</name>
     <description>csmall</description>
 
+
     <modules>
         <!--聚合执行命令会因为leaf存在失败-->
-                     <!-- 单点登录服务：统一身份认证和登录 -->
-        <module>mall-common</module>                 <!-- 公共组件服务：包含通用配置、工具类、异常处理等 -->
-                          <!-- 后台管理服务：管理员账户、角色权限管理 -->
-                      <!-- 数据模型服务：存放实体类、DTO、VO等数据传输对象 -->
-                <!-- 资源服务：文件上传、图片管理等静态资源处理 -->
-                  <!-- 商品服务：商品信息管理，包括SPU/SKU、品牌、分类等 -->
-                         <!-- 用户管理服务：普通用户账户、收货地址、积分等管理 -->
-                    <!-- 前端服务：面向用户的功能接口，商品展示、分类浏览等 -->
-                        <!-- 订单服务：购物车、订单处理、支付流程管理 -->
-                       <!-- 搜索服务：基于Elasticsearch的商品搜索功能 -->
-                       <!-- 秒杀服务：限时抢购、促销活动功能 -->
-               <!-- API网关服务：统一入口、路由转发、鉴权等 -->
+        <module>mall-ams</module>                 <!-- 后台管理服务：管理员账户、角色权限管理 -->
+        <module>mall-common</module>              <!-- 公共组件服务：包含通用配置、工具类、异常处理等 -->
+        <module>mall-front</module>               <!-- 前端服务：面向用户的功能接口，商品展示、分类浏览等 -->
+        <module>mall-gateway-server</module>      <!-- API网关服务：统一入口、路由转发、鉴权等 -->
+        <module>mall-leaf</module>                <!-- 雪花算法分布式ID生成服务 -->
+        <module>mall-order</module>               <!-- 订单服务：购物车、订单处理、支付流程管理 -->
+        <module>mall-pojo</module>                <!-- 数据模型服务：存放实体类、DTO、VO等数据传输对象 -->
+        <module>mall-product</module>             <!-- 商品服务：商品信息管理，包括SPU/SKU、品牌、分类等 -->
+        <module>mall-resource</module>            <!-- 资源服务：文件上传、图片管理等静态资源处理 -->
+        <module>mall-search</module>              <!-- 搜索服务：基于Elasticsearch的商品搜索功能 -->
+        <module>mall-seckill</module>             <!-- 秒杀服务：限时抢购、促销活动功能 -->
+        <module>mall-sso</module>                 <!-- 单点登录服务：统一身份认证和登录 -->
+        <module>mall-ums</module>                 <!-- 用户管理服务：普通用户账户、收货地址、积分等管理 -->
     </modules>
 
 
