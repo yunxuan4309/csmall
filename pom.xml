@@ -42,7 +42,7 @@
         <mall-service.version>1.0.0</mall-service.version>
         <mall-product-service.version>1.0.0</mall-product-service.version>
         <spring-cloud.version>2024.0.3</spring-cloud.version> <!-- 修改：使用兼容Spring Boot 3.5.7的Spring Cloud版本 -->
-        <spring-cloud-alibaba.version>2024.0.3.0</spring-cloud-alibaba.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
+        <spring-cloud-alibaba.version>2023.0.3.1</spring-cloud-alibaba.version> <!-- 修改：使用已知可用的兼容Spring Boot 3.5.7的版本 -->
         <spring-boot.version>3.5.7</spring-boot.version> <!-- 修改：统一为3.5.7，保持版本一致性 -->
         <spring-boot-configuration-processor.version>3.5.7</spring-boot-configuration-processor.version> <!-- 修改：与Spring Boot主版本保持一致 -->
         <spring-security-jwt.version>3.3.0</spring-security-jwt.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
