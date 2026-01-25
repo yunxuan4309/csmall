@@ -18,19 +18,18 @@
 
     <modules>
         <!--聚合执行命令会因为leaf存在失败-->
-        <module>mall-leaf</module>                   <!-- ID生成服务：分布式ID生成器，为系统提供全局唯一ID -->
-        <module>mall-sso</module>                    <!-- 单点登录服务：统一身份认证和登录 -->
+                     <!-- 单点登录服务：统一身份认证和登录 -->
         <module>mall-common</module>                 <!-- 公共组件服务：包含通用配置、工具类、异常处理等 -->
-        <module>mall-ams</module>                    <!-- 后台管理服务：管理员账户、角色权限管理 -->
-        <module>mall-pojo</module>                   <!-- 数据模型服务：存放实体类、DTO、VO等数据传输对象 -->
-        <module>mall-resource</module>               <!-- 资源服务：文件上传、图片管理等静态资源处理 -->
-        <module>mall-product</module>                <!-- 商品服务：商品信息管理，包括SPU/SKU、品牌、分类等 -->
-        <module>mall-ums</module>                    <!-- 用户管理服务：普通用户账户、收货地址、积分等管理 -->
-        <module>mall-front</module>                  <!-- 前端服务：面向用户的功能接口，商品展示、分类浏览等 -->
-        <module>mall-order</module>                  <!-- 订单服务：购物车、订单处理、支付流程管理 -->
-        <module>mall-search</module>                 <!-- 搜索服务：基于Elasticsearch的商品搜索功能 -->
-        <module>mall-seckill</module>                <!-- 秒杀服务：限时抢购、促销活动功能 -->
-        <module>mall-gateway-server</module>         <!-- API网关服务：统一入口、路由转发、鉴权等 -->
+                          <!-- 后台管理服务：管理员账户、角色权限管理 -->
+                      <!-- 数据模型服务：存放实体类、DTO、VO等数据传输对象 -->
+                <!-- 资源服务：文件上传、图片管理等静态资源处理 -->
+                  <!-- 商品服务：商品信息管理，包括SPU/SKU、品牌、分类等 -->
+                         <!-- 用户管理服务：普通用户账户、收货地址、积分等管理 -->
+                    <!-- 前端服务：面向用户的功能接口，商品展示、分类浏览等 -->
+                        <!-- 订单服务：购物车、订单处理、支付流程管理 -->
+                       <!-- 搜索服务：基于Elasticsearch的商品搜索功能 -->
+                       <!-- 秒杀服务：限时抢购、促销活动功能 -->
+               <!-- API网关服务：统一入口、路由转发、鉴权等 -->
     </modules>
 
 
@@ -41,24 +40,26 @@
         <mall-mapper.version>1.0.0</mall-mapper.version>
         <mall-service.version>1.0.0</mall-service.version>
         <mall-product-service.version>1.0.0</mall-product-service.version>
-        <spring-cloud.version>2024.0.3</spring-cloud.version> <!-- 修改：使用兼容Spring Boot 3.5.7的Spring Cloud版本 -->
+        <spring-cloud.version>2023.0.3</spring-cloud.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的Spring Cloud版本 -->
         <spring-cloud-alibaba.version>2023.0.3.1</spring-cloud-alibaba.version> <!-- 修改：使用已知可用的兼容Spring Boot 3.5.7的版本 -->
         <spring-boot.version>3.5.7</spring-boot.version> <!-- 修改：统一为3.5.7，保持版本一致性 -->
         <spring-boot-configuration-processor.version>3.5.7</spring-boot-configuration-processor.version> <!-- 修改：与Spring Boot主版本保持一致 -->
-        <spring-security-jwt.version>3.3.0</spring-security-jwt.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
+        <spring-security-jwt.version>3.1.4</spring-security-jwt.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的版本 -->
         <mybatis-spring-boot.version>3.0.3</mybatis-spring-boot.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
-        <mybaits-plus.version>3.5.8</mybaits-plus.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
-        <pagehelper-spring-boot.version>1.4.8</pagehelper-spring-boot.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
-        <mysql.version>8.4.0</mysql.version> <!-- 修改：使用最新稳定版本 -->
+        <mybaits-plus.version>3.5.7</mybaits-plus.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的版本 -->
+        <pagehelper-spring-boot.version>1.4.6</pagehelper-spring-boot.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的版本 -->
+        <mysql.version>8.0.33</mysql.version> <!-- 修改：使用阿里云镜像中稳定可用的版本 -->
         <lombok.version>1.18.34</lombok.version> <!-- 修改：使用最新稳定版本 -->
-        <knife4j-spring-boot.version>4.5.0</knife4j-spring-boot.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
+        <knife4j-spring-boot.version>3.0.3</knife4j-spring-boot.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
         <spring-rabbit-test.version>3.5.7</spring-rabbit-test.version> <!-- 修改：与Spring Boot主版本保持一致 -->
         <spring-security-test.version>6.5.0</spring-security-test.version> <!-- 修改：与Spring Boot主版本保持一致 -->
-        <fastjson.version>2.0.53</fastjson.version> <!-- 修改：使用FastJSON 2.x最新稳定版本 -->
+        <fastjson.version>2.0.43</fastjson.version> <!-- 修改：使用阿里云镜像中稳定可用的FastJSON 2.x版本 -->
         <druid.version>1.2.24</druid.version> <!-- 修改：使用最新稳定版本 -->
-        <jjwt.version>0.12.6</jjwt.version> <!-- 修改：使用最新稳定版本 -->
-        <redisson.version>3.37.0</redisson.version> <!-- 修改：使用最新稳定版本 -->
+        <jjwt.version>0.9.1</jjwt.version> <!-- 修改：使用阿里云镜像中广泛支持的兼容版本 -->
+        <redisson.version>3.24.3</redisson.version> <!-- 修改：使用阿里云镜像中可用的稳定版本 -->
     </properties>
+
+
 
 
     <!-- 依赖管理 -->
@@ -304,6 +305,12 @@
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt</artifactId>
                 <version>${jjwt.version}</version>
+            </dependency>
+            <!-- Swagger Annotations -->
+            <dependency>
+                <groupId>io.swagger</groupId>
+                <artifactId>swagger-annotations</artifactId>
+                <version>1.6.6</version>
             </dependency>
             <!-- Spring Boot Test：测试 -->
             <dependency>
