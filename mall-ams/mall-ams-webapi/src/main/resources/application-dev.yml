@@ -6,7 +6,7 @@ my:
     #addr: 114.116.199.250
 spring:
   datasource:
-    url: jdbc:mysql://${my.server.addr}:3306/mall_ams?useSSL=false&useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowMultiQueries=true
+    url: jdbc:mysql://${my.server.addr}:3306/cs_mall_ams?useSSL=false&useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowMultiQueries=true
     username: root
     password: tarena2017Up;
     type: com.alibaba.druid.pool.DruidDataSource
