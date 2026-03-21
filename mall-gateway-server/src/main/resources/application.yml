@@ -1,0 +1,8 @@
+server:
+  #10086原来的
+  port: 10087
+spring:
+  main:
+    web-application-type: reactive
+  profiles:
+    active: test
