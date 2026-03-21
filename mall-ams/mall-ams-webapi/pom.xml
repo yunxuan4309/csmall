@@ -2,21 +2,29 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <!--更新权限管理相关功能ams-->
     <parent>
+        <artifactId>mall-ams</artifactId>
         <groupId>com.cooxiao.mall</groupId>
-        <artifactId>cs-mall-all</artifactId>
         <version>1.0.0</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
-
-    <artifactId>mall-ams</artifactId>
-    <packaging>pom</packaging>
-    <modules>
-        <module>mall-ams-service</module>
-        <module>mall-ams-webapi</module>
-    </modules>
+    <artifactId>mall-ams-webapi</artifactId>
     <dependencies>
+        <!--依赖common-->
+        <dependency>
+            <groupId>com.cooxiao</groupId>
+            <artifactId>mall-common</artifactId>
+        </dependency>
+        <!-- Spring Boot Validation：验证请求参数 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <!--redis-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
         <!--测试dubbo调用-->
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
@@ -84,15 +92,24 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+        <dependency>
+            <groupId>com.cooxiao.mall</groupId>
+            <artifactId>mall-ams-service</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <!--nacos注册中心-->
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.cooxiao</groupId>
-            <artifactId>mall-pojo</artifactId>
-        </dependency>
     </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>
