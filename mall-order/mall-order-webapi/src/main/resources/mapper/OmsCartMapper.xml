@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--ctrl+点击OmsCartMapper,能够回到OmsCartMapper接口,就说明映射没有问题-->
+<mapper namespace="com.cooxiao.mall.order.mapper.OmsCartMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.cooxiao.mall.pojo.order.model.OmsCart">
+        <id column="id" property="id" />
+        <result column="user_id" property="userId" />
+        <result column="sku_id" property="skuId" />
+        <result column="title" property="title" />
+        <result column="main_picture" property="mainPicture" />
+        <result column="price" property="price" />
+        <result column="quantity" property="quantity" />
+        <result column="gmt_create" property="gmtCreate" />
+        <result column="gmt_modified" property="gmtModified" />
+        <result column="bar_code" property="barCode"/>
+        <result column="data" property="data"/>
+    </resultMap>
+<!--定义查询oms_cart表时使用的列名sql片段-->
+    <sql id="SimpleQueryFields">
+        <if test="true">
+            id,
+            user_id,
+            sku_id,
+            title,
+            main_picture,
+            price,
+            quantity,
+            gmt_create,
+            gmt_modified
+
+        </if>
+
+    </sql>
+<!--判断当前登录用户购物车中是否包含指定skuId的商品-->
+<select id="selectExistCart" resultMap="BaseResultMap">
+    select <include refid="SimpleQueryFields"/> from oms_cart where user_id=#{userId} and sku_id=#{skuId}
+</select>
+
+    <!--  查询(判断)当前登录用户购物车中是否包含指定skuId的商品  -->
+    <select id="selectExistsCart" resultMap="BaseResultMap">
+        select
+        <include refid="SimpleQueryFields" />
+        from
+        oms_cart
+        where
+        user_id=#{userId}
+        and
+        sku_id=#{skuId}
+    </select>
+
+    <!-- 新增sku信息到购物车表   -->
+    <insert id="saveCart" useGeneratedKeys="true" keyProperty="id">
+        insert into oms_cart(
+            user_id,
+            sku_id,
+            title,
+            main_picture,
+            price,
+            quantity
+        ) values(
+                    #{userId},
+                    #{skuId},
+                    #{title},
+                    #{mainPicture},
+                    #{price},
+                    #{quantity}
+                )
+    </insert>
+    <!--  修改购物车中sku商品数量  -->
+    <update id="updateQuantityById">
+        update
+            oms_cart
+        set
+            quantity=#{quantity}
+        where
+            id=#{id}
+    </update>
+    <!--   根据用户选中的一个或多个购物车商品id删除商品(支持批量删除)  -->
+    <!--
+        foreach中collection属性赋值为数组时,使用array
+        item是定义编写元素的名称,必须和循环体中#{}中的名称匹配
+        separator是分隔符
+        open和close是可以在循环开始和结束时在sql语句中添加的内容
+    -->
+    <delete id="deleteCartsByIds">
+        delete from
+        oms_cart
+        where
+        id in
+        <foreach collection="array" item="id" separator=","
+                 open="(" close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <delete id="deleteCartsByUserId">
+        delete from
+            oms_cart
+        where
+            user_id=#{userId}
+    </delete>
+
+    <!--    根据用户Id和skuId删除购物车职工商品(新增订单业务中使用)   -->
+    <delete id="deleteCartByUserIdAndSkuId" >
+        delete from
+            oms_cart
+        where
+            user_id=#{userId}
+          and
+            sku_id=#{skuId}
+    </delete>
+
+    <!--  根据当前登录用户id查询此用户购物车中所有sku信息  -->
+    <!--
+           MyBatis框架有默认的映射规则
+           数据中下划线规则会按驼峰命名规则转换
+           例如:
+           列名            属性名
+           id               id
+           user_id          userId
+           sku_id           skuId
+           title            title
+    -->
+    <select id="selectCartByUserId"
+            resultType="com.cooxiao.mall.pojo.order.vo.CartStandardVO" >
+        select
+        <include refid="SimpleQueryFields" />
+        from
+        oms_cart
+        where
+        user_id=#{id}
+    </select>
+</mapper>
+
+
+
+
