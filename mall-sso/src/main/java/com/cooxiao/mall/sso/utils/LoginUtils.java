@@ -1,6 +1,6 @@
 package com.cooxiao.mall.sso.utils;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 
 public class LoginUtils {
     //获取ip地址

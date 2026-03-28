@@ -5,8 +5,9 @@
     <!--更新权限管理相关功能ams-->
     <parent>
         <groupId>com.cooxiao.mall</groupId>
-        <artifactId>cs-mall-all</artifactId>
-        <version>1.0.0</version>
+        <artifactId>csmall</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -60,7 +61,8 @@
         </dependency>
         <dependency>
             <groupId>com.github.xiaoymin</groupId>
-            <artifactId>knife4j-spring-boot-starter</artifactId>
+            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+            <version>${knife4j-openapi3.version}</version>
         </dependency>
         <!-- MySQL -->
         <dependency>
@@ -90,8 +92,15 @@
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.cooxiao</groupId>
+            <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-pojo</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.cooxiao.mall</groupId>
+            <artifactId>mall-common</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
         </dependency>
     </dependencies>
 

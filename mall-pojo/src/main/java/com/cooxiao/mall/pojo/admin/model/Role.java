@@ -1,4 +1,8 @@
 package com.cooxiao.mall.pojo.admin.model;
+
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -13,12 +17,12 @@ import java.time.LocalDateTime;
  * @since 2021-12-02
  */
 @Data
-
+@TableName("ams_role")
 public class Role implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-
+    @TableId(value = "id", type = IdType.ASSIGN_ID)
     private Long id;
 
     /**

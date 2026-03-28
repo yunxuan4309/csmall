@@ -1,7 +1,5 @@
 package com.cooxiao.mall.pojo.valid;
 
-import io.swagger.models.auth.In;
-
 /**
  * <p>正则表达式根级接口，定义了通用的正则表达式和提示文本</p>
  *

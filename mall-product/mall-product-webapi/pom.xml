@@ -9,7 +9,7 @@
     <parent>
         <groupId>com.cooxiao.mall</groupId>
         <artifactId>mall-product</artifactId>
-        <version>1.0.0</version>
+        <version>0.0.1-SNAPSHOT</version>
     </parent>
 
     <!-- 当前项目的参数 -->
@@ -23,12 +23,12 @@
     <dependencies>
         <!-- 公共模块 -->
         <dependency>
-            <groupId>com.cooxiao</groupId>
+            <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-common</artifactId>
         </dependency>
         <!-- POJO模块 -->
         <dependency>
-            <groupId>com.cooxiao</groupId>
+            <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-pojo</artifactId>
         </dependency>
         <!-- Product Service模块 -->
@@ -96,7 +96,9 @@
         <!-- Knife4j Spring Boot：在线API -->
         <dependency>
             <groupId>com.github.xiaoymin</groupId>
-            <artifactId>knife4j-spring-boot-starter</artifactId>
+            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+            <version>${knife4j-openapi3.version}</version>
+
         </dependency>
         <!-- Alibaba FastJson -->
         <dependency>

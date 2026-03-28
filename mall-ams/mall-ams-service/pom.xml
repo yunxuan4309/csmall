@@ -5,15 +5,22 @@
     <parent>
         <artifactId>mall-ams</artifactId>
         <groupId>com.cooxiao.mall</groupId>
-        <version>1.0.0</version>
+        <version>0.0.1-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>mall-ams-service</artifactId>
     <dependencies>
-        <dependency>
-            <groupId>com.cooxiao</groupId>
-            <artifactId>mall-pojo</artifactId>
-        </dependency>
+            <dependency>
+                <groupId>com.cooxiao.mall</groupId>
+                <artifactId>mall-pojo</artifactId>
+
+            </dependency>
+
+            <dependency>
+                <groupId>com.cooxiao.mall</groupId>
+                <artifactId>mall-common</artifactId>
+
+            </dependency>
     </dependencies>
 </project>

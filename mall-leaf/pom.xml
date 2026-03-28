@@ -5,7 +5,7 @@
     <groupId>com.cooxiao.mall</groupId>
     <artifactId>mall-leaf</artifactId>
     <packaging>pom</packaging>
-    <version>1.0.0</version>
+    <version>0.0.1-SNAPSHOT</version>
     <name>Leaf</name>
     <modules>
         <module>leaf-core</module>

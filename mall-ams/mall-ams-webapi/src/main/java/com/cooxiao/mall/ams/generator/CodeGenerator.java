@@ -1,18 +1,11 @@
 package com.cooxiao.mall.ams.generator;
 
-import com.baomidou.mybatisplus.core.exceptions.MybatisPlusException;
-import com.baomidou.mybatisplus.core.toolkit.StringPool;
-import com.baomidou.mybatisplus.core.toolkit.StringUtils;
-import com.baomidou.mybatisplus.generator.AutoGenerator;
-import com.baomidou.mybatisplus.generator.InjectionConfig;
-import com.baomidou.mybatisplus.generator.config.*;
-import com.baomidou.mybatisplus.generator.config.po.TableInfo;
-import com.baomidou.mybatisplus.generator.config.rules.DateType;
+import com.baomidou.mybatisplus.generator.FastAutoGenerator;
+import com.baomidou.mybatisplus.generator.config.OutputFile;
 import com.baomidou.mybatisplus.generator.config.rules.NamingStrategy;
 import com.baomidou.mybatisplus.generator.engine.FreemarkerTemplateEngine;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Collections;
 import java.util.Scanner;
 
 /**
@@ -56,11 +49,11 @@ public class CodeGenerator {
         System.out.println(help.toString());
         if (scanner.hasNext()) {
             String ipt = scanner.next();
-            if (StringUtils.isNotBlank(ipt)) {
+            if (ipt != null && !ipt.trim().isEmpty()) {
                 return ipt;
             }
         }
-        throw new MybatisPlusException("请输入正确的" + tip + "！");
+        throw new RuntimeException("请输入正确的" + tip + "！");
     }
 
     /**
@@ -68,86 +61,38 @@ public class CodeGenerator {
      */
     public static void main(String[] args) {
         // 代码生成器
-        AutoGenerator mpg = new AutoGenerator();
-
-        // 全局配置
-        GlobalConfig gc = new GlobalConfig();
         String projectPath = System.getProperty("user.dir");
-        gc.setOutputDir(projectPath + generateTo);
-        gc.setAuthor(author);
-        gc.setOpen(false);
-        //设置时间类型为Date
-        gc.setDateType(DateType.TIME_PACK);
-        //开启swagger
-        //gc.setSwagger2(true);
-        //设置mapper.xml的resultMap
-        gc.setBaseResultMap(true);
-        mpg.setGlobalConfig(gc);
 
-        // 数据源配置
-        DataSourceConfig dsc = new DataSourceConfig();
-        dsc.setUrl(url);
-        // dsc.setSchemaName("public");
-        dsc.setDriverName(driver);
-        dsc.setUsername(username);
-        dsc.setPassword(password);
-        mpg.setDataSource(dsc);
-
-        // 包配置
-        PackageConfig pc = new PackageConfig();
-        pc.setEntity("model");
-        //pc.setModuleName(scanner("模块名"));
-        pc.setModuleName(modelName);
-        pc.setParent(parentPackage);
-        mpg.setPackageInfo(pc);
-
-        // 自定义配置
-        InjectionConfig cfg = new InjectionConfig() {
-            @Override
-            public void initMap() {
-                // to do nothing
-            }
-        };
-        List<FileOutConfig> focList = new ArrayList<>();
-        focList.add(new FileOutConfig("/templates/mapper.xml.ftl") {
-            @Override
-            public String outputFile(TableInfo tableInfo) {
-                // 自定义输入文件名称
-                return projectPath + mapperXmlPath
-                        + "/" + tableInfo.getEntityName() + "Mapper" + StringPool.DOT_XML;
-            }
-        });
-        cfg.setFileOutConfigList(focList);
-        mpg.setCfg(cfg);
-        mpg.setTemplate(new TemplateConfig().setXml(null));
-        mpg.setTemplate(new TemplateConfig().setMapper(mapperTemplate));
-
-        // 策略配置
-        StrategyConfig strategy = new StrategyConfig();
-        strategy.setNaming(NamingStrategy.underline_to_camel);
-        //字段驼峰命名
-        strategy.setColumnNaming(NamingStrategy.underline_to_camel);
-        //设置实体类的lombok
-        strategy.setEntityLombokModel(true);
-        //设置controller的父类
-        if (baseControllerClassName != null) strategy.setSuperControllerClass(baseControllerClassName);
-        //设置服务类的父类
-        if (baseServiceClassName != null) strategy.setSuperServiceImplClass(baseServiceClassName);
-        // strategy.
-        //设置实体类属性对应表字段的注解
-        strategy.setEntityTableFieldAnnotationEnable(true);
-        //设置表名
-        String tableName = scanner("表名, all全部表");
-        if (!"all".equalsIgnoreCase(tableName)) {
-            strategy.setInclude(tableName);
-        }
-        strategy.setTablePrefix(pc.getModuleName() + "_");
-        strategy.setRestControllerStyle(true);
-        mpg.setStrategy(strategy);
-
-        // 选择 freemarker 引擎需要指定如下加，注意 pom 依赖必须有！
-        mpg.setTemplateEngine(new FreemarkerTemplateEngine());
-        mpg.execute();
+        FastAutoGenerator.create(url, username, password)
+                .globalConfig(builder -> {
+                    builder.author(author)
+                            .outputDir(projectPath + generateTo)
+                            .disableOpenDir(); // 生成后不自动打开目录
+                })
+                .packageConfig(builder -> {
+                    builder.parent(parentPackage)
+                            .moduleName(modelName)
+                            .entity("model")
+                            .pathInfo(Collections.singletonMap(OutputFile.xml, projectPath + mapperXmlPath));
+                })
+                .templateConfig(builder -> {
+                    builder.mapper("/ftl/mapper.java").xml(null); // 使用自定义模板并禁用默认XML模板
+                })
+                .strategyConfig(builder -> {
+                    builder.addInclude(scanner("表名, all全部表"))
+                            .addTablePrefix(modelName + "_")
+                            .entityBuilder()
+                                .enableLombok()
+                                .enableTableFieldAnnotation()
+                                .naming(NamingStrategy.underline_to_camel)
+                                .columnNaming(NamingStrategy.underline_to_camel)
+                            .controllerBuilder()
+                                .enableRestStyle()
+                            .serviceBuilder()
+                                .formatServiceFileName("%sService")
+                                .formatServiceImplFileName("%sServiceImpl");
+                })
+                .templateEngine(new FreemarkerTemplateEngine())
+                .execute();
     }
-
 }

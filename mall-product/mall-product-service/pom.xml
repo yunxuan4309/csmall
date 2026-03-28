@@ -9,7 +9,7 @@
     <parent>
         <groupId>com.cooxiao.mall</groupId>
         <artifactId>mall-product</artifactId>
-        <version>1.0.0</version>
+        <version>0.0.1-SNAPSHOT</version>
     </parent>
 
     <!-- 当前项目的参数 -->
@@ -23,8 +23,9 @@
     <dependencies>
         <!-- POJO模块 -->
         <dependency>
-            <groupId>com.cooxiao</groupId>
+            <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-pojo</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
         </dependency>
         <!-- MyBatis Spring Boot：数据访问层MyBatis编程 -->
         <!-- 添加此依赖是因为业务接口中需要添加@Transcational注解 -->

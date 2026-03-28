@@ -1,7 +1,7 @@
 package com.cooxiao.mall.ums.service.impl;
 
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
-import com.cooxiao.mall.common.pojo.domain.CsmallAuthenticationInfo;
+import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.restful.ResponseCode;
 import com.cooxiao.mall.pojo.ums.dto.ChangePasswordDTO;
 import com.cooxiao.mall.pojo.ums.dto.UserRegistryDTO;

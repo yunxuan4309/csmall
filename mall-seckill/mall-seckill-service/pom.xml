@@ -5,15 +5,16 @@
     <parent>
         <artifactId>mall-seckill</artifactId>
         <groupId>com.cooxiao.mall</groupId>
-        <version>1.0.0</version>
+        <version>0.0.1-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>mall-seckill-service</artifactId>
     <dependencies>
         <dependency>
-            <groupId>com.cooxiao</groupId>
+            <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-pojo</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
         </dependency>
     </dependencies>
 

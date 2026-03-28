@@ -1,7 +1,7 @@
 package com.cooxiao.mall.order.service.impl;
 
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
-import com.cooxiao.mall.common.pojo.domain.CsmallAuthenticationInfo;
+import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
 import com.cooxiao.mall.order.mapper.OmsCartMapper;

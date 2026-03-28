@@ -3,9 +3,10 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
-        <artifactId>cs-mall-all</artifactId>
         <groupId>com.cooxiao.mall</groupId>
-        <version>1.0.0</version>
+        <artifactId>csmall</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -14,7 +15,7 @@
     <dependencies>
         <!-- 公共模块 -->
         <dependency>
-            <groupId>com.cooxiao</groupId>
+            <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-common</artifactId>
         </dependency>
         <!-- Lombok -->
@@ -36,7 +37,8 @@
         <!-- Knife4j Spring Boot：在线API -->
         <dependency>
             <groupId>com.github.xiaoymin</groupId>
-            <artifactId>knife4j-spring-boot-starter</artifactId>
+            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+            <version>${knife4j-openapi3.version}</version>
         </dependency>
         <!-- Alibaba FastJson -->
         <dependency>
@@ -57,6 +59,11 @@
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-gateway</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
         </dependency>
     </dependencies>
     <build>

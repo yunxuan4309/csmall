@@ -1,6 +1,6 @@
 package com.cooxiao.mall.sso.security.service.admin.impl;
 
-import com.cooxiao.mall.common.pojo.domain.CsmallAuthenticationInfo;
+import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.utils.JwtTokenUtils;
 import com.cooxiao.mall.pojo.admin.model.AdminLoginLog;
 import com.cooxiao.mall.sso.mapper.admin.AdminLoginLogMapper;

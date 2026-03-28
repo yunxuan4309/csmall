@@ -7,10 +7,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -19,7 +20,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @Configuration
 @EnableWebSecurity
 // @EnableGlobalMethodSecurity(prePostEnabled = true)
-public class ResourceWebSecurityConfiguration extends WebSecurityConfigurerAdapter {
+public class ResourceWebSecurityConfiguration {
 
     @Autowired
     private SSOFilter ssoFilter;
@@ -27,10 +28,7 @@ public class ResourceWebSecurityConfiguration extends WebSecurityConfigurerAdapt
     private MyAccessDeniedHandler myAccessDeniedHandler;
     @Autowired
     private MyAuthenticationEntryPoint myAuthenticationEntryPoint;
-    @Bean
-    public PasswordEncoder passwordEncoder(){
-        return new BCryptPasswordEncoder();
-    }
+
     @Bean
     CorsConfigurationSource corsConfigurationSource(){
         CorsConfigurationSource source =   new UrlBasedCorsConfigurationSource();
@@ -41,21 +39,16 @@ public class ResourceWebSecurityConfiguration extends WebSecurityConfigurerAdapt
         ((UrlBasedCorsConfigurationSource) source).registerCorsConfiguration("/**",corsConfiguration); //配置允许跨域访问的url
         return source;
     }
-    @Override
-    protected void configure(HttpSecurity http) throws Exception {
-        http.csrf().disable();
-        http.cors().configurationSource(corsConfigurationSource());
-        http.authorizeRequests().antMatchers("/",
-                "/*.html",
-                "/favicon.ico",
-                "/**/*.html",
-                "/**/*.css",
-                "/**/*.js",
-                "/swagger-resources/**",
-                "/v2/api-docs/**").permitAll()
-                   .anyRequest().authenticated().and()
-                .exceptionHandling().accessDeniedHandler(myAccessDeniedHandler).authenticationEntryPoint(myAuthenticationEntryPoint);
-        http.sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http.csrf(csrf -> csrf.disable());
+        http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
+        http.authorizeHttpRequests(auth -> auth
+                .requestMatchers("/", "/*.html", "/favicon.ico", "/**/*.html", "/**/*.css", "/**/*.js", "/swagger-resources/**", "/v3/api-docs/**", "/doc.html").permitAll()
+                .anyRequest().authenticated()
+        );
+        http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         http.addFilterBefore(ssoFilter, UsernamePasswordAuthenticationFilter.class);
+        return http.build();
     }
 }

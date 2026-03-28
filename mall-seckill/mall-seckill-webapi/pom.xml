@@ -5,7 +5,7 @@
     <parent>
         <artifactId>mall-seckill</artifactId>
         <groupId>com.cooxiao.mall</groupId>
-        <version>1.0.0</version>
+        <version>0.0.1-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -34,8 +34,9 @@
         </dependency>
         <!-- 公共模块 -->
         <dependency>
-            <groupId>com.cooxiao</groupId>
+            <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-common</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
         </dependency>
         <!-- Spring Boot Web：WEB应用 -->
         <dependency>
@@ -76,7 +77,8 @@
         <!-- Knife4j Spring Boot：在线API -->
         <dependency>
             <groupId>com.github.xiaoymin</groupId>
-            <artifactId>knife4j-spring-boot-starter</artifactId>
+            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+            <version>${knife4j-openapi3.version}</version>
         </dependency>
         <!-- Alibaba FastJson -->
         <dependency>
@@ -127,12 +129,12 @@
         <dependency>
             <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-order-service</artifactId>
-            <version>1.0.0</version>
+            <version>0.0.1-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-ums-service</artifactId>
-            <version>1.0.0</version>
+            <version>0.0.1-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.cooxiao.mall</groupId>
@@ -141,7 +143,7 @@
         <dependency>
             <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-seckill-service</artifactId>
-            <version>1.0.0</version>
+            <version>0.0.1-SNAPSHOT</version>
         </dependency>
         <!--sentinel整合cloud-->
         <dependency>

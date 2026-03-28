@@ -6,7 +6,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 
-//import javax.validation.constraints.NotNull;
+//import jakarta.validation.constraints.NotNull;
 @Data
 @ApiModel(value="后台账号新增DTO")
 public class AdminAddDTO implements Serializable {

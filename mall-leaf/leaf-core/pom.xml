@@ -4,7 +4,7 @@
     <parent>
         <groupId>com.cooxiao.mall</groupId>
         <artifactId>mall-leaf</artifactId>
-        <version>1.0.0</version>
+        <version>0.0.1-SNAPSHOT</version>
     </parent>
 
     <groupId>com.sankuai.inf.leaf</groupId>

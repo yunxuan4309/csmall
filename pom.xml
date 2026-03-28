@@ -10,7 +10,7 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <packaging>pom</packaging>
-    <groupId>com.mygroup</groupId>
+    <groupId>com.cooxiao.mall</groupId>
     <artifactId>csmall</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>csmall</name>
@@ -37,8 +37,8 @@
 
     <properties>
         <java.version>17</java.version>
-        <mall-pojo.version>1.0.0</mall-pojo.version>
-        <mall-common.version>1.0.0</mall-common.version>
+        <mall-pojo.version>0.0.1-SNAPSHOT</mall-pojo.version>
+        <mall-common.version>0.0.1-SNAPSHOT</mall-common.version>
         <mall-mapper.version>1.0.0</mall-mapper.version>
         <mall-service.version>1.0.0</mall-service.version>
         <mall-product-service.version>1.0.0</mall-product-service.version>
@@ -52,14 +52,17 @@
         <pagehelper-spring-boot.version>1.4.6</pagehelper-spring-boot.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的版本 -->
         <mysql.version>8.0.33</mysql.version> <!-- 修改：使用阿里云镜像中稳定可用的版本 -->
         <lombok.version>1.18.34</lombok.version> <!-- 修改：使用最新稳定版本 -->
-        <knife4j-spring-boot.version>3.0.3</knife4j-spring-boot.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
+        <knife4j-spring-boot-starter.version>4.5.0</knife4j-spring-boot-starter.version> <!-- Knife4j版本 -->
+        <knife4j-openapi3.version>4.5.0</knife4j-openapi3.version> <!-- 使用兼容Spring Boot 3.x的OpenAPI 3版本 -->
         <spring-rabbit-test.version>3.5.7</spring-rabbit-test.version> <!-- 修改：与Spring Boot主版本保持一致 -->
         <spring-security-test.version>6.5.0</spring-security-test.version> <!-- 修改：与Spring Boot主版本保持一致 -->
         <fastjson.version>2.0.43</fastjson.version> <!-- 修改：使用阿里云镜像中稳定可用的FastJSON 2.x版本 -->
         <druid.version>1.2.24</druid.version> <!-- 修改：使用最新稳定版本 -->
         <jjwt.version>0.9.1</jjwt.version> <!-- 修改：使用阿里云镜像中广泛支持的兼容版本 -->
         <redisson.version>3.24.3</redisson.version> <!-- 修改：使用阿里云镜像中可用的稳定版本 -->
-    </properties>
+        <swagger-annotations.version>1.6.14</swagger-annotations.version> <!-- Swagger 2 注解兼容 -->
+        <springdoc-openapi.version>2.5.0</springdoc-openapi.version>
+</properties>
 
 
 
@@ -69,87 +72,87 @@
         <dependencies>
             <!-- 公共模块 -->
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-common</artifactId>
                 <version>${mall-common.version}</version>
             </dependency>
             <!-- POJO模块 -->
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-pojo</artifactId>
                 <version>${mall-pojo.version}</version>
             </dependency>
             <!-- 添加其他项目内模块的依赖声明 -->
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-ams</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-front</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-gateway-server</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-leaf</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-order</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-product</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-resource</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-search</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-seckill</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-sso</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-ums</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
             <!-- Mapper模块 -->
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-mapper</artifactId>
                 <version>${mall-mapper.version}</version>
             </dependency>
             <!-- Service模块 -->
             <dependency>
-                <groupId>com.mygroup</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-service</artifactId>
                 <version>${mall-service.version}</version>
             </dependency>
             <!-- Product Service模块 -->
             <dependency>
-                <groupId>com.mygroup.mall</groupId>
+                <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-product-service</artifactId>
                 <version>${mall-product-service.version}</version>
             </dependency>
@@ -244,11 +247,17 @@
                 <artifactId>spring-security-jwt</artifactId>
                 <version>${spring-security-jwt.version}</version>
             </dependency>
-            <!-- Knife4j Spring Boot：在线API -->
+            <!-- Knife4j OpenAPI3：在线API (Spring Boot 3.x) -->
             <dependency>
                 <groupId>com.github.xiaoymin</groupId>
-                <artifactId>knife4j-spring-boot-starter</artifactId>
-                <version>${knife4j-spring-boot.version}</version>
+                <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+                <version>${knife4j-openapi3.version}</version>
+            </dependency>
+            <!-- Swagger 2 注解：兼容旧代码 -->
+            <dependency>
+                <groupId>io.swagger</groupId>
+                <artifactId>swagger-annotations</artifactId>
+                <version>${swagger-annotations.version}</version>
             </dependency>
             <!-- Spring Boot Data Redis：缓存 -->
             <dependency>
@@ -296,6 +305,7 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
             <!-- Alibaba FastJson -->
             <dependency>
                 <groupId>com.alibaba</groupId>
@@ -307,12 +317,6 @@
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt</artifactId>
                 <version>${jjwt.version}</version>
-            </dependency>
-            <!-- Swagger Annotations -->
-            <dependency>
-                <groupId>io.swagger</groupId>
-                <artifactId>swagger-annotations</artifactId>
-                <version>1.6.6</version>
             </dependency>
             <!-- Spring Boot Test：测试 -->
             <dependency>
@@ -344,6 +348,24 @@
                 <groupId>io.seata</groupId>
                 <artifactId>seata-serializer-kryo</artifactId>
                 <version>1.4.2</version>
+            </dependency>
+            <!-- Seata Spring Boot Starter -->
+            <dependency>
+                <groupId>io.seata</groupId>
+                <artifactId>seata-spring-boot-starter</artifactId>
+                <version>1.7.1</version>
+            </dependency>
+            <!-- Spring Cloud Starter Dubbo -->
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-starter-dubbo</artifactId>
+                <version>2021.1</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+                <version>${springdoc-openapi.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

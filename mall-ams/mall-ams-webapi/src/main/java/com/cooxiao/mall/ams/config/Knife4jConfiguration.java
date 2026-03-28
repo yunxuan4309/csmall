@@ -1,45 +1,25 @@
 package com.cooxiao.mall.ams.config;
-import com.github.xiaoymin.knife4j.spring.extension.OpenApiExtensionResolver;
-import org.springframework.beans.factory.annotation.Autowired;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.info.Info;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import springfox.documentation.builders.ApiInfoBuilder;
-import springfox.documentation.builders.PathSelectors;
-import springfox.documentation.builders.RequestHandlerSelectors;
-import springfox.documentation.service.ApiInfo;
-import springfox.documentation.service.Contact;
-import springfox.documentation.spi.DocumentationType;
-import springfox.documentation.spring.web.plugins.Docket;
-import springfox.documentation.swagger2.annotations.EnableSwagger2WebMvc;
 /**
  * Knife4j（Swagger2）的配置
  */
 @Configuration
-@EnableSwagger2WebMvc
 public class Knife4jConfiguration {
-    @Autowired
-    private OpenApiExtensionResolver openApiExtensionResolver;
-    @Bean(value = "pms")
-    public Docket pms() {
-        String groupName = "1.0.0";
-        Docket docket = new Docket(DocumentationType.SWAGGER_2)
-                .host("http://www.cooxiao.com")
-                .apiInfo(apiInfo())
-                .groupName(groupName) //分组名称
-                .select()
-                .apis(RequestHandlerSelectors.basePackage("com.cooxiao.mall.ams.controller")) //这里指定Controller扫描包路径
-                .paths(PathSelectors.any())
-                .build()
-                .extensions(openApiExtensionResolver.buildExtensions(groupName));
-        return docket;
-    }
-    private ApiInfo apiInfo() {
-        return new ApiInfoBuilder()
-                .title("Cool Shark Mall SSO角色管理在线API")
-                .description("Cool Shark Mall SSO角色管理在线API")
-                .termsOfServiceUrl("http://www.cooxiao.com")
-                .contact(new Contact("jsd@cooxiao.com", "http://jsd.cooxiao.com", "jsd@cooxiao.com"))
-                .version("1.0.0")
-                .build();
+    @Bean
+    public OpenAPI openAPI() {
+        return new OpenAPI()
+                .info(new Info()
+                        .title("酷鲨商城SSO角色管理在线API")
+                        .description("酷鲨商城SSO角色管理在线API")
+                        .termsOfService("http://www.cooxiao.com")
+                        .contact(new Contact()
+                                .name("jsd@cooxiao.com")
+                                .url("http://jsd.cooxiao.com")
+                                .email("jsd@cooxiao.com"))
+                        .version("1.0.0"));
     }
 }
