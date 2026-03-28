@@ -1,6 +1,5 @@
 package com.cooxiao.mall.ums.config;
 
-
 import com.cooxiao.mall.ums.interceptor.AutoUpdateTimeInterceptor;
 import org.apache.ibatis.plugin.Interceptor;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -9,7 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.context.annotation.Configuration;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.util.List;
 
 /**
@@ -29,5 +28,4 @@ public class AutoUpdateTimeInterceptorConfiguration {
             sqlSessionFactory.getConfiguration().addInterceptor(interceptor);
         }
     }
-
 }

@@ -48,7 +48,7 @@
         <spring-boot-configuration-processor.version>3.5.7</spring-boot-configuration-processor.version> <!-- 修改：与Spring Boot主版本保持一致 -->
         <spring-security-jwt.version>3.1.4</spring-security-jwt.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的版本 -->
         <mybatis-spring-boot.version>3.0.3</mybatis-spring-boot.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
-        <mybaits-plus.version>3.5.7</mybaits-plus.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的版本 -->
+        <mybaits-plus.version>3.5.8</mybaits-plus.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的版本 -->
         <pagehelper-spring-boot.version>1.4.6</pagehelper-spring-boot.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的版本 -->
         <mysql.version>8.0.33</mysql.version> <!-- 修改：使用阿里云镜像中稳定可用的版本 -->
         <lombok.version>1.18.34</lombok.version> <!-- 修改：使用最新稳定版本 -->

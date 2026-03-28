@@ -1,6 +1,6 @@
 package com.cooxiao.mall.seckill.timer.job;
 
-import com.alibaba.nacos.client.naming.utils.RandomUtils;
+import java.util.concurrent.ThreadLocalRandom;
 import com.cooxiao.mall.pojo.seckill.model.SeckillSku;
 import com.cooxiao.mall.pojo.seckill.model.SeckillSpu;
 import com.cooxiao.mall.seckill.mapper.SeckillSkuMapper;
@@ -88,7 +88,7 @@ public class SeckillInitialJob implements Job {
                             // 保存时间=秒杀持续时间+提前的5分钟+防雪崩随机数30秒
                             // 1000*60*60*2+1000*60*5+ RandomUtils.nextInt(1000*30),
                             // 为了方便测试,保存五分钟
-                            1000*60*5+ RandomUtils.nextInt(10000),//雪崩:数据同时消失或者同时回来
+                            1000*60*5+ ThreadLocalRandom.current().nextInt(10000),//雪崩:数据同时消失或者同时回来
                             TimeUnit.MILLISECONDS);
                     log.info("{}号sku库存数成功预热到缓存!",sku.getSkuId());
                 }
@@ -109,11 +109,11 @@ public class SeckillInitialJob implements Job {
             }else{
                 // 如果Redis中没有这个key,就生成随机码保存到Redis
                 // 我们制定一个随机码的范围100000-999999
-                int randCode= RandomUtils.nextInt(900000)+100000;
+                int randCode= ThreadLocalRandom.current().nextInt(900000)+100000;
                 redisTemplate.boundValueOps(randCodeKey).set(
                         randCode,
                         // 为了方便测试,保存五分钟
-                        1000*60*5+RandomUtils.nextInt(10000),
+                        1000*60*5+ThreadLocalRandom.current().nextInt(10000),
                         TimeUnit.MILLISECONDS);
                 log.info("{}号spu商品的随机码生成保存完成!值为:{}",spu.getSpuId(),randCode);
             }

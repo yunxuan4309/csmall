@@ -1,6 +1,6 @@
 package com.cooxiao.mall.seckill.service.impl;
 
-import com.alibaba.nacos.client.naming.utils.RandomUtils;
+import java.util.concurrent.ThreadLocalRandom;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.ResponseCode;
 import com.cooxiao.mall.pojo.product.vo.SkuStandardVO;
@@ -97,7 +97,7 @@ public class SeckillSkuServiceImpl implements ISeckillSkuService {
                 // 将赋好值的对象seckillSkuVO,保存到Redis中
                 redisTemplate.boundValueOps(skuVOKey).set(
                         seckillSkuVO,
-                        1000*60*5 + RandomUtils.nextInt(10000),
+                        1000*60*5 + ThreadLocalRandom.current().nextInt(10000),
                         TimeUnit.MILLISECONDS);
             }
             // if-else结束后,seckillSkuVO一定已经被赋值了

@@ -12,7 +12,7 @@ import com.cooxiao.mall.ums.mapper.ChangePasswordLogMapper;
 import com.cooxiao.mall.ums.mapper.UserMapper;
 import com.cooxiao.mall.ums.service.IUserService;
 import com.cooxiao.mall.ums.utils.IdGeneratorUtils;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
