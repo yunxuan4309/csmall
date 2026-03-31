@@ -1,6 +1,8 @@
 package com.cooxiao.mall.seckill.service.impl;
 
 import java.util.concurrent.ThreadLocalRandom;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -13,8 +15,6 @@ import com.cooxiao.mall.product.service.seckill.IForSeckillSpuService;
 import com.cooxiao.mall.seckill.mapper.SeckillSpuMapper;
 import com.cooxiao.mall.seckill.service.ISeckillSpuService;
 import com.cooxiao.mall.seckill.utils.SeckillCacheUtils;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.beans.BeanUtils;
@@ -48,32 +48,34 @@ public class SeckillSpuServiceImpl implements ISeckillSpuService {
     @Override
     public JsonPage<SeckillSpuVO> listSeckillSpus(Integer page, Integer pageSize) {
         // 设置分页条件
-        PageHelper.startPage(page,pageSize);
+        Page<SeckillSpu> pageParam = new Page<>(page, pageSize);
         // 执行查询秒杀商品列表的方法
-        List<SeckillSpu> seckillSpus=seckillSpuMapper.findSeckillSpus();
+        IPage<SeckillSpu> seckillSpuPage = seckillSpuMapper.findSeckillSpus(pageParam);
         // 实例化一个SeckillSpuVO泛型的集合,用于最终返回
         // SeckillSpuVO既包含spu常规信息又包含spu秒杀信息
-        List<SeckillSpuVO> seckillSpuVOs=new ArrayList<>();
+        List<SeckillSpuVO> seckillSpuVOs = new ArrayList<>();
         // 遍历seckillSpus(从数据库查询出的只有秒杀信息的集合)
-        for(SeckillSpu seckillSpu : seckillSpus){
-            // 获取spuId
-            Long spuId=seckillSpu.getSpuId();
-            // 根据spuId利用Dubbo查询到该商品的常规信息
-            SpuStandardVO standardVO =
-                    dubboSeckillSpuService.getSpuById(spuId);
-            // 实例化SeckillSpuVO对象
-            SeckillSpuVO seckillSpuVO=new SeckillSpuVO();
-            // 将常规信息同名属性赋值到seckillSpuVO
-            BeanUtils.copyProperties(standardVO,seckillSpuVO);
-            // 常规信息赋值完毕后,将秒杀信息手动赋值到seckillSpuVO
+        for (SeckillSpu seckillSpu : seckillSpuPage.getRecords()) {
+            // 获取 spuId
+            Long spuId = seckillSpu.getSpuId();
+            // 根据 spuId 利用 Dubbo 查询到该商品的常规信息
+            SpuStandardVO standardVO = dubboSeckillSpuService.getSpuById(spuId);
+            // 实例化 SeckillSpuVO 对象
+            SeckillSpuVO seckillSpuVO = new SeckillSpuVO();
+            // 将常规信息同名属性赋值到 seckillSpuVO
+            BeanUtils.copyProperties(standardVO, seckillSpuVO);
+            // 常规信息赋值完毕后,将秒杀信息手动赋值到 seckillSpuVO
             seckillSpuVO.setSeckillListPrice(seckillSpu.getListPrice());
             seckillSpuVO.setStartTime(seckillSpu.getStartTime());
             seckillSpuVO.setEndTime(seckillSpu.getEndTime());
-            // 到此为止,seckillSpuVO就赋值了常规信息和秒杀信息
+            // 到此为止, seckillSpuVO 就赋值了常规信息和秒杀信息
             seckillSpuVOs.add(seckillSpuVO);
         }
-        // 最后返回分页类型的返回值,赋值seckillSpuVOs集合
-        return JsonPage.restPage(new PageInfo<>(seckillSpuVOs));
+        // 构建分页结果
+        Page<SeckillSpuVO> resultPage = new Page<>(seckillSpuPage.getCurrent(), seckillSpuPage.getSize(), seckillSpuPage.getTotal());
+        resultPage.setRecords(seckillSpuVOs);
+        // 最后返回分页类型的返回值
+        return JsonPage.restPage(resultPage);
     }
     // 装配操作Redis的对象
     @Autowired
@@ -104,7 +106,7 @@ public class SeckillSpuServiceImpl implements ISeckillSpuService {
                 throw new CoolSharkServiceException(
                         ResponseCode.NOT_FOUND,"您要访问的商品不存在");
             }
-            // 查询spu常规信息
+            // 查询 spu常规信息
             SpuStandardVO standardVO =
                     dubboSeckillSpuService.getSpuById(spuId);
             // 将常规信息和秒杀信息都赋值到seckillSpuVO对象中
@@ -151,27 +153,27 @@ public class SeckillSpuServiceImpl implements ISeckillSpuService {
     // 项目中没有给定SpuDetail用的key常量,所以我们自己声明一个
     public static final String
             SECKILL_SPU_DETAIL_PREFIX="seckill:spu:detail:";
-    // 根据spuId查询秒杀用spuDetail信息
+    // 根据 spuId 查询秒杀用 spuDetail 信息
     @Override
     public SeckillSpuDetailSimpleVO getSeckillSpuDetail(Long spuId) {
-        // 先获取当前spu对应的key
+        // 先获取当前 spu 对应的 key
         String spuDetailKey=SECKILL_SPU_DETAIL_PREFIX+spuId;
         // 声明返回值类型对象
         SeckillSpuDetailSimpleVO simpleVO=null;
-        // 判断这个Key是否存在
+        // 判断这个 Key 是否存在
         if(redisTemplate.hasKey(spuDetailKey)){
-            // 如果存在,从Redis中获取
+            // 如果存在,从 Redis 中获取
             simpleVO= (SeckillSpuDetailSimpleVO)
                     redisTemplate.boundValueOps(spuDetailKey).get();
         }else{
-            // 如果不存在这个Key
-            // dubbo调用product模块查询spuDetail对象
+            // 如果不存在这个 Key
+            // dubbo 调用 product 模块查询 spuDetail 对象
             SpuDetailStandardVO spuDetailStandardVO =
                     dubboSeckillSpuService.getSpuDetailById(spuId);
-            // 先实例化simpleVO,再给它赋值同名属性
+            // 先实例化 simpleVO,再给它赋值同名属性
             simpleVO=new SeckillSpuDetailSimpleVO();
             BeanUtils.copyProperties(spuDetailStandardVO,simpleVO);
-            // 保存到Redis中
+            // 保存到 Redis 中
             redisTemplate.boundValueOps(spuDetailKey).set(
                     simpleVO,
                     1000*60*5+ThreadLocalRandom.current().nextInt(10000),

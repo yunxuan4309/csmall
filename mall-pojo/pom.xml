@@ -97,8 +97,8 @@
         <!-- MyBatis Plus：提供实体类注解（仅编译时使用） -->
         <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-boot-starter</artifactId>
-            <version>3.5.8</version>
+            <artifactId>mybatis-plus-annotation</artifactId>
+            <version>${mybaits-plus.version}</version>
         </dependency>
     </dependencies>
 

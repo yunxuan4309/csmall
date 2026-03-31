@@ -1,5 +1,8 @@
 package com.cooxiao.mall.product.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -13,14 +16,13 @@ import com.cooxiao.mall.pojo.product.model.SkuSpecification;
 import com.cooxiao.mall.pojo.product.vo.SkuStandardVO;
 import com.cooxiao.mall.product.utils.IdGeneratorUtils;
 import com.cooxiao.mall.product.utils.ListConvertUtils;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * <p>SKU（Stock Keeping Unit）业务实现类</p>
@@ -87,9 +89,27 @@ public class SkuServiceImpl implements ISkuService {
 
     @Override
     public JsonPage<SkuStandardVO> list(Long spuId, Integer pageNum, Integer pageSize) {
-        PageHelper.startPage(pageNum, pageSize);
-        List<SkuStandardVO> skus = skuMapper.listBySpuId(spuId);
-        return JsonPage.restPage(new PageInfo<>(skus));
+        Page<Sku> pageParam = new Page<>(pageNum, pageSize);
+        LambdaQueryWrapper<Sku> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Sku::getSpuId, spuId)
+               .orderByDesc(Sku::getSort, Sku::getGmtCreate);
+        IPage<Sku> result = skuMapper.selectPage(pageParam, wrapper);
+        // 转换为VO
+        List<SkuStandardVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<SkuStandardVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
+    }
+
+    private SkuStandardVO convertToVO(Sku sku) {
+        if (sku == null) {
+            return null;
+        }
+        SkuStandardVO vo = new SkuStandardVO();
+        BeanUtils.copyProperties(sku, vo);
+        return vo;
     }
 
 }

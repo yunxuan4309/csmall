@@ -1,5 +1,8 @@
 package com.cooxiao.mall.product.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -10,14 +13,13 @@ import com.cooxiao.mall.pojo.product.dto.BrandAddNewDTO;
 import com.cooxiao.mall.pojo.product.dto.BrandUpdateDTO;
 import com.cooxiao.mall.pojo.product.model.Brand;
 import com.cooxiao.mall.pojo.product.vo.BrandStandardVO;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * <p>品牌业务实现类/p>
@@ -111,18 +113,44 @@ public class BrandServiceImpl implements IBrandService {
 
     @Override
     public JsonPage<BrandStandardVO> list(Integer page, Integer pageSize) {
-        PageHelper.startPage(page, pageSize);
         log.debug("查询品牌分页：page={}, size={}", page, pageSize);
-        List<BrandStandardVO> brands = brandMapper.list();
-        return JsonPage.restPage(new PageInfo<>(brands));
+        Page<Brand> pageParam = new Page<>(page, pageSize);
+        LambdaQueryWrapper<Brand> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByDesc(Brand::getSort, Brand::getGmtCreate);
+        IPage<Brand> result = brandMapper.selectPage(pageParam, wrapper);
+        // 转换为VO
+        List<BrandStandardVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<BrandStandardVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
     }
 
     @Override
     public JsonPage<BrandStandardVO> listByCategoryId(Long categoryId, Integer page, Integer pageSize) {
         log.debug("查询商品分类关联的商品品牌，商品分类id为" + categoryId);
-        PageHelper.startPage(page, pageSize);
-        List<BrandStandardVO> brands = brandMapper.listByCategoryId(categoryId);
-        return JsonPage.restPage(new PageInfo<>(brands));
+        Page<Brand> pageParam = new Page<>(page, pageSize);
+        LambdaQueryWrapper<Brand> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Brand::getId, categoryId)
+               .orderByDesc(Brand::getSort, Brand::getGmtCreate);
+        IPage<Brand> result = brandMapper.selectPage(pageParam, wrapper);
+        // 转换为VO
+        List<BrandStandardVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<BrandStandardVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
+    }
+
+    private BrandStandardVO convertToVO(Brand brand) {
+        if (brand == null) {
+            return null;
+        }
+        BrandStandardVO vo = new BrandStandardVO();
+        BeanUtils.copyProperties(brand, vo);
+        return vo;
     }
 
 }

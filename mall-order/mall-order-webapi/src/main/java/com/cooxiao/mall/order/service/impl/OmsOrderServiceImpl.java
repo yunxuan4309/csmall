@@ -1,5 +1,7 @@
 package com.cooxiao.mall.order.service.impl;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.restful.JsonPage;
@@ -20,8 +22,6 @@ import com.cooxiao.mall.pojo.order.vo.OrderAddVO;
 import com.cooxiao.mall.pojo.order.vo.OrderDetailVO;
 import com.cooxiao.mall.pojo.order.vo.OrderListVO;
 import com.cooxiao.mall.product.service.order.IForOrderSkuService;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import io.seata.spring.annotation.GlobalTransactional;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.dubbo.config.annotation.DubboReference;
@@ -196,15 +196,13 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         // 编写一个方法专门进行判断
         validateTimes(orderListTimeDTO);
         // 设置分页查询条件
-        PageHelper.startPage(orderListTimeDTO.getPage(),
-                orderListTimeDTO.getPageSize());
+        Page<OrderListVO> page = new Page<>(orderListTimeDTO.getPage(), orderListTimeDTO.getPageSize());
         // 给当前登录用户id赋值
         orderListTimeDTO.setUserId(getUserId());
         // 执行查询
-        List<OrderListVO> list=omsOrderMapper
-                .selectOrderBetweenTimes(orderListTimeDTO);
-        //  别忘了返回
-        return JsonPage.restPage(new PageInfo<>(list));
+        IPage<OrderListVO> result = omsOrderMapper.selectOrderBetweenTimes(page, orderListTimeDTO);
+        // 返回分页结果
+        return JsonPage.restPage(result);
     }
 
     private void validateTimes(OrderListTimeDTO orderListTimeDTO) {
@@ -257,5 +255,3 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
     }
 
 }
-
-

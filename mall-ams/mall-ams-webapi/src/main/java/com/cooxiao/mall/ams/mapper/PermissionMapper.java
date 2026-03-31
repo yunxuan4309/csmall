@@ -1,8 +1,7 @@
 package com.cooxiao.mall.ams.mapper;
 
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.cooxiao.mall.pojo.admin.model.Permission;
-import com.cooxiao.mall.pojo.admin.query.PermissionQuery;
-import com.cooxiao.mall.pojo.admin.vo.PermissionVO;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
@@ -13,14 +12,12 @@ import java.util.List;
  * @author cooxiao.com
  * @since 2021-12-02
  */
-public interface PermissionMapper{
-    List<Permission> selectPermissionsByAdminId(@Param("adminId")Long id);
+public interface PermissionMapper extends BaseMapper<Permission> {
+    List<Permission> selectPermissionsByAdminId(@Param("adminId") Long id);
 
     void insertPermission(Permission permission);
 
-    List<PermissionVO> selectPermissions(PermissionQuery permissionQuery);
-
     void updatePermission(Permission permission);
 
-    void deletePermission(@Param("id")Long id);
+    void deletePermission(@Param("id") Long id);
 }

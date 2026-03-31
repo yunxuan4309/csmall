@@ -1,6 +1,6 @@
 package com.cooxiao.mall.common.restful;
 
-import com.github.pagehelper.PageInfo;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
 
@@ -27,19 +27,15 @@ public class JsonPage<T> implements Serializable {
     private List<T> list;
 
     /**
-     * 将PageHelper分页后的list转为分页信息
+     * 将MyBatis-Plus分页后的IPage转为分页信息
      */
-    public static <T> JsonPage<T> restPage(PageInfo<T> pageInfo) {
+    public static <T> JsonPage<T> restPage(IPage<T> page) {
         JsonPage<T> result = new JsonPage<T>();
-        result.setTotalPage(pageInfo.getPages());
-        result.setPage(pageInfo.getPageNum());
-        result.setPageSize(pageInfo.getPageSize());
-        result.setTotal(pageInfo.getTotal());
-        result.setList(pageInfo.getList());
+        result.setTotalPage((int) page.getPages());
+        result.setPage((int) page.getCurrent());
+        result.setPageSize((int) page.getSize());
+        result.setTotal(page.getTotal());
+        result.setList(page.getRecords());
         return result;
     }
-
-
-
-
 }

@@ -1,5 +1,6 @@
 package com.cooxiao.mall.product.mapper;
 
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.cooxiao.mall.pojo.product.model.Category;
 import com.cooxiao.mall.pojo.product.vo.CategoryStandardVO;
 import org.apache.ibatis.annotations.Param;
@@ -14,23 +15,7 @@ import java.util.List;
  * @since 2021-11-30
  */
 @Repository
-public interface CategoryMapper {
-
-    /**
-     * 新增类别
-     *
-     * @param category 新增的类别对象
-     * @return 受影响的行数
-     */
-    int insert(Category category);
-
-    /**
-     * 根据id删除类别
-     *
-     * @param id 被删除的类别的id
-     * @return 受影响的行数
-     */
-    int deleteById(Long id);
+public interface CategoryMapper extends BaseMapper<Category> {
 
     /**
      * 设置将指定类别的"是否包含子级类别"的值
@@ -76,15 +61,6 @@ public interface CategoryMapper {
     int updateFullInfoById(Category category);
 
     /**
-     * 根据类别名称统计数量
-     *
-     * @param name 类别名称
-     * @return 此名称的类别的数量
-     */
-    @Deprecated
-    int countByName(String name);
-
-    /**
      * 根据父级类别id统计其子级类别数量
      *
      * @param parentId 父级类别id
@@ -107,13 +83,6 @@ public interface CategoryMapper {
      * @return 匹配的类别详情，如果没有匹配的数据，则返回null
      */
     CategoryStandardVO getByName(String name);
-
-    /**
-     * 查询类别列表
-     *
-     * @return 类别列表，如果没有匹配的数据，将返回长度为0的列表
-     */
-    List<CategoryStandardVO> list();
 
     /**
      * 根据品牌id查询类别列表

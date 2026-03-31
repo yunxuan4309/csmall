@@ -1,5 +1,8 @@
 package com.cooxiao.mall.product.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -14,8 +17,6 @@ import com.cooxiao.mall.pojo.product.model.Picture;
 import com.cooxiao.mall.pojo.product.vo.PictureSimpleVO;
 import com.cooxiao.mall.pojo.product.vo.PictureStandardVO;
 import com.cooxiao.mall.product.utils.PictureUploadUtils;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * <p>图片业务实现类</p>
@@ -149,9 +151,27 @@ public class PictureServiceImpl implements IPictureService {
 
     @Override
     public JsonPage<PictureStandardVO> listByAlbumId(Long albumId, Integer pageNum, Integer pageSize) {
-        PageHelper.startPage(pageNum, pageSize);
-        List<PictureStandardVO> pictureList = pictureMapper.listByAlbumId(albumId);
-        return JsonPage.restPage(new PageInfo<>(pictureList));
+        Page<Picture> pageParam = new Page<>(pageNum, pageSize);
+        LambdaQueryWrapper<Picture> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Picture::getAlbumId, albumId)
+               .orderByDesc(Picture::getSort, Picture::getGmtCreate);
+        IPage<Picture> result = pictureMapper.selectPage(pageParam, wrapper);
+        // 转换为VO
+        List<PictureStandardVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<PictureStandardVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
+    }
+
+    private PictureStandardVO convertToVO(Picture picture) {
+        if (picture == null) {
+            return null;
+        }
+        PictureStandardVO vo = new PictureStandardVO();
+        BeanUtils.copyProperties(picture, vo);
+        return vo;
     }
 
 }

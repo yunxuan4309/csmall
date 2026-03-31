@@ -126,7 +126,7 @@
 
 
     <!-- 查询当前登录用户指定时间范围内所有订单信息  -->
-    <select id="selectOrdersBetweenTimes"
+    <select id="selectOrderBetweenTimes"
             resultMap="OrderWithOrderItemMap" >
         SELECT
             oo.id,
@@ -148,11 +148,11 @@
         FROM oms_order oo
                  JOIN oms_order_item ooi ON oo.id=ooi.order_id
         WHERE
-            oo.user_id=#{userId}
+            oo.user_id=#{dto.userId}
           AND
-            oo.gmt_create &gt;= #{startTime}
+            oo.gmt_create &gt;= #{dto.startTime}
           AND
-            oo.gmt_create &lt;= #{endTime}
+            oo.gmt_create &lt;= #{dto.endTime}
         ORDER BY oo.gmt_modified DESC
     </select>
     <!--  利用动态sql,实现对订单对象中指定字段的修改  -->

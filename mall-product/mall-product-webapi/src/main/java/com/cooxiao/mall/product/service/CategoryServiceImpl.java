@@ -1,5 +1,8 @@
 package com.cooxiao.mall.product.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -11,14 +14,13 @@ import com.cooxiao.mall.pojo.product.dto.CategoryUpdateBaseInfoDTO;
 import com.cooxiao.mall.pojo.product.dto.CategoryUpdateFullInfoDTO;
 import com.cooxiao.mall.pojo.product.model.Category;
 import com.cooxiao.mall.pojo.product.vo.CategoryStandardVO;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * <p>类别业务实现类</p>
@@ -273,16 +275,43 @@ public class CategoryServiceImpl implements ICategoryService {
 
     @Override
     public JsonPage<CategoryStandardVO> listByBrand(Long brandId, Integer pageNum, Integer pageSize) {
-        PageHelper.startPage(pageNum, pageSize);
-        List<CategoryStandardVO> categories = categoryMapper.listByBrandId(brandId);
-        return JsonPage.restPage(new PageInfo<>(categories));
+        Page<Category> pageParam = new Page<>(pageNum, pageSize);
+        LambdaQueryWrapper<Category> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Category::getId, brandId)
+               .orderByDesc(Category::getSort, Category::getGmtCreate);
+        IPage<Category> result = categoryMapper.selectPage(pageParam, wrapper);
+        // 转换为VO
+        List<CategoryStandardVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<CategoryStandardVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
     }
 
     @Override
     public JsonPage<CategoryStandardVO> listByParent(Long parentId, Integer pageNum, Integer pageSize) {
-        PageHelper.startPage(pageNum, pageSize);
-        List<CategoryStandardVO> categories = categoryMapper.listByParentId(parentId);
-        return JsonPage.restPage(new PageInfo<>(categories));
+        Page<Category> pageParam = new Page<>(pageNum, pageSize);
+        LambdaQueryWrapper<Category> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Category::getParentId, parentId)
+               .orderByDesc(Category::getSort, Category::getGmtCreate);
+        IPage<Category> result = categoryMapper.selectPage(pageParam, wrapper);
+        // 转换为VO
+        List<CategoryStandardVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<CategoryStandardVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
+    }
+
+    private CategoryStandardVO convertToVO(Category category) {
+        if (category == null) {
+            return null;
+        }
+        CategoryStandardVO vo = new CategoryStandardVO();
+        BeanUtils.copyProperties(category, vo);
+        return vo;
     }
 
 }

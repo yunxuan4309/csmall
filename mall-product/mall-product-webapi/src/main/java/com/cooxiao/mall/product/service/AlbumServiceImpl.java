@@ -1,5 +1,8 @@
 package com.cooxiao.mall.product.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -11,14 +14,13 @@ import com.cooxiao.mall.pojo.product.dto.AlbumAddNewDTO;
 import com.cooxiao.mall.pojo.product.dto.AlbumUpdateDTO;
 import com.cooxiao.mall.pojo.product.model.Album;
 import com.cooxiao.mall.pojo.product.vo.AlbumStandardVO;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * <p>相册业务实现类</p>
@@ -113,7 +115,7 @@ public class AlbumServiceImpl implements IAlbumService {
         album.setDescription(albumUpdateDTO.getDescription());
         album.setSort(albumUpdateDTO.getSort() == null ? DataCommonConst.SORT_DEFAULT : albumUpdateDTO.getSort());
         log.debug("即将提交更新相册数据：{}", album);
-        int rows = albumMapper.update(album);
+        int rows = albumMapper.updateById(album);
         if (rows != 1) {
             throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "更新相册信息失败，服务器忙，请稍后再次尝试！");
         }
@@ -131,10 +133,26 @@ public class AlbumServiceImpl implements IAlbumService {
     @Override
     public JsonPage<AlbumStandardVO> list(Integer page, Integer pageSize) {
         log.debug("查询相册列表，页码={}，每页记录数={}", page, pageSize);
-        PageHelper.startPage(page, pageSize);
-        List<AlbumStandardVO> albums = albumMapper.list();
-        log.debug("查询分页相册列表：page={}，size={}", page, pageSize);
-        return JsonPage.restPage(new PageInfo<>(albums));
+        Page<Album> pageParam = new Page<>(page, pageSize);
+        LambdaQueryWrapper<Album> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByDesc(Album::getSort, Album::getGmtCreate);
+        IPage<Album> result = albumMapper.selectPage(pageParam, wrapper);
+        // 转换为VO
+        List<AlbumStandardVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<AlbumStandardVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
+    }
+
+    private AlbumStandardVO convertToVO(Album album) {
+        if (album == null) {
+            return null;
+        }
+        AlbumStandardVO vo = new AlbumStandardVO();
+        BeanUtils.copyProperties(album, vo);
+        return vo;
     }
 
 }

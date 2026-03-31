@@ -1,14 +1,12 @@
 package com.cooxiao.mall.order.mapper;
 
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.cooxiao.mall.pojo.order.model.OmsCart;
-import com.cooxiao.mall.pojo.order.vo.CartStandardVO;
-import feign.Param;
+import org.apache.ibatis.annotations.Param;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
-
 @Repository
-public interface OmsCartMapper {
+public interface OmsCartMapper extends BaseMapper<OmsCart> {
     //查询(判断)当前登录用户购物车中是否包含指定skuId的商品
     OmsCart selectExistCart(@Param("userId") Long userId, @Param("skuId") Long skuId);
 
@@ -26,7 +24,4 @@ public interface OmsCartMapper {
 
     // 根据用户Id和skuId删除购物车职工商品(新增订单业务中使用)
     int deleteCartByUserIdAndSkuId(OmsCart omsCart);
-
-    // 根据当前登录用户id查询此用户购物车中所有sku信息
-    List<CartStandardVO> selectCartByUserId(Long userId);
 }

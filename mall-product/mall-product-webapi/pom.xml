@@ -88,11 +88,7 @@
             <groupId>org.mybatis.spring.boot</groupId>
             <artifactId>mybatis-spring-boot-starter</artifactId>
         </dependency>
-        <!-- PageHelper Spring Boot：MyBatis分页 -->
-        <dependency>
-            <groupId>com.github.pagehelper</groupId>
-            <artifactId>pagehelper-spring-boot-starter</artifactId>
-        </dependency>
+
         <!-- Knife4j Spring Boot：在线API -->
         <dependency>
             <groupId>com.github.xiaoymin</groupId>
@@ -118,8 +114,8 @@
         </dependency>
         <!--dubbo-->
         <dependency>
-            <groupId>com.alibaba.cloud</groupId>
-            <artifactId>spring-cloud-starter-dubbo</artifactId>
+            <groupId>org.apache.dubbo</groupId>
+            <artifactId>dubbo-spring-boot-starter</artifactId>
         </dependency>
         <dependency>
             <groupId>io.seata</groupId>

@@ -1,5 +1,8 @@
 package com.cooxiao.mall.ams.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.ams.exception.CoolSharkException;
 import com.cooxiao.mall.ams.mapper.AdminRoleMapper;
 import com.cooxiao.mall.ams.mapper.RoleMapper;
@@ -9,13 +12,12 @@ import com.cooxiao.mall.pojo.admin.dto.RoleAddDTO;
 import com.cooxiao.mall.pojo.admin.dto.RoleUpdateDTO;
 import com.cooxiao.mall.pojo.admin.model.Role;
 import com.cooxiao.mall.pojo.admin.vo.RoleVO;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -31,20 +33,45 @@ public class RoleServiceImpl implements IRoleService {
     private RoleMapper roleMapper;
     @Autowired
     private AdminRoleMapper adminRoleMapper;
+
+    private RoleVO convertToVO(Role role) {
+        if (role == null) {
+            return null;
+        }
+        RoleVO vo = new RoleVO();
+        BeanUtils.copyProperties(role, vo);
+        return vo;
+    }
+
     @Override
     public JsonPage<RoleVO> listRoles(Integer pageNum, Integer sizeNum) {
-        PageHelper.startPage(pageNum,sizeNum);
-        List<RoleVO> roles=roleMapper.selectRoles();
-        PageInfo pageInfo=new PageInfo<>(roles);
-        return JsonPage.restPage(pageInfo);
+        Page<Role> page = new Page<>(pageNum, sizeNum);
+        LambdaQueryWrapper<Role> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByDesc(Role::getGmtCreate);
+        Page<Role> result = roleMapper.selectPage(page, wrapper);
+        List<RoleVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<RoleVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
     }
 
     @Override
     public JsonPage<RoleVO> queryRoles(Integer pageNum, Integer sizeNum, String query) {
-        PageHelper.startPage(pageNum,sizeNum);
-        List<RoleVO> roles=roleMapper.selectRolesLikeName(query);
-        PageInfo pageInfo=new PageInfo<>(roles);
-        return JsonPage.restPage(pageInfo);
+        Page<Role> page = new Page<>(pageNum, sizeNum);
+        LambdaQueryWrapper<Role> wrapper = new LambdaQueryWrapper<>();
+        wrapper.like(Role::getName, query)
+               .or()
+               .like(Role::getDescription, query)
+               .orderByDesc(Role::getGmtCreate);
+        Page<Role> result = roleMapper.selectPage(page, wrapper);
+        List<RoleVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<RoleVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
     }
 
     @Override

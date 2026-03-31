@@ -1,5 +1,8 @@
 package com.cooxiao.mall.order.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.restful.JsonPage;
@@ -10,8 +13,6 @@ import com.cooxiao.mall.pojo.order.dto.CartAddDTO;
 import com.cooxiao.mall.pojo.order.dto.CartUpdateDTO;
 import com.cooxiao.mall.pojo.order.model.OmsCart;
 import com.cooxiao.mall.pojo.order.vo.CartStandardVO;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -19,6 +20,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @author=java.cooxiao.com QQ:25380243
@@ -37,8 +39,9 @@ public class OmsCartServiceImpl implements IOmsCartService {
         // 我们需要先获取用户保存在SpringSecurity上下文中的信息,才能获取userId
         Long userId=getUserId();
         // 根据userId和cartDTO中的skuId进行用户购物车中商品的查询
-        OmsCart omsCart =
-                omsCartMapper.selectExistCart(userId, cartDTO.getSkuId());
+        LambdaQueryWrapper<OmsCart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(OmsCart::getUserId, userId).eq(OmsCart::getSkuId, cartDTO.getSkuId());
+        OmsCart omsCart = omsCartMapper.selectOne(wrapper);
         // 判断omsCart是否为null
         if(omsCart == null){
             // 如果omsCart是null,证明当前用户购物车中没有这个商品,执行新增操作
@@ -49,14 +52,14 @@ public class OmsCartServiceImpl implements IOmsCartService {
             // 检查omsCart是否还有未赋值的必要属性,发送userId没有被赋值
             omsCart.setUserId(userId);
             // 执行新增操作
-            omsCartMapper.saveCart(omsCart);
+            omsCartMapper.insert(omsCart);
         }else{
             // 如果omsCart不是null,证明当前用户购物车中有这个商品,执行修改数量操作
             // 修改数量的具体方法如下:将当前omsCart对象的quantity和参数cartDTO的相加
             // 将相加的结果赋回到omsCart对象的quantity属性里
             omsCart.setQuantity(omsCart.getQuantity()+cartDTO.getQuantity());
             // 在执行数据库的修改,史omsCart新的quantity影响数据库
-            omsCartMapper.updateQuantityById(omsCart);
+            omsCartMapper.updateById(omsCart);
         }
     }
 
@@ -64,19 +67,38 @@ public class OmsCartServiceImpl implements IOmsCartService {
     public JsonPage<CartStandardVO> listCarts(Integer page, Integer pageSize) {
         // 先从SpringSecurity上下文中获取当前登录用户id
         Long userId=getUserId();
-        // 在执行查询之前,先设置分页查询的条件
-        PageHelper.startPage(page,pageSize);
-        // 上面设置了分页条件,下面查询会生成limit关键字查询指定区域的数据
-        List<CartStandardVO> list=omsCartMapper.selectCartByUserId(userId);
-        // 返回JsonPage类型对象
-        return JsonPage.restPage(new PageInfo<>(list));
+        // 设置分页查询条件
+        Page<OmsCart> pageParam = new Page<>(page, pageSize);
+        // 使用 LambdaQueryWrapper 进行查询
+        LambdaQueryWrapper<OmsCart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(OmsCart::getUserId, userId).orderByDesc(OmsCart::getGmtCreate);
+        // 执行查询
+        Page<OmsCart> result = omsCartMapper.selectPage(pageParam, wrapper);
+        // 转换为VO
+        List<CartStandardVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<CartStandardVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        // 返回分页结果
+        return JsonPage.restPage(pageVO);
+    }
+
+    // 转换为VO
+    private CartStandardVO convertToVO(OmsCart cart) {
+        if (cart == null) {
+            return null;
+        }
+        CartStandardVO vo = new CartStandardVO();
+        BeanUtils.copyProperties(cart, vo);
+        return vo;
     }
 
     // 支持批量删除购物车中商品的方法
     @Override
     public void removeCart(Long[] ids) {
         // 直接将ids参数赋值到mapper中
-        int rows=omsCartMapper.deleteCartsByIds(ids);
+        int rows=omsCartMapper.deleteBatchIds(java.util.Arrays.asList(ids));
         if(rows==0){
             throw new CoolSharkServiceException(
                     ResponseCode.NOT_FOUND,"您要删除的商品已经删除了!");
@@ -87,7 +109,9 @@ public class OmsCartServiceImpl implements IOmsCartService {
     @Override
     public void removeAllCarts() {
         Long userId=getUserId();
-        int rows=omsCartMapper.deleteCartsByUserId(userId);
+        LambdaQueryWrapper<OmsCart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(OmsCart::getUserId, userId);
+        int rows = omsCartMapper.delete(wrapper);
         if(rows==0){
             throw new CoolSharkServiceException(
                     ResponseCode.NOT_FOUND,"您的购物车已经是空了!");
@@ -98,7 +122,10 @@ public class OmsCartServiceImpl implements IOmsCartService {
     @Override
     public void removeUserCarts(OmsCart omsCart) {
         // 购物车删除的效果无需验证,即使没有删除,也不要抛出异常,因为它不影响新增订单的流程
-        omsCartMapper.deleteCartByUserIdAndSkuId(omsCart);
+        LambdaQueryWrapper<OmsCart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(OmsCart::getUserId, omsCart.getUserId())
+               .eq(OmsCart::getSkuId, omsCart.getSkuId());
+        omsCartMapper.delete(wrapper);
     }
 
     @Override
@@ -108,7 +135,7 @@ public class OmsCartServiceImpl implements IOmsCartService {
         // 当前方法参数CartUpdateDTO中包含了id和quantity属性,赋值给omsCart对象即可
         BeanUtils.copyProperties(cartUpdateDTO,omsCart);
         // 执行修改
-        omsCartMapper.updateQuantityById(omsCart);
+        omsCartMapper.updateById(omsCart);
     }
 
     // 前端将JWT发送给服务器,服务器在运行控制器方法前先在过滤器中获取前端发送来的JWT
@@ -136,7 +163,4 @@ public class OmsCartServiceImpl implements IOmsCartService {
     public Long getUserId(){
         return getUserInfo().getId();
     }
-
-
-
 }

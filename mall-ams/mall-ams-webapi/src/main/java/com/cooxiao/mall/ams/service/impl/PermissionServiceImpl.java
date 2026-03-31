@@ -1,5 +1,8 @@
 package com.cooxiao.mall.ams.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.ams.exception.CoolSharkException;
 import com.cooxiao.mall.ams.mapper.RolePermissionMapper;
 import com.cooxiao.mall.ams.mapper.PermissionMapper;
@@ -10,13 +13,12 @@ import com.cooxiao.mall.pojo.admin.dto.PermissionUpdateDTO;
 import com.cooxiao.mall.pojo.admin.model.Permission;
 import com.cooxiao.mall.pojo.admin.query.PermissionQuery;
 import com.cooxiao.mall.pojo.admin.vo.PermissionVO;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -32,6 +34,16 @@ public class PermissionServiceImpl implements IPermissionService {
     private PermissionMapper permissionMapper;
     @Autowired
     private RolePermissionMapper rolePermissionMapper;
+
+    private PermissionVO convertToVO(Permission permission) {
+        if (permission == null) {
+            return null;
+        }
+        PermissionVO vo = new PermissionVO();
+        BeanUtils.copyProperties(permission, vo);
+        return vo;
+    }
+
     @Override
     public void addPermission(PermissionAddDTO permissionAddDTO) {
         //转化对象
@@ -42,10 +54,21 @@ public class PermissionServiceImpl implements IPermissionService {
 
     @Override
     public JsonPage<PermissionVO> listPermissions(PermissionQuery permissionQuery) {
-        PageHelper.startPage(permissionQuery.getPageNum(),permissionQuery.getSizeNum());
-        List<PermissionVO> permissionVOList=permissionMapper.selectPermissions(permissionQuery);
-        PageInfo pageInfo=new PageInfo(permissionVOList);
-        return JsonPage.restPage(pageInfo);
+        Page<Permission> page = new Page<>(permissionQuery.getPageNum(), permissionQuery.getSizeNum());
+        LambdaQueryWrapper<Permission> wrapper = new LambdaQueryWrapper<>();
+        if (permissionQuery.getName() != null) {
+            wrapper.like(Permission::getName, permissionQuery.getName());
+        }
+        if (permissionQuery.getValue() != null) {
+            wrapper.like(Permission::getValue, permissionQuery.getValue());
+        }
+        Page<Permission> result = permissionMapper.selectPage(page, wrapper);
+        List<PermissionVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<PermissionVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
     }
 
     @Override

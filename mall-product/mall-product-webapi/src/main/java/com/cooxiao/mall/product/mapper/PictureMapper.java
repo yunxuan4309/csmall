@@ -1,5 +1,6 @@
 package com.cooxiao.mall.product.mapper;
 
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.cooxiao.mall.pojo.product.model.Picture;
 import com.cooxiao.mall.pojo.product.vo.PictureStandardVO;
 import org.springframework.stereotype.Repository;
@@ -13,15 +14,7 @@ import java.util.List;
  * @since 2021-11-30
  */
 @Repository
-public interface PictureMapper {
-
-    /**
-     * 插入图片
-     *
-     * @param picture 图片
-     * @return 受影响的行数
-     */
-    int insert(Picture picture);
+public interface PictureMapper extends BaseMapper<Picture> {
 
     /**
      * 批量插入图片
@@ -29,17 +22,7 @@ public interface PictureMapper {
      * @param pictures 插入的图片集合
      * @return 受影响的行数
      */
-    @Deprecated
     int insertBatch(List<Picture> pictures);
-
-    /**
-     * 根据id删除图片
-     *
-     * @param id 被删除的图片的id
-     * @return 受影响的行数
-     */
-    @Deprecated
-    int deleteById(Long id);
 
     /**
      * 将指定的图片设置为封面

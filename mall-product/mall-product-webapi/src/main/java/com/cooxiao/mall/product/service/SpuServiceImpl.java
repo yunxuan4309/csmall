@@ -1,5 +1,7 @@
 package com.cooxiao.mall.product.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -15,15 +17,12 @@ import com.cooxiao.mall.pojo.product.vo.SpuStandardVO;
 import com.cooxiao.mall.product.constant.DataCommonConst;
 import com.cooxiao.mall.product.mapper.*;
 import com.cooxiao.mall.product.utils.IdGeneratorUtils;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 /**
  * <p>SPU（Standard Product Unit）业务实现类</p>
@@ -186,16 +185,16 @@ public class SpuServiceImpl implements ISpuService {
 
     @Override
     public JsonPage<SpuListItemVO> list(Integer page, Integer pageSize) {
-        PageHelper.startPage(page, pageSize);
-        List<SpuListItemVO> spuList = spuMapper.list();
-        return JsonPage.restPage(new PageInfo<>(spuList));
+        Page<SpuListItemVO> pageParam = new Page<>(page, pageSize);
+        IPage<SpuListItemVO> result = spuMapper.list(pageParam);
+        return JsonPage.restPage(result);
     }
 
     @Override
     public JsonPage<SpuListItemVO> listFromDB(SpuQuery spuQuery, Integer page, Integer pageSize) {
-        PageHelper.startPage(page, pageSize);
-        List<SpuListItemVO> spuList = spuMapper.listByCustomCondition(spuQuery);
-        return JsonPage.restPage(new PageInfo<>(spuList));
+        Page<SpuListItemVO> pageParam = new Page<>(page, pageSize);
+        IPage<SpuListItemVO> result = spuMapper.listByCustomCondition(pageParam, spuQuery);
+        return JsonPage.restPage(result);
     }
 
     @Override

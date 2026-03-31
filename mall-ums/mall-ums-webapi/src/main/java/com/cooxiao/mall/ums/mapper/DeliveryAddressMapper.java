@@ -1,8 +1,9 @@
 package com.cooxiao.mall.ums.mapper;
 
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.cooxiao.mall.pojo.ums.model.DeliveryAddress;
-import com.cooxiao.mall.pojo.ums.vo.DeliveryAddressStandardVO;
 import org.apache.ibatis.annotations.Param;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
@@ -12,9 +13,8 @@ import java.util.List;
  * @author cooxiao.com
  * @since 2022-02-22
  */
-public interface DeliveryAddressMapper {
-    List<DeliveryAddressStandardVO> selectAddressesByUserId(Long userId);
-
+@Repository
+public interface DeliveryAddressMapper extends BaseMapper<DeliveryAddress> {
     void insertDeliveryAddress(DeliveryAddress deliveryAddress);
 
     int selectCountByUserId(@Param("userId")Long userId);

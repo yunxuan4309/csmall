@@ -1,5 +1,6 @@
 package com.cooxiao.mall.product.mapper;
 
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.cooxiao.mall.pojo.product.model.Attribute;
 import com.cooxiao.mall.pojo.product.vo.AttributeDetailsVO;
 import com.cooxiao.mall.pojo.product.vo.AttributeStandardVO;
@@ -15,31 +16,7 @@ import java.util.List;
  * @since 2021-11-30
  */
 @Repository
-public interface AttributeMapper {
-
-    /**
-     * 新增属性
-     *
-     * @param attribute 新增的属性对象
-     * @return 受影响的行数
-     */
-    int insert(Attribute attribute);
-
-    /**
-     * 根据id删除属性
-     *
-     * @param id 被删除的属性的id
-     * @return 受影响的行数
-     */
-    int deleteById(Long id);
-
-    /**
-     * 修改属性
-     *
-     * @param attribute 封装了被修改的属性的id，和新的相关值的对象
-     * @return 受影响的行数
-     */
-    int update(Attribute attribute);
+public interface AttributeMapper extends BaseMapper<Attribute> {
 
     /**
      * 根据属性模板id统计商品属性的数量

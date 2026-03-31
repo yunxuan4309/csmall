@@ -1,5 +1,8 @@
 package com.cooxiao.mall.product.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -16,14 +19,13 @@ import com.cooxiao.mall.pojo.product.vo.AttributeTemplateDetailsVO;
 import com.cooxiao.mall.pojo.product.vo.AttributeTemplateListItemVO;
 import com.cooxiao.mall.pojo.product.vo.AttributeTemplateStandardVO;
 import com.cooxiao.mall.pojo.product.vo.CategoryStandardVO;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * <p>属性模板业务实现类</p>
@@ -128,7 +130,7 @@ public class AttributeTemplateServiceImpl implements IAttributeTemplateService {
         attributeTemplate.setId(id);
         BeanUtils.copyProperties(attributeTemplateUpdateDTO, attributeTemplate);
         log.debug("更新属性模板" + attributeTemplate);
-        int rows = attributeTemplateMapper.update(attributeTemplate);
+        int rows = attributeTemplateMapper.updateById(attributeTemplate);
         if (rows != 1) {
             throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "更新属性模板失败，服务器忙，请稍后再次尝试！");
         }
@@ -163,10 +165,27 @@ public class AttributeTemplateServiceImpl implements IAttributeTemplateService {
 
     @Override
     public JsonPage<AttributeTemplateStandardVO> list(Integer pageNum, Integer pageSize) {
-        PageHelper.startPage(pageNum, pageSize);
         log.debug("查询属性模板分页数据:page=" + pageNum + ";size=" + pageSize);
-        List<AttributeTemplateStandardVO> attributeTemplateSimpleVOList = attributeTemplateMapper.list();
-        return JsonPage.restPage(new PageInfo<>(attributeTemplateSimpleVOList));
+        Page<AttributeTemplate> pageParam = new Page<>(pageNum, pageSize);
+        LambdaQueryWrapper<AttributeTemplate> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByDesc(AttributeTemplate::getSort, AttributeTemplate::getGmtCreate);
+        IPage<AttributeTemplate> result = attributeTemplateMapper.selectPage(pageParam, wrapper);
+        // 转换为VO
+        List<AttributeTemplateStandardVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<AttributeTemplateStandardVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
+    }
+
+    private AttributeTemplateStandardVO convertToVO(AttributeTemplate attributeTemplate) {
+        if (attributeTemplate == null) {
+            return null;
+        }
+        AttributeTemplateStandardVO vo = new AttributeTemplateStandardVO();
+        BeanUtils.copyProperties(attributeTemplate, vo);
+        return vo;
     }
 
     @Override

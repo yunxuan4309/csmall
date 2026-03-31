@@ -1,6 +1,6 @@
 package com.cooxiao.mall.gateway.knife4j.config;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.stereotype.Component;
@@ -18,15 +18,23 @@ public class Knife4jSwaggerProvider implements WebFluxConfigurer {
     // OpenAPI 3的标准路径
     public static final String API_URI = "/v3/api-docs";
 
-    @Autowired
-    private RouteLocator routeLocator;
+    private final ObjectProvider<RouteLocator> routeLocatorProvider;
 
     @Value("${spring.application.name}")
     private String applicationName;
 
+    public Knife4jSwaggerProvider(ObjectProvider<RouteLocator> routeLocatorProvider) {
+        this.routeLocatorProvider = routeLocatorProvider;
+    }
+
     public List<SwaggerResource> getSwaggerResources() {
         List<SwaggerResource> resources = new ArrayList<>();
         List<String> routeHosts = new ArrayList<>();
+
+        RouteLocator routeLocator = routeLocatorProvider.getIfAvailable();
+        if (routeLocator == null) {
+            return resources;
+        }
 
         // 获取所有路由服务
         routeLocator.getRoutes()

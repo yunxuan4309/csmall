@@ -53,11 +53,6 @@
             <groupId>org.mybatis.spring.boot</groupId>
             <artifactId>mybatis-spring-boot-starter</artifactId>
         </dependency>
-        <!-- PageHelper Spring Boot：MyBatis分页 -->
-        <dependency>
-            <groupId>com.github.pagehelper</groupId>
-            <artifactId>pagehelper-spring-boot-starter</artifactId>
-        </dependency>
         <!-- Knife4j Spring Boot：在线API -->
         <dependency>
             <groupId>com.github.xiaoymin</groupId>
@@ -89,6 +84,12 @@
             <artifactId>mybatis-plus-boot-starter</artifactId>
             <version>${mybaits-plus.version}</version>
         </dependency>
+        <!-- MyBatis Plus JSqlParser：分页插件依赖（3.5.9+需要单独引入） -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+            <version>${mybatis-plus-jsqlparser.version}</version>
+        </dependency>
         <!-- MyBatis Plus Generator：代码生成器 -->
         <dependency>
             <groupId>com.baomidou</groupId>
@@ -107,8 +108,8 @@
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.alibaba.cloud</groupId>
-            <artifactId>spring-cloud-starter-dubbo</artifactId>
+            <groupId>org.apache.dubbo</groupId>
+            <artifactId>dubbo-spring-boot-starter</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

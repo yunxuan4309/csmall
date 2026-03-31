@@ -1,5 +1,6 @@
 package com.cooxiao.mall.product.mapper;
 
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.cooxiao.mall.pojo.product.model.AttributeTemplate;
 import com.cooxiao.mall.pojo.product.vo.AttributeTemplateDetailsVO;
 import com.cooxiao.mall.pojo.product.vo.AttributeTemplateListItemVO;
@@ -16,31 +17,7 @@ import java.util.List;
  * @since 2021-11-30
  */
 @Repository
-public interface AttributeTemplateMapper {
-
-    /**
-     * 新增属性模板
-     *
-     * @param attributeTemplate 新增的属性模板对象
-     * @return 受影响的行数
-     */
-    int insert(AttributeTemplate attributeTemplate);
-
-    /**
-     * 根据id删除属性模板
-     *
-     * @param id 被删除的属性模板的id
-     * @return 受影响的行数
-     */
-    int deleteById(Long id);
-
-    /**
-     * 修改属性模板
-     *
-     * @param attributeTemplate 封装了被修改的属性模板的id，和新的相关值的对象
-     * @return 受影响的行数
-     */
-    int update(AttributeTemplate attributeTemplate);
+public interface AttributeTemplateMapper extends BaseMapper<AttributeTemplate> {
 
     /**
      * 统计某名称的属性模板数量

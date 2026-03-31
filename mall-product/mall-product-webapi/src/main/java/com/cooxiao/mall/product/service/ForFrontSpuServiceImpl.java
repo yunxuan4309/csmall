@@ -1,5 +1,8 @@
 package com.cooxiao.mall.product.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -11,13 +14,13 @@ import com.cooxiao.mall.pojo.product.vo.SpuStandardVO;
 import com.cooxiao.mall.product.service.front.IForFrontSpuService;
 import com.cooxiao.mall.product.mapper.SpuDetailMapper;
 import com.cooxiao.mall.product.mapper.SpuMapper;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import org.apache.dubbo.config.annotation.DubboService;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @DubboService
 @Service
@@ -26,13 +29,23 @@ public class ForFrontSpuServiceImpl implements IForFrontSpuService {
     private SpuMapper spuMapper;
     @Autowired
     private SpuDetailMapper spuDetailMapper;
+
     @Override
     public JsonPage<SpuListItemVO> listSpuByCategoryId(Long categoryId, Integer page, Integer pageSize) {
-        SpuQuery spuQuery=new SpuQuery();
-        spuQuery.setCategoryId(categoryId);
-        PageHelper.startPage(page,pageSize);
-        List<SpuListItemVO> spuListItemVOs = spuMapper.listByCustomCondition(spuQuery);
-        return JsonPage.restPage(new PageInfo<>(spuListItemVOs));
+        Page<Spu> pageParam = new Page<>(page, pageSize);
+        LambdaQueryWrapper<Spu> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Spu::getCategoryId, categoryId)
+               .eq(Spu::getChecked, 1)
+               .eq(Spu::getDeleted, 0)
+               .orderByDesc(Spu::getGmtCreate);
+        IPage<Spu> result = spuMapper.selectPage(pageParam, wrapper);
+        // 转换为VO
+        List<SpuListItemVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<SpuListItemVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
     }
 
     /**
@@ -57,13 +70,21 @@ public class ForFrontSpuServiceImpl implements IForFrontSpuService {
 
     @Override
     public JsonPage<Spu> getSpuByPage(Integer pageNum, Integer pageSize) {
-        PageHelper.startPage(pageNum,pageSize);
-        List<Spu> list=spuMapper.findAllList();
-        return JsonPage.restPage(new PageInfo<>(list));
+        Page<Spu> pageParam = new Page<>(pageNum, pageSize);
+        LambdaQueryWrapper<Spu> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Spu::getChecked, 1)
+               .eq(Spu::getDeleted, 0)
+               .orderByDesc(Spu::getGmtCreate);
+        IPage<Spu> result = spuMapper.selectPage(pageParam, wrapper);
+        return JsonPage.restPage(result);
+    }
+
+    private SpuListItemVO convertToVO(Spu spu) {
+        if (spu == null) {
+            return null;
+        }
+        SpuListItemVO vo = new SpuListItemVO();
+        BeanUtils.copyProperties(spu, vo);
+        return vo;
     }
 }
-
-
-
-
-

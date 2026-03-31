@@ -20,12 +20,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <!--MyBatis分页插件-->
-        <dependency>
-            <groupId>com.github.pagehelper</groupId>
-            <artifactId>pagehelper-spring-boot-starter</artifactId>
-            <version>${pagehelper-spring-boot.version}</version>
-        </dependency>
         <!-- Knife4j OpenAPI3：在线API -->
         <dependency>
             <groupId>com.github.xiaoymin</groupId>
@@ -53,6 +47,12 @@
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>
             <version>${fastjson.version}</version>
+        </dependency>
+        <!-- MyBatis Plus：支持分页 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-core</artifactId>
+            <version>${mybaits-plus.version}</version>
         </dependency>
     </dependencies>
 

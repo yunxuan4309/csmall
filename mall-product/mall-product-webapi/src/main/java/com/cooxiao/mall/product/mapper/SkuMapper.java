@@ -1,5 +1,6 @@
 package com.cooxiao.mall.product.mapper;
 
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.cooxiao.mall.pojo.product.model.Sku;
 import com.cooxiao.mall.pojo.product.vo.SkuStandardVO;
 import org.apache.ibatis.annotations.Param;
@@ -15,15 +16,7 @@ import java.util.List;
  * @since 2021-11-30
  */
 @Repository
-public interface SkuMapper {
-
-    /**
-     * 新增SKU
-     *
-     * @param sku 新增的SKU对象
-     * @return 受影响的行数
-     */
-    int insert(Sku sku);
+public interface SkuMapper extends BaseMapper<Sku> {
 
     /**
      * 批量新增SKU
@@ -32,14 +25,6 @@ public interface SkuMapper {
      * @return 受影响的行数
      */
     int insertBatch(List<Sku> skuList);
-
-    /**
-     * 根据id删除SKU
-     *
-     * @param id 被删除的SKU的id
-     * @return 受影响的行数
-     */
-    int deleteById(Long id);
 
     /**
      * 修改SKU

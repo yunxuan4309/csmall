@@ -130,7 +130,7 @@
         from
         oms_cart
         where
-        user_id=#{id}
+        user_id=#{userId}
     </select>
 </mapper>
 

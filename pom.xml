@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.7</version>
+        <version>3.2.5</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <packaging>pom</packaging>
@@ -42,20 +42,22 @@
         <mall-mapper.version>1.0.0</mall-mapper.version>
         <mall-service.version>1.0.0</mall-service.version>
         <mall-product-service.version>1.0.0</mall-product-service.version>
-        <spring-cloud.version>2023.0.3</spring-cloud.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的Spring Cloud版本 -->
-        <spring-cloud-alibaba.version>2023.0.3.1</spring-cloud-alibaba.version> <!-- 修改：使用已知可用的兼容Spring Boot 3.5.7的版本 -->
-        <spring-boot.version>3.5.7</spring-boot.version> <!-- 修改：统一为3.5.7，保持版本一致性 -->
-        <spring-boot-configuration-processor.version>3.5.7</spring-boot-configuration-processor.version> <!-- 修改：与Spring Boot主版本保持一致 -->
-        <spring-security-jwt.version>3.1.4</spring-security-jwt.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的版本 -->
+        <spring-cloud.version>2023.0.3</spring-cloud.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.2.5的Spring Cloud版本 -->
+        <spring-cloud-alibaba.version>2023.0.1.2</spring-cloud-alibaba.version> <!-- 修改：使用已知可用的兼容Spring Boot 3.2.5的版本 -->
+        <spring-boot.version>3.2.5</spring-boot.version> <!-- 修改：统一为3.2.5，保持版本一致性 -->
+        <spring-boot-configuration-processor.version>3.2.5</spring-boot-configuration-processor.version> <!-- 修改：与Spring Boot主版本保持一致 -->
+        <spring-security-jwt.version>3.1.4</spring-security-jwt.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.2.5的版本 -->
         <mybatis-spring-boot.version>3.0.3</mybatis-spring-boot.version> <!-- 修改：使用兼容Spring Boot 3.5.7的版本 -->
-        <mybaits-plus.version>3.5.8</mybaits-plus.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的版本 -->
-        <pagehelper-spring-boot.version>1.4.6</pagehelper-spring-boot.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的版本 -->
+        <mybatis.version>3.5.19</mybatis.version> <!-- MyBatis版本：需要3.5.16+以兼容MyBatis-Plus 3.5.8 -->
+        <mybaits-plus.version>3.5.9</mybaits-plus.version>
+        <mybatis-plus-jsqlparser.version>3.5.9</mybatis-plus-jsqlparser.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.5.7的版本 -->
+        <pagehelper-spring-boot.version>1.4.7</pagehelper-spring-boot.version>
         <mysql.version>8.0.33</mysql.version> <!-- 修改：使用阿里云镜像中稳定可用的版本 -->
         <lombok.version>1.18.34</lombok.version> <!-- 修改：使用最新稳定版本 -->
         <knife4j-spring-boot-starter.version>4.5.0</knife4j-spring-boot-starter.version> <!-- Knife4j版本 -->
         <knife4j-openapi3.version>4.5.0</knife4j-openapi3.version> <!-- 使用兼容Spring Boot 3.x的OpenAPI 3版本 -->
-        <spring-rabbit-test.version>3.5.7</spring-rabbit-test.version> <!-- 修改：与Spring Boot主版本保持一致 -->
-        <spring-security-test.version>6.5.0</spring-security-test.version> <!-- 修改：与Spring Boot主版本保持一致 -->
+        <spring-rabbit-test.version>3.2.5</spring-rabbit-test.version> <!-- 修改：与Spring Boot主版本保持一致 -->
+        <spring-security-test.version>6.2.4</spring-security-test.version> <!-- 修改：与Spring Boot主版本保持一致 -->
         <fastjson.version>2.0.43</fastjson.version> <!-- 修改：使用阿里云镜像中稳定可用的FastJSON 2.x版本 -->
         <druid.version>1.2.24</druid.version> <!-- 修改：使用最新稳定版本 -->
         <jjwt.version>0.9.1</jjwt.version> <!-- 修改：使用阿里云镜像中广泛支持的兼容版本 -->
@@ -175,16 +177,28 @@
                 <artifactId>druid</artifactId>
                 <version>${druid.version}</version>
             </dependency>
+            <!-- MyBatis：覆盖mybatis-spring-boot-starter传递的旧版本 -->
+            <dependency>
+                <groupId>org.mybatis</groupId>
+                <artifactId>mybatis</artifactId>
+                <version>${mybatis.version}</version>
+            </dependency>
             <!-- MyBatis Spring Boot：数据访问层MyBatis编程 -->
             <dependency>
                 <groupId>org.mybatis.spring.boot</groupId>
                 <artifactId>mybatis-spring-boot-starter</artifactId>
                 <version>${mybatis-spring-boot.version}</version>
             </dependency>
-            <!-- MyBatis Plus Spring Boot：MyBatis增强 -->
+            <!-- MyBatis Plus Spring Boot：MyBatis增强（Spring Boot 2.x 使用） -->
             <dependency>
                 <groupId>com.baomidou</groupId>
                 <artifactId>mybatis-plus-boot-starter</artifactId>
+                <version>${mybaits-plus.version}</version>
+            </dependency>
+            <!-- MyBatis Plus Spring Boot 3.x：MyBatis增强（Spring Boot 3.x 必须使用） -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
                 <version>${mybaits-plus.version}</version>
             </dependency>
             <!-- MyBatis Plus Generator：代码生成器 -->
@@ -192,12 +206,6 @@
                 <groupId>com.baomidou</groupId>
                 <artifactId>mybatis-plus-generator</artifactId>
                 <version>${mybaits-plus.version}</version>
-            </dependency>
-            <!-- PageHelper Spring Boot：MyBatis分页 -->
-            <dependency>
-                <groupId>com.github.pagehelper</groupId>
-                <artifactId>pagehelper-spring-boot-starter</artifactId>
-                <version>${pagehelper-spring-boot.version}</version>
             </dependency>
             <!-- Spring Boot：基础框架 -->
             <dependency>
@@ -355,11 +363,11 @@
                 <artifactId>seata-spring-boot-starter</artifactId>
                 <version>1.7.1</version>
             </dependency>
-            <!-- Spring Cloud Starter Dubbo -->
+            <!-- Spring Cloud Starter Dubbo (Dubbo 3.x for Spring Boot 3.x) -->
             <dependency>
-                <groupId>com.alibaba.cloud</groupId>
-                <artifactId>spring-cloud-starter-dubbo</artifactId>
-                <version>2021.1</version>
+                <groupId>org.apache.dubbo</groupId>
+                <artifactId>dubbo-spring-boot-starter</artifactId>
+                <version>3.3.2</version>
             </dependency>
 
             <dependency>

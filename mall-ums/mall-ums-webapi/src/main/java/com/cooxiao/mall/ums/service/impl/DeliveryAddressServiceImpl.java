@@ -1,5 +1,8 @@
 package com.cooxiao.mall.ums.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.restful.JsonPage;
@@ -10,8 +13,6 @@ import com.cooxiao.mall.pojo.ums.model.DeliveryAddress;
 import com.cooxiao.mall.pojo.ums.vo.DeliveryAddressStandardVO;
 import com.cooxiao.mall.ums.mapper.DeliveryAddressMapper;
 import com.cooxiao.mall.ums.service.IDeliveryAddressService;
-import com.github.pagehelper.PageHelper;
-import com.github.pagehelper.PageInfo;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -19,6 +20,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -33,12 +35,29 @@ public class DeliveryAddressServiceImpl implements IDeliveryAddressService {
     @Autowired
     private DeliveryAddressMapper deliveryAddressMapper;
 
+    private DeliveryAddressStandardVO convertToVO(DeliveryAddress address) {
+        if (address == null) {
+            return null;
+        }
+        DeliveryAddressStandardVO vo = new DeliveryAddressStandardVO();
+        BeanUtils.copyProperties(address, vo);
+        return vo;
+    }
+
     @Override
     public JsonPage<DeliveryAddressStandardVO> listAddress(Integer page, Integer pageSize) {
         Long userId = getUserId();
-        PageHelper.startPage(page,pageSize);
-        List<DeliveryAddressStandardVO> addresses=deliveryAddressMapper.selectAddressesByUserId(userId);
-        return JsonPage.restPage(new PageInfo<>(addresses));
+        Page<DeliveryAddress> pageParam = new Page<>(page, pageSize);
+        LambdaQueryWrapper<DeliveryAddress> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(DeliveryAddress::getUserId, userId)
+               .orderByDesc(DeliveryAddress::getGmtModified);
+        Page<DeliveryAddress> result = deliveryAddressMapper.selectPage(pageParam, wrapper);
+        List<DeliveryAddressStandardVO> voList = result.getRecords().stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+        IPage<DeliveryAddressStandardVO> pageVO = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        pageVO.setRecords(voList);
+        return JsonPage.restPage(pageVO);
     }
 
     @Override
@@ -47,7 +66,9 @@ public class DeliveryAddressServiceImpl implements IDeliveryAddressService {
         Long userId = getUserId();
         DeliveryAddress deliveryAddress=new DeliveryAddress();
         //查询已存在
-        int count=deliveryAddressMapper.selectCountByUserId(userId);
+        LambdaQueryWrapper<DeliveryAddress> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(DeliveryAddress::getUserId, userId);
+        long count = deliveryAddressMapper.selectCount(wrapper);
         if(count==0){
             //说明之前米有写入任何地址管理,第一个地址就是默认地址
             deliveryAddress.setDefaultAddress(1);
@@ -56,7 +77,7 @@ public class DeliveryAddressServiceImpl implements IDeliveryAddressService {
         }
         BeanUtils.copyProperties(deliveryAddressAddDTO,deliveryAddress);
         deliveryAddress.setUserId(userId);
-        deliveryAddressMapper.insertDeliveryAddress(deliveryAddress);
+        deliveryAddressMapper.insert(deliveryAddress);
     }
 
     @Override
@@ -64,12 +85,12 @@ public class DeliveryAddressServiceImpl implements IDeliveryAddressService {
         //转化
         DeliveryAddress deliveryAddress=new DeliveryAddress();
         BeanUtils.copyProperties(deliveryAddressEditDTO,deliveryAddress);
-        deliveryAddressMapper.updateAddressById(deliveryAddress);
+        deliveryAddressMapper.updateById(deliveryAddress);
     }
 
     @Override
     public void deleteAddress(Long id) {
-        deliveryAddressMapper.deleteAddressById(id);
+        deliveryAddressMapper.deleteById(id);
     }
 
     //TODO 可以和购物车业务层方法合并简化

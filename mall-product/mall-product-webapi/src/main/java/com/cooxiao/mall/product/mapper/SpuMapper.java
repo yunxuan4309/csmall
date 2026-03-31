@@ -1,5 +1,8 @@
 package com.cooxiao.mall.product.mapper;
 
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.pojo.product.model.Spu;
 import com.cooxiao.mall.pojo.product.query.SpuQuery;
 import com.cooxiao.mall.pojo.product.vo.SpuListItemVO;
@@ -18,7 +21,7 @@ import java.util.List;
  * @since 2021-11-30
  */
 @Repository
-public interface SpuMapper {
+public interface SpuMapper extends BaseMapper<Spu> {
 
     /**
      * 新增SPU
@@ -104,19 +107,21 @@ public interface SpuMapper {
     SpuStandardVO getById(Long id);
 
     /**
-     * 查询SPU列表
+     * 查询SPU列表（支持分页）
      *
+     * @param page 分页参数
      * @return SPU列表，如果没有匹配的数据，将返回长度为0的列表
      */
-    List<SpuListItemVO> list();
+    IPage<SpuListItemVO> list(Page<SpuListItemVO> page);
 
     /**
-     * 查询SPU列表
+     * 查询SPU列表（支持分页）
      *
-     * @param spuQuery 封装了查询条件的对象
+     * @param page      分页参数
+     * @param spuQuery  封装了查询条件的对象
      * @return SPU列表，如果没有匹配的数据，将返回长度为0的列表
      */
-    List<SpuListItemVO> listByCustomCondition(SpuQuery spuQuery);
+    IPage<SpuListItemVO> listByCustomCondition(Page<SpuListItemVO> page, @Param("spuQuery") SpuQuery spuQuery);
 
 
     // 全查所有spu
