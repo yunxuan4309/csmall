@@ -44,10 +44,15 @@ public class AdminSSOServiceImpl implements IAdminSSOService {
         //生成返回的token
         String token;
         AdminUserDetails userDetails = (AdminUserDetails) userDetailsService.loadUserByUsername(adminLoginDTO.getUsername());
+        log.info("加载到的用户详情: {}", userDetails);
         if (userDetails == null) {
             throw new CoolSharkServiceException(ResponseCode.BAD_REQUEST, "登录失败！用户名密码错误");
         }
-        if (!passwordEncoder.matches(adminLoginDTO.getPassword(), userDetails.getPassword())) {
+        log.info("输入的密码: {}", adminLoginDTO.getPassword());
+        log.info("数据库中的密码哈希: {}", userDetails.getPassword());
+        boolean matches = passwordEncoder.matches(adminLoginDTO.getPassword(), userDetails.getPassword());
+        log.info("密码验证结果: {}", matches);
+        if (!matches) {
             throw new CoolSharkServiceException(ResponseCode.BAD_REQUEST, "登录失败！用户名密码错误");
         }
         CsmallAuthenticationInfo csmallAuthenticationInfo = generateFromAdmin(userDetails);
@@ -57,12 +62,10 @@ public class AdminSSOServiceImpl implements IAdminSSOService {
         adminLoginLog.setAdminId(userDetails.getId());
         LocalDateTime now=LocalDateTime.now();
         adminLoginLog.setGmtCreate(now);
-        adminLoginLog.setGmtModified(now);
         adminLoginLog.setGmtLogin(now);
         adminLoginLog.setIp(adminLoginDTO.getIp());
         adminLoginLog.setUserAgent(adminLoginDTO.getUserAgent());
         adminLoginLog.setUsername(userDetails.getUsername());
-        adminLoginLog.setNickname(userDetails.getNickname());
         adminLoginLogMapper.insertAdminLoginLog(adminLoginLog);
         return token;
     }

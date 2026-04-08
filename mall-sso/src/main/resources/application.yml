@@ -1,8 +1,16 @@
 spring:
+  application:
+    name: mall-sso
   profiles:
     active: test
     #active: multisource-dev
     #active: multisource-prod
+  # 确保 Jackson 是首选的 JSON 处理库
+  main:
+    web-application-type: servlet
+  mvc:
+    format:
+      request-format: json
 server:
   port: 10002
 
@@ -14,7 +22,7 @@ jwt:
 
 mybatis:
   mapper-locations:
-    - classpath:mapper/*.xml
+    - classpath:mapper/**/*.xml
   configuration:
     cache-enabled: false
     map-underscore-to-camel-case: true

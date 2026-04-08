@@ -54,11 +54,8 @@ public class ResourceWebSecurityConfiguration {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/",
-                        "/*.html",
                         "/favicon.ico",
-                        "/**/*.html",
-                        "/**/*.css",
-                        "/**/*.js",
+                        "/error",
                         "/swagger-resources/**",
                         "/v2/api-docs/**",
                         "/v3/api-docs/**",

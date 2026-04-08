@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,7 +33,7 @@ public class UserSSOController {
     private String jwtTokenHead;
     @ApiOperation(value = "前台单点登录认证登录")
     @PostMapping("/login")
-    public JsonResult<TokenVO> doLogin(@Valid UserLoginDTO userLoginDTO, HttpServletRequest request){
+    public JsonResult<TokenVO> doLogin(@Valid @RequestBody UserLoginDTO userLoginDTO, HttpServletRequest request){
         //先补充数据
         String ip = LoginUtils.getIpAddress(request);
         log.info("远程ip地址:{}",ip);

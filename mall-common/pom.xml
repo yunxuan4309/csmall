@@ -42,6 +42,11 @@
             <artifactId>jjwt</artifactId>
             <version>${jjwt.version}</version>
         </dependency>
+        <!-- JAXB API for Java 9+ (JJWT 0.9.x 需要) -->
+        <dependency>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>jaxb-api</artifactId>
+        </dependency>
         <!-- Alibaba FastJson -->
         <dependency>
             <groupId>com.alibaba</groupId>

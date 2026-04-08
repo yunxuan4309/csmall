@@ -9,8 +9,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -31,16 +29,12 @@ public class SSOWebSecurityConfig {
     private MyAuthenticationEntryPoint myAuthenticationEntryPoint;
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
-    @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("*"));
+        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowedMethods(Arrays.asList("*"));
+        configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
@@ -49,20 +43,23 @@ public class SSOWebSecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         String[] permitList = {
+                // Swagger/Knife4j 文档
                 "/swagger-resources/**",
                 "/v2/api-docs/**",
                 "/v3/api-docs/**",
                 "/doc.html",
                 "/favicon.ico",
+                // 根路径和错误处理
                 "/",
-                "/*.html",
-                "/**/*.html",
-                "/**/*.css",
-                "/**/*.js",
-                "/*/sso/login",
-                "/*/sso/logout",
-                "/*/sso/checkLogin",
-                "/*/sso/home"
+                "/error",
+                // SSO 登录登出接口 - 使用精确路径
+                "/admin/sso/login",
+                "/admin/sso/logout",
+                "/admin/sso/home",
+                "/admin/sso/debug",
+                "/admin/sso/hash",
+                "/user/sso/login",
+                "/user/sso/logout"
         };
 
         http.csrf(csrf -> csrf.disable());

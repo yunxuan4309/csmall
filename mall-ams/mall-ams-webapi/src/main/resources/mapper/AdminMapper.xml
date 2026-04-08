@@ -12,7 +12,7 @@
         <result column="phone" property="phone" />
         <result column="email" property="email" />
         <result column="description" property="description" />
-        <result column="is_enable" property="isEnable" />
+        <result column="enable" property="isEnable" />
         <result column="last_login_ip" property="lastLoginIp" />
         <result column="login_count" property="loginCount" />
         <result column="gmt_last_login" property="gmtLastLogin" />
@@ -47,7 +47,7 @@
             description,
         </if>
         <if test="isEnable!=null">
-            is_enable,
+            enable,
         </if>
         id,
         username,
@@ -108,7 +108,7 @@
                 nickname=#{nickname},
             </if>
             <if test="isEnable!=null">
-                is_enable=#{isEnable},
+                enable=#{isEnable},
             </if>
             <if test="avatar!=null">
                 avatar=#{avatar},

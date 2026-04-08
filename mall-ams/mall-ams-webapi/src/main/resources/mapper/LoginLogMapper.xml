@@ -8,9 +8,9 @@
         <result column="admin_id" property="adminId" />
         <result column="username" property="username" />
         <result column="nickname" property="nickname" />
-        <result column="ip" property="ip" />
+        <result column="ip_address" property="ip" />
         <result column="user_agent" property="userAgent" />
-        <result column="gmt_login" property="gmtLogin" />
+        <result column="login_time" property="gmtLogin" />
         <result column="gmt_create" property="gmtCreate" />
         <result column="gmt_modified" property="gmtModified" />
     </resultMap>

@@ -38,14 +38,18 @@ public class AdminSSOUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        log.info("开始查询用户: {}", username);
         // 获取与用户名匹配的管理员信息
         Admin admin = null;
         try {
             admin = adminMapper.findByUsername(username);
+            log.info("数据库查询结果: {}", admin);
         } catch (CoolSharkServiceException e) {
+            log.error("查询用户时发生异常", e);
             throw new BadCredentialsException("登录失败，用户名不正确！");
         }
         if(admin==null){
+            log.warn("未找到用户: {}", username);
             return null;
         }
         // 检查管理员是否启用

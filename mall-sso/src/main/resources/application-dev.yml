@@ -5,6 +5,10 @@ my:
     #华为云
     #addr: 114.116.199.250
 spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${my.server.addr}:8848
   jackson:
     default-property-inclusion: always
   datasource:

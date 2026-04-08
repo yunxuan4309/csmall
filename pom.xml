@@ -61,6 +61,7 @@
         <fastjson.version>2.0.43</fastjson.version> <!-- 修改：使用阿里云镜像中稳定可用的FastJSON 2.x版本 -->
         <druid.version>1.2.24</druid.version> <!-- 修改：使用最新稳定版本 -->
         <jjwt.version>0.9.1</jjwt.version> <!-- 修改：使用阿里云镜像中广泛支持的兼容版本 -->
+        <jaxb-api.version>2.3.1</jaxb-api.version> <!-- JAXB API for Java 9+ -->
         <redisson.version>3.24.3</redisson.version> <!-- 修改：使用阿里云镜像中可用的稳定版本 -->
         <swagger-annotations.version>1.6.14</swagger-annotations.version> <!-- Swagger 2 注解兼容 -->
         <springdoc-openapi.version>2.5.0</springdoc-openapi.version>
@@ -325,6 +326,12 @@
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt</artifactId>
                 <version>${jjwt.version}</version>
+            </dependency>
+            <!-- JAXB API for Java 9+ (JJWT 0.9.x 需要) -->
+            <dependency>
+                <groupId>javax.xml.bind</groupId>
+                <artifactId>jaxb-api</artifactId>
+                <version>${jaxb-api.version}</version>
             </dependency>
             <!-- Spring Boot Test：测试 -->
             <dependency>

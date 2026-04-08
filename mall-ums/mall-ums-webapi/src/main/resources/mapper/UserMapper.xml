@@ -11,7 +11,7 @@
         <result column="avatar" property="avatar" />
         <result column="phone" property="phone" />
         <result column="email" property="email" />
-        <result column="is_enable" property="enable" />
+        <result column="enable" property="enable" />
         <result column="reward_point" property="rewardPoint" />
         <result column="last_login_ip" property="lastLoginIp" />
         <result column="login_count" property="loginCount" />
@@ -27,7 +27,7 @@
         <result column="avatar" property="avatar" />
         <result column="phone" property="phone" />
         <result column="email" property="email" />
-        <result column="is_enable" property="enable" />
+        <result column="enable" property="enable" />
         <result column="reward_point" property="rewardPoint" />
         <result column="last_login_ip" property="lastLoginIp" />
         <result column="login_count" property="loginCount" />
@@ -44,7 +44,7 @@
             avatar,
             phone,
             email,
-            is_enable,
+            enable,
             reward_point,
             last_login_ip,
             login_count,
@@ -61,7 +61,7 @@
             avatar,
             phone,
             email,
-            is_enable,
+            enable,
             reward_point,
             last_login_ip,
             login_count,
@@ -86,7 +86,7 @@
         phone,
         email,
         nickname,
-        is_enable
+        enable
         ) values (
         #{id},
         #{username},

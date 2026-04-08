@@ -12,7 +12,7 @@
         <result column="phone" property="phone" />
         <result column="email" property="email" />
         <result column="description" property="description" />
-        <result column="is_enable" property="enable" />
+        <result column="enable" property="enable" />
         <result column="last_login_ip" property="lastLoginIp" />
         <result column="login_count" property="loginCount" />
         <result column="gmt_last_login" property="gmtLastLogin" />
@@ -28,7 +28,7 @@
         <result column="phone" property="phone" />
         <result column="email" property="email" />
         <result column="description" property="description" />
-        <result column="is_enable" property="enable" />
+        <result column="enable" property="enable" />
         <result column="last_login_ip" property="lastLoginIp" />
         <result column="login_count" property="loginCount" />
         <result column="gmt_last_login" property="gmtLastLogin" />
@@ -44,7 +44,7 @@
             phone,
             email,
             description,
-            is_enable,
+            enable,
             last_login_ip,
             login_count,
             gmt_last_login,
@@ -64,7 +64,7 @@
         phone,
         email,
         description,
-        is_enable,
+        enable,
         last_login_ip,
         login_count,
         gmt_last_login,

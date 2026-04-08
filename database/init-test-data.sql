@@ -220,3 +220,46 @@ SELECT '  - 14 个 SKU' AS info;
 SELECT '  - 3 个角色' AS info;
 SELECT '  - 10 个权限' AS info;
 SELECT '  - 3 个测试用户' AS info;
+
+
+
+
+-- =====================================================
+-- 管理员账号测试数据
+-- 密码说明: BCrypt 加密后的密码
+--   - admin/123456  (超级管理员)
+--   - liucs/123456    (运营管理员)
+--   - wangkj/123456   (客服管理员)
+-- =====================================================
+
+USE cs_mall_ams;
+
+-- 插入管理员账号 (密码均为 BCrypt 加密)
+INSERT INTO `ams_admin` (`id`, `username`, `password`, `nickname`, `phone`, `email`, `enable`) VALUES
+                                                                                                   (1, 'admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iDJfYR5sILt8BPLu5mZFBqg5RE0S', '系统管理员', '13800000000', 'admin@csmall.com', 1),
+                                                                                                   (2, 'liucs', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iDJfYR5sILt8BPLu5mZFBqg5RE0S', '刘苍松', '13800000001', 'liucs@csmall.com', 1),
+                                                                                                   (3, 'wangkj', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iDJfYR5sILt8BPLu5mZFBqg5RE0S', '王可静', '13800000002', 'wangkj@csmall.com', 1);
+
+-- 重新插入管理员角色关联 (之前插入的外键会报错，因为admin不存在)
+-- 先清空再插入
+DELETE FROM `ams_admin_role`;
+INSERT INTO `ams_admin_role` (`id`, `admin_id`, `role_id`) VALUES
+                                                               (1, 1, 1),  -- admin -> 超级管理员
+                                                               (2, 2, 2),  -- liucs -> 运营管理员
+                                                               (3, 3, 3);  -- wangkj -> 客服管理员
+
+-- 重新插入角色权限关联 (确保超级管理员有所有权限)
+DELETE FROM `ams_role_permission`;
+INSERT INTO `ams_role_permission` (`id`, `role_id`, `permission_id`) VALUES
+-- 超级管理员拥有所有权限
+(1, 1, 1), (2, 1, 2), (3, 1, 3), (4, 1, 4), (5, 1, 5),
+(6, 1, 6), (7, 1, 7), (8, 1, 8),
+(9, 1, 9), (10, 1, 10),
+-- 运营管理员权限
+(11, 2, 1), (12, 2, 2), (13, 2, 3), (14, 2, 4), (15, 2, 5),
+(16, 2, 6), (17, 2, 7), (18, 2, 8),
+-- 客服管理员权限
+(19, 3, 6), (20, 3, 7), (21, 3, 8),
+(22, 3, 9), (23, 3, 10);
+
+SELECT '✅ 管理员数据初始化完成!' AS message;
