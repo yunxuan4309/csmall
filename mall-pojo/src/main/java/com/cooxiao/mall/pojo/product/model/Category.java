@@ -1,5 +1,7 @@
 package com.cooxiao.mall.pojo.product.model;
 
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -12,6 +14,7 @@ import java.time.LocalDateTime;
  * @since 2021-11-30
  */
 @Data
+@TableName("pms_category")
 public class Category implements Serializable {
 
     /**
@@ -57,11 +60,13 @@ public class Category implements Serializable {
     /**
      * 是否为父级（是否包含子级），1=是父级，0=不是父级
      */
+    @TableField("is_parent")
     private Integer parent;
 
     /**
      * 是否显示在导航栏中，1=启用，0=未启用
      */
+    @TableField("is_display")
     private Integer display;
 
     /**

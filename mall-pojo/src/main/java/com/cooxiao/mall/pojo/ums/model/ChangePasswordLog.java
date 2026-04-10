@@ -1,5 +1,6 @@
 package com.cooxiao.mall.pojo.ums.model;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
  * @since 2022-02-22
  */
 @Data
+@TableName("ums_change_password_log")
 public class ChangePasswordLog implements Serializable {
 
     private static final long serialVersionUID = 1L;

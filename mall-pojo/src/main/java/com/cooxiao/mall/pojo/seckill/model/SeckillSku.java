@@ -1,5 +1,6 @@
 package com.cooxiao.mall.pojo.seckill.model;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import java.io.Serializable;
@@ -14,6 +15,7 @@ import java.time.LocalDateTime;
  * @since 2022-02-23
  */
 @Data
+@TableName("seckill_sku")
 public class SeckillSku implements Serializable {
     private static final long serialVersionUID = 1L;
     /**

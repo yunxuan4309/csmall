@@ -1,5 +1,6 @@
 package com.cooxiao.mall.pojo.product.model;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -13,6 +14,7 @@ import java.time.LocalDateTime;
  * @since 2021-11-30
  */
 @Data
+@TableName("pms_attribute")
 public class Attribute implements Serializable {
 
     /**

@@ -1,5 +1,7 @@
 package com.cooxiao.mall.pojo.product.model;
 
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -13,6 +15,7 @@ import java.time.LocalDateTime;
  * @since 2021-11-30
  */
 @Data
+@TableName("pms_spu")
 public class Spu implements Serializable {
 
     /**
@@ -128,26 +131,31 @@ public class Spu implements Serializable {
     /**
      * 是否标记为删除，1=已删除，0=未删除
      */
+    @TableField("is_deleted")
     private Integer deleted;
 
     /**
      * 是否上架（发布），1=已上架，0=未上架 （下架）
      */
+    @TableField("is_published")
     private Integer published;
 
     /**
      * 是否新品，1=新品，0=非新品
      */
+    @TableField("is_new_arrival")
     private Integer newArrival;
 
     /**
      * 是否推荐，1=推荐，0=不推荐
      */
+    @TableField("is_recommend")
     private Integer recommend;
 
     /**
      * 是否已审核，1=已审核，0=未审核
      */
+    @TableField("is_checked")
     private Integer checked;
 
     /**

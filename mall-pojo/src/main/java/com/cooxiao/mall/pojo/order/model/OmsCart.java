@@ -1,5 +1,6 @@
 package com.cooxiao.mall.pojo.order.model;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
  * @since 2022-02-16
  */
 @Data
+@TableName("oms_cart")
 public class OmsCart implements Serializable {
 
     private static final long serialVersionUID = 1L;

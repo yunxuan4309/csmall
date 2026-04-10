@@ -1,5 +1,6 @@
 package com.cooxiao.mall.pojo.product.model;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -11,6 +12,7 @@ import java.time.LocalDateTime;
  * @since 2021-11-30
  */
 @Data
+@TableName("pms_category_attribute_template")
 public class CategoryAttributeTemplate {
 
     /**

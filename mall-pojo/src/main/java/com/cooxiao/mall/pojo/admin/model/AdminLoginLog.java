@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
  * @since 2021-12-02
  */
 @Data
-@TableName("ams_admin_login_log")
+@TableName("ams_login_log")
 public class AdminLoginLog implements Serializable {
 
     private static final long serialVersionUID = 1L;

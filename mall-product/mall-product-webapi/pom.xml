@@ -88,6 +88,17 @@
             <groupId>org.mybatis.spring.boot</groupId>
             <artifactId>mybatis-spring-boot-starter</artifactId>
         </dependency>
+        <!-- MyBatis Plus Spring Boot 3：MyBatis增强（Spring Boot 3.x 必须使用） -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+        </dependency>
+        <!-- MyBatis Plus JSqlParser：分页插件依赖 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+            <version>${mybatis-plus-jsqlparser.version}</version>
+        </dependency>
 
         <!-- Knife4j Spring Boot：在线API -->
         <dependency>
