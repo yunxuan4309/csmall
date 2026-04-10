@@ -86,68 +86,144 @@ INSERT INTO `pms_attribute_template_value` (`id`, `attribute_template_id`, `valu
 (18, 3, 'XXL', 5);
 
 -- ----------------------------
--- 8. SPU 数据 - 手机
+-- 8. SPU 数据 - 手机(分类4)
 -- ----------------------------
-INSERT INTO `pms_spu` (`id`, `name`, `type_number`, `title`, `description`, `list_price`, `stock`, `unit`, `brand_id`, `brand_name`, `category_id`, `category_name`, `attribute_template_id`, `is_published`, `is_new_arrival`, `is_recommend`) VALUES 
-(1, 'iPhone 15 Pro', 'APL-IP15P-001', 'Apple iPhone 15 Pro 5G 手机', 'A17 Pro 芯片，钛金属设计', 7999.00, 100, '台', 1, '苹果', 4, '手机', 1, 1, 1, 1),
-(2, '华为 Mate 60 Pro', 'HW-M60P-001', 'HUAWEI Mate 60 Pro 5G 手机', '麒麟 9000S 芯片，卫星通话', 6999.00, 150, '台', 2, '华为', 4, '手机', 1, 1, 1, 1),
-(3, '小米 14 Pro', 'MI-14P-001', 'Xiaomi 14 Pro 5G 手机', '骁龙 8 Gen3，徕卡影像', 4999.00, 200, '台', 3, '小米', 4, '手机', 1, 1, 0, 1);
+INSERT INTO `pms_spu` (`id`, `name`, `type_number`, `title`, `description`, `list_price`, `stock`, `unit`, `brand_id`, `brand_name`, `category_id`, `category_name`, `attribute_template_id`, `is_published`, `is_new_arrival`, `is_recommend`, `is_checked`, `is_deleted`) VALUES
+(1,  'iPhone 15 Pro',        'APL-IP15P-001',  'Apple iPhone 15 Pro 5G 手机',              'A17 Pro 芯片，钛金属设计',               7999.00, 100, '台', 1, '苹果',   4, '手机',     1, 1, 1, 1, 1, 0),
+(2,  '华为 Mate 60 Pro',     'HW-M60P-001',    'HUAWEI Mate 60 Pro 5G 手机',              '麒麟 9000S 芯片，卫星通话',              6999.00, 150, '台', 2, '华为',   4, '手机',     1, 1, 1, 1, 1, 0),
+(3,  '小米 14 Pro',          'MI-14P-001',     'Xiaomi 14 Pro 5G 手机',                   '骁龙 8 Gen3，徕卡影像',                  4999.00, 200, '台', 3, '小米',   4, '手机',     1, 1, 0, 1, 1, 0),
+(4,  '华为 P60 Pro',         'HW-P60P-001',    'HUAWEI P60 Pro 旗舰影像手机',             '超聚光XMAGE影像系统',                    5988.00, 120, '台', 2, '华为',   4, '手机',     1, 1, 1, 0, 1, 0),
+(5,  '小米 14',              'MI-14-001',      'Xiaomi 14 轻薄旗舰手机',                  '骁龙 8 Gen3，小尺寸旗舰',                3999.00, 300, '台', 3, '小米',   4, '手机',     1, 1, 0, 0, 1, 0);
 
 -- ----------------------------
--- 9. SPU 数据 - 笔记本
+-- 9. SPU 数据 - 平板电脑(分类5)
 -- ----------------------------
-INSERT INTO `pms_spu` (`id`, `name`, `type_number`, `title`, `description`, `list_price`, `stock`, `unit`, `brand_id`, `brand_name`, `category_id`, `category_name`, `attribute_template_id`, `is_published`, `is_new_arrival`, `is_recommend`) VALUES 
-(4, 'MacBook Pro 14', 'APL-MBP14-001', 'Apple MacBook Pro 14 英寸笔记本电脑', 'M3 Pro 芯片，18GB 内存', 12999.00, 50, '台', 1, '苹果', 6, '笔记本', 2, 1, 1, 1),
-(5, 'ThinkPad X1 Carbon', 'LEN-X1C-001', 'Lenovo ThinkPad X1 Carbon 轻薄本', 'Intel Evo 认证，14 英寸 2.8K', 9999.00, 80, '台', 4, '联想', 6, '笔记本', 2, 1, 0, 1);
+INSERT INTO `pms_spu` (`id`, `name`, `type_number`, `title`, `description`, `list_price`, `stock`, `unit`, `brand_id`, `brand_name`, `category_id`, `category_name`, `attribute_template_id`, `is_published`, `is_new_arrival`, `is_recommend`, `is_checked`, `is_deleted`) VALUES
+(6,  'iPad Pro 12.9',        'APL-IPDP-001',   'Apple iPad Pro 12.9 英寸平板',            'M2 芯片，Liquid Retina XDR',             8999.00, 60,  '台', 1, '苹果',   5, '平板电脑', 1, 1, 1, 1, 1, 0),
+(7,  '华为 MatePad Pro',     'HW-MPP-001',     'HUAWEI MatePad Pro 13.2 英寸',            '星闪连接，PC级办公体验',                 4699.00, 80,  '台', 2, '华为',   5, '平板电脑', 1, 1, 1, 0, 1, 0);
 
 -- ----------------------------
--- 10. SKU 数据 - iPhone 15 Pro
+-- 10. SPU 数据 - 笔记本(分类6)
 -- ----------------------------
-INSERT INTO `pms_sku` (`id`, `spu_id`, `title`, `bar_code`, `price`, `stock`) VALUES 
-(1, 1, 'iPhone 15 Pro 6GB+128GB 深空黑色', 'SKU-1-001', 7999.00, 30),
-(2, 1, 'iPhone 15 Pro 6GB+256GB 深空黑色', 'SKU-1-002', 8999.00, 25),
-(3, 1, 'iPhone 15 Pro 8GB+256GB 原色钛金属', 'SKU-1-003', 9999.00, 20),
-(4, 1, 'iPhone 15 Pro 8GB+512GB 原色钛金属', 'SKU-1-004', 11999.00, 15);
+INSERT INTO `pms_spu` (`id`, `name`, `type_number`, `title`, `description`, `list_price`, `stock`, `unit`, `brand_id`, `brand_name`, `category_id`, `category_name`, `attribute_template_id`, `is_published`, `is_new_arrival`, `is_recommend`, `is_checked`, `is_deleted`) VALUES
+(8,  'MacBook Pro 14',       'APL-MBP14-001',  'Apple MacBook Pro 14 英寸笔记本',         'M3 Pro 芯片，18GB 内存',                 12999.00, 50, '台', 1, '苹果',   6, '笔记本',   2, 1, 1, 1, 1, 0),
+(9,  'ThinkPad X1 Carbon',   'LEN-X1C-001',    'Lenovo ThinkPad X1 Carbon 轻薄本',        'Intel Evo 认证，14 英寸 2.8K',           9999.00, 80,  '台', 4, '联想',   6, '笔记本',   2, 1, 0, 1, 1, 0),
+(10, '小米 RedmiBook Pro',   'MI-RBP-001',     'RedmiBook Pro 15 2024 锐龙版',             'AMD R7 7840HS，3.2K 120Hz',              4999.00, 100, '台', 3, '小米',   6, '笔记本',   2, 1, 0, 0, 1, 0),
+(11, '戴尔 XPS 13',         'DL-XPS13-001',   'Dell XPS 13 Plus 超轻薄笔记本',           'Intel i7-1360P，OLED 屏',                8999.00, 40,  '台', 5, '戴尔',   6, '笔记本',   2, 1, 1, 1, 1, 0),
+(12, 'MacBook Air 15',      'APL-MA15-001',   'Apple MacBook Air 15 英寸轻薄本',         'M3 芯片，长达18小时续航',                 9999.00, 70,  '台', 1, '苹果',   6, '笔记本',   2, 1, 1, 0, 1, 0);
 
 -- ----------------------------
--- 11. SKU 数据 - 华为 Mate 60 Pro
+-- 11. SPU 数据 - 台式机(分类7)
 -- ----------------------------
-INSERT INTO `pms_sku` (`id`, `spu_id`, `title`, `bar_code`, `price`, `stock`) VALUES 
-(5, 2, '华为 Mate 60 Pro 12GB+256GB 雅川青', 'SKU-2-001', 6999.00, 50),
-(6, 2, '华为 Mate 60 Pro 12GB+512GB 白沙银', 'SKU-2-002', 7499.00, 40),
-(7, 2, '华为 Mate 60 Pro 12GB+1TB 南糯紫', 'SKU-2-003', 7999.00, 30);
+INSERT INTO `pms_spu` (`id`, `name`, `type_number`, `title`, `description`, `list_price`, `stock`, `unit`, `brand_id`, `brand_name`, `category_id`, `category_name`, `attribute_template_id`, `is_published`, `is_new_arrival`, `is_recommend`, `is_checked`, `is_deleted`) VALUES
+(13, '联想 天逸510S',       'LEN-TY510-001',  'Lenovo 天逸510S 家用台式机',              'Intel i5-13400，16GB 512GB',             3999.00, 60,  '台', 4, '联想',   7, '台式机',   2, 1, 0, 0, 1, 0),
+(14, '戴尔 OptiPlex',       'DL-OPT-001',     'Dell OptiPlex 7010 商务台式机',            'Intel i7-13700，稳定办公',               5999.00, 30,  '台', 5, '戴尔',   7, '台式机',   2, 1, 0, 0, 1, 0);
 
 -- ----------------------------
--- 12. SKU 数据 - 小米 14 Pro
+-- 12. SPU 数据 - 男装(分类8)
 -- ----------------------------
-INSERT INTO `pms_sku` (`id`, `spu_id`, `title`, `bar_code`, `price`, `stock`) VALUES 
-(8, 3, '小米 14 Pro 8GB+256GB 岩石青', 'SKU-3-001', 4999.00, 60),
-(9, 3, '小米 14 Pro 12GB+256GB 雪山粉', 'SKU-3-002', 5299.00, 50),
-(10, 3, '小米 14 Pro 16GB+512GB 钛金属特别版', 'SKU-3-003', 5999.00, 40);
+INSERT INTO `pms_spu` (`id`, `name`, `type_number`, `title`, `description`, `list_price`, `stock`, `unit`, `brand_id`, `brand_name`, `category_id`, `category_name`, `attribute_template_id`, `is_published`, `is_new_arrival`, `is_recommend`, `is_checked`, `is_deleted`) VALUES
+(15, '耐克 Air Max 运动鞋',  'NK-AM-001',      'Nike Air Max 270 男子运动鞋',              '大容量气垫缓震，透气鞋面',               1099.00, 200, '双', 6, '耐克',    8, '男装',     3, 1, 0, 1, 1, 0),
+(16, '阿迪达斯 三叶草卫衣',  'AD-CW-001',      'adidas Originals 经典三叶草卫衣',         '法式毛圈面料，宽松版型',                 599.00,  150, '件', 7, '阿迪达斯',8, '男装',     3, 1, 0, 0, 1, 0);
 
 -- ----------------------------
--- 13. SKU 数据 - MacBook Pro 14
+-- 13. SPU 数据 - 女装(分类9)
 -- ----------------------------
-INSERT INTO `pms_sku` (`id`, `spu_id`, `title`, `bar_code`, `price`, `stock`) VALUES 
-(11, 4, 'MacBook Pro 14 M3 Pro 18GB+512GB 深空灰色', 'SKU-4-001', 12999.00, 20),
-(12, 4, 'MacBook Pro 14 M3 Pro 18GB+1TB 银色', 'SKU-4-002', 14999.00, 15);
+INSERT INTO `pms_spu` (`id`, `name`, `type_number`, `title`, `description`, `list_price`, `stock`, `unit`, `brand_id`, `brand_name`, `category_id`, `category_name`, `attribute_template_id`, `is_published`, `is_new_arrival`, `is_recommend`, `is_checked`, `is_deleted`) VALUES
+(17, '耐克 Dunk 运动鞋',    'NK-DK-001',      'Nike Dunk Low 女子休闲运动鞋',            '复古篮球鞋设计，百搭潮流',               899.00,  180, '双', 6, '耐克',    9, '女装',     3, 1, 1, 1, 1, 0),
+(18, '阿迪达斯 超跑裤',     'AD-SP-001',      'adidas Aeroready 女子训练长裤',            '吸湿速干面料，运动舒适',                 399.00,  160, '件', 7, '阿迪达斯',9, '女装',     3, 1, 0, 0, 1, 0);
 
 -- ----------------------------
--- 14. SKU 数据 - ThinkPad X1 Carbon
+-- 14. SPU 数据 - 更多手机
 -- ----------------------------
-INSERT INTO `pms_sku` (`id`, `spu_id`, `title`, `bar_code`, `price`, `stock`) VALUES 
-(13, 5, 'ThinkPad X1 Carbon i5 16GB+512GB', 'SKU-5-001', 9999.00, 30),
-(14, 5, 'ThinkPad X1 Carbon i7 32GB+1TB', 'SKU-5-002', 12999.00, 25);
+INSERT INTO `pms_spu` (`id`, `name`, `type_number`, `title`, `description`, `list_price`, `stock`, `unit`, `brand_id`, `brand_name`, `category_id`, `category_name`, `attribute_template_id`, `is_published`, `is_new_arrival`, `is_recommend`, `is_checked`, `is_deleted`) VALUES
+(19, 'iPhone 15',           'APL-IP15-001',   'Apple iPhone 15 5G 手机',                 'A16 仿生芯片，灵动岛',                   5999.00, 180, '台', 1, '苹果',   4, '手机',     1, 1, 0, 1, 1, 0),
+(20, 'Redmi K70 Pro',       'MI-K70P-001',    'Redmi K70 Pro 旗舰手机',                   '骁龙 8 Gen3，2K 中国屏',                 3299.00, 250, '台', 3, '小米',   4, '手机',     1, 1, 1, 0, 1, 0);
 
 -- ----------------------------
--- 15. SPU 详情数据 (简化版)
+-- 15. SKU 数据 - iPhone 15 Pro
 -- ----------------------------
-INSERT INTO `pms_spu_detail` (`id`, `spu_id`, `content`) VALUES 
-(1, 1, '<div>iPhone 15 Pro 详情内容</div>'),
-(2, 2, '<div>华为 Mate 60 Pro 详情内容</div>'),
-(3, 3, '<div>小米 14 Pro 详情内容</div>'),
-(4, 4, '<div>MacBook Pro 14 详情内容</div>'),
-(5, 5, '<div>ThinkPad X1 Carbon 详情内容</div>');
+INSERT INTO `pms_sku` (`id`, `spu_id`, `title`, `bar_code`, `price`, `stock`) VALUES
+(1,  1, 'iPhone 15 Pro 128GB 深空黑色',    'SKU-1-001', 7999.00, 30),
+(2,  1, 'iPhone 15 Pro 256GB 原色钛金属',  'SKU-1-002', 8999.00, 25),
+(3,  1, 'iPhone 15 Pro 512GB 原色钛金属',  'SKU-1-003', 9999.00, 20),
+(4,  1, 'iPhone 15 Pro 1TB 原色钛金属',    'SKU-1-004', 11999.00, 15),
+-- 华为 Mate 60 Pro
+(5,  2, '华为 Mate 60 Pro 256GB 雅川青',   'SKU-2-001', 6999.00, 50),
+(6,  2, '华为 Mate 60 Pro 512GB 白沙银',   'SKU-2-002', 7499.00, 40),
+-- 小米 14 Pro
+(7,  3, '小米 14 Pro 256GB 岩石青',        'SKU-3-001', 4999.00, 60),
+(8,  3, '小米 14 Pro 512GB 钛金属特别版',  'SKU-3-002', 5999.00, 40),
+-- 华为 P60 Pro
+(9,  4, '华为 P60 Pro 256GB 翡羽绿',       'SKU-4-001', 5988.00, 40),
+(10, 4, '华为 P60 Pro 512GB 蓝天蓝',       'SKU-4-002', 6488.00, 30),
+-- 小米 14
+(11, 5, '小米 14 256GB 白色',              'SKU-5-001', 3999.00, 100),
+(12, 5, '小米 14 512GB 黑色',              'SKU-5-002', 4299.00, 80),
+-- iPad Pro
+(13, 6, 'iPad Pro 12.9 256GB WiFi 深空灰', 'SKU-6-001', 8999.00, 30),
+(14, 6, 'iPad Pro 12.9 512GB WiFi 银色',   'SKU-6-002', 10499.00, 20),
+-- MatePad Pro
+(15, 7, 'MatePad Pro 12+256GB 曜金黑',     'SKU-7-001', 4699.00, 40),
+-- MacBook Pro 14
+(16, 8, 'MacBook Pro 14 M3 Pro 18+512GB 深空灰', 'SKU-8-001', 12999.00, 20),
+(17, 8, 'MacBook Pro 14 M3 Pro 18+1TB 银色',     'SKU-8-002', 14999.00, 15),
+-- ThinkPad X1
+(18, 9, 'ThinkPad X1 Carbon i5 16+512GB',  'SKU-9-001', 9999.00, 30),
+(19, 9, 'ThinkPad X1 Carbon i7 32+1TB',    'SKU-9-002', 12999.00, 25),
+-- RedmiBook
+(20, 10, 'RedmiBook Pro R7 16+512GB 银色', 'SKU-10-001', 4999.00, 50),
+-- XPS 13
+(21, 11, 'XPS 13 i7 16+512GB 铂金银',      'SKU-11-001', 8999.00, 20),
+-- MacBook Air
+(22, 12, 'MacBook Air 15 M3 8+256GB 午夜色','SKU-12-001', 9999.00, 35),
+(23, 12, 'MacBook Air 15 M3 16+512GB 星光色','SKU-12-002', 11499.00, 25),
+-- 天逸510S
+(24, 13, '天逸510S i5 16+512GB',            'SKU-13-001', 3999.00, 30),
+-- OptiPlex
+(25, 14, 'OptiPlex 7010 i7 16+512GB',      'SKU-14-001', 5999.00, 15),
+-- 耐克 Air Max
+(26, 15, 'Air Max 270 黑白 42码',           'SKU-15-001', 1099.00, 60),
+(27, 15, 'Air Max 270 黑白 43码',           'SKU-15-002', 1099.00, 50),
+-- 阿迪卫衣
+(28, 16, '三叶草卫衣 黑色 M',              'SKU-16-001', 599.00, 40),
+(29, 16, '三叶草卫衣 黑色 L',              'SKU-16-002', 599.00, 35),
+-- 耐克 Dunk
+(30, 17, 'Dunk Low 粉白 37码',             'SKU-17-001', 899.00, 50),
+(31, 17, 'Dunk Low 粉白 38码',             'SKU-17-002', 899.00, 45),
+-- 阿迪裤子
+(32, 18, 'Aeroready 长裤 黑色 M',          'SKU-18-001', 399.00, 40),
+-- iPhone 15
+(33, 19, 'iPhone 15 128GB 粉色',           'SKU-19-001', 5999.00, 60),
+(34, 19, 'iPhone 15 256GB 蓝色',           'SKU-19-002', 6999.00, 50),
+-- Redmi K70 Pro
+(35, 20, 'Redmi K70 Pro 256GB 墨羽',       'SKU-20-001', 3299.00, 80),
+(36, 20, 'Redmi K70 Pro 512GB 晴雪',       'SKU-20-002', 3699.00, 60);
+
+-- ----------------------------
+-- 16. SPU 详情数据
+-- ----------------------------
+INSERT INTO `pms_spu_detail` (`id`, `spu_id`, `content`) VALUES
+(1,  1,  '<div><h2>iPhone 15 Pro</h2><p>A17 Pro 芯片，钛金属设计，4800万像素主摄</p></div>'),
+(2,  2,  '<div><h2>华为 Mate 60 Pro</h2><p>麒麟 9000S 芯片，卫星通话，超感知影像</p></div>'),
+(3,  3,  '<div><h2>小米 14 Pro</h2><p>骁龙 8 Gen3，徕卡专业光学镜头，2K 屏幕</p></div>'),
+(4,  4,  '<div><h2>华为 P60 Pro</h2><p>超聚光XMAGE影像，昆仑玻璃，双向北斗卫星消息</p></div>'),
+(5,  5,  '<div><h2>小米 14</h2><p>骁龙 8 Gen3，小尺寸旗舰，1.5K 屏幕</p></div>'),
+(6,  6,  '<div><h2>iPad Pro 12.9</h2><p>M2 芯片，Liquid Retina XDR 显示屏</p></div>'),
+(7,  7,  '<div><h2>MatePad Pro 13.2</h2><p>星闪连接，PC级办公，13.2英寸OLED</p></div>'),
+(8,  8,  '<div><h2>MacBook Pro 14</h2><p>M3 Pro 芯片，18小时续航，Liquid Retina XDR</p></div>'),
+(9,  9,  '<div><h2>ThinkPad X1 Carbon</h2><p>Intel Evo 认证，14英寸2.8K OLED，轻至1.12kg</p></div>'),
+(10, 10, '<div><h2>RedmiBook Pro 15</h2><p>AMD R7 7840HS，3.2K 120Hz 屏幕</p></div>'),
+(11, 11, '<div><h2>Dell XPS 13 Plus</h2><p>Intel i7，OLED 触控屏，极致轻薄</p></div>'),
+(12, 12, '<div><h2>MacBook Air 15</h2><p>M3 芯片，18小时续航，15.3英寸大屏</p></div>'),
+(13, 13, '<div><h2>天逸510S</h2><p>Intel i5-13400，16GB内存，512GB SSD</p></div>'),
+(14, 14, '<div><h2>OptiPlex 7010</h2><p>Intel i7-13700，商务稳定之选</p></div>'),
+(15, 15, '<div><h2>Air Max 270</h2><p>大容量Air气垫缓震，透气网面鞋面</p></div>'),
+(16, 16, '<div><h2>三叶草经典卫衣</h2><p>法式毛圈面料，经典三叶草Logo</p></div>'),
+(17, 17, '<div><h2>Dunk Low</h2><p>复古篮球鞋设计，日常百搭潮流</p></div>'),
+(18, 18, '<div><h2>Aeroready 训练长裤</h2><p>吸湿速干面料，运动自由舒适</p></div>'),
+(19, 19, '<div><h2>iPhone 15</h2><p>A16 仿生芯片，灵动岛设计，4800万像素</p></div>'),
+(20, 20, '<div><h2>Redmi K70 Pro</h2><p>骁龙 8 Gen3，2K中国屏，5000mAh</p></div>');
 
 
 -- =====================================================
@@ -215,8 +291,8 @@ SELECT '已添加:' AS info;
 SELECT '  - 9 个商品分类' AS info;
 SELECT '  - 7 个品牌' AS info;
 SELECT '  - 3 个属性模板' AS info;
-SELECT '  - 5 个 SPU' AS info;
-SELECT '  - 14 个 SKU' AS info;
+SELECT '  - 20 个 SPU' AS info;
+SELECT '  - 36 个 SKU' AS info;
 SELECT '  - 3 个角色' AS info;
 SELECT '  - 10 个权限' AS info;
 SELECT '  - 3 个测试用户' AS info;
