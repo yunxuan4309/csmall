@@ -35,7 +35,7 @@ public class UserDetailController {
      */
     @ApiOperation(value="注册后第一次编辑新增用户详情")
     @PostMapping("/add")
-    @PreAuthorize("hasRole('ROLE_user')")
+    @PreAuthorize("hasRole('user')")
     public JsonResult addUserDetail(UserDetailAddDTO userDetailAddDTO){
         userDetailService.addUserDetail(userDetailAddDTO);
         return JsonResult.ok();
@@ -45,7 +45,7 @@ public class UserDetailController {
      */
     @ApiOperation(value="查询当前用户的详情信息")
     @GetMapping("/show")
-    @PreAuthorize("hasRole('ROLE_user')")
+    @PreAuthorize("hasRole('user')")
     public JsonResult<UserDetailStandardVO> getUserDetails(){
         UserDetailStandardVO userDetailStandardVO=userDetailService.getUserDetails();
         return JsonResult.ok(userDetailStandardVO);
@@ -55,7 +55,7 @@ public class UserDetailController {
      */
     @ApiOperation(value="修改用户详情")
     @PostMapping("/modified")
-    @PreAuthorize("hasRole('ROLE_user')")
+    @PreAuthorize("hasRole('user')")
     public JsonResult modifiedUserDetail(UserDetailUpdateDTO userDetailUpdateDTO){
         userDetailService.updateUserDetail(userDetailUpdateDTO);
         return JsonResult.ok();

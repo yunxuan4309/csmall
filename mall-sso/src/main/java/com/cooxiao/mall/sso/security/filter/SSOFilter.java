@@ -54,7 +54,8 @@ public class SSOFilter extends OncePerRequestFilter {
             String lockedTokenList="token_list_.lock";
             Boolean member = stringRedisTemplate.boundSetOps(lockedTokenList).isMember(authToken);
             if(member){
-                log.info("从redis拿到登录的token:"+authToken);
+                log.info("token已登出,视为无效:"+authToken);
+                SecurityContextHolder.setContext(SecurityContextHolder.createEmptyContext());
                 filterChain.doFilter(httpServletRequest, httpServletResponse);
                 return;
             }

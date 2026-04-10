@@ -72,7 +72,7 @@ public class UserController {
      */
     @ApiOperation(value="修改登录密码")
     @PostMapping("/renew/password")
-    @PreAuthorize("hasRole('ROLE_user')")
+    @PreAuthorize("hasRole('user')")
     public JsonResult renewPassword(@Valid ChangePasswordDTO changePasswordDTO, HttpServletRequest request,@RequestHeader("Authorization") String authToken){
         String ip = LoginUtils.getIpAddress(request);
         changePasswordDTO.setIp(ip);

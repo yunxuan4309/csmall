@@ -38,7 +38,7 @@ public class DeliveryAddressController {
      */
     @ApiOperation(value="根据登录用户查询管理地址列表")
     @GetMapping("list")
-    @PreAuthorize("hasRole('ROLE_user')")
+    @PreAuthorize("hasRole('user')")
     @ApiImplicitParams({
             @ApiImplicitParam(name = "page", value = "页码", dataType = "int"),
             @ApiImplicitParam(name = "pageSize", value = "每页记录数", dataType = "int")
@@ -52,7 +52,7 @@ public class DeliveryAddressController {
      */
     @ApiOperation(value="新增用户邮寄地址")
     @PostMapping("/add")
-    @PreAuthorize("hasRole('ROLE_user')")
+    @PreAuthorize("hasRole('user')")
     public JsonResult addAddress(DeliveryAddressAddDTO deliveryAddressAddDTO){
         deliveryAddressService.addAddress(deliveryAddressAddDTO);
         return JsonResult.ok();
@@ -62,7 +62,7 @@ public class DeliveryAddressController {
      */
     @ApiOperation(value="对已有地址进行编辑")
     @PostMapping("/edit")
-    @PreAuthorize("hasRole('ROLE_user')")
+    @PreAuthorize("hasRole('user')")
     public JsonResult editAddress(DeliveryAddressEditDTO deliveryAddressEditDTO){
         deliveryAddressService.editAddress(deliveryAddressEditDTO);
         return JsonResult.ok();
@@ -72,7 +72,7 @@ public class DeliveryAddressController {
      */
     @ApiOperation(value="根据id删除已有地址")
     @PostMapping("/delete")
-    @PreAuthorize("hasRole('ROLE_user')")
+    @PreAuthorize("hasRole('user')")
     public JsonResult deleteAddress(Long id){
         deliveryAddressService.deleteAddress(id);
         return JsonResult.ok();
