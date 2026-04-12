@@ -1,6 +1,7 @@
 package com.cooxiao.mall.order.mapper;
 
 import com.cooxiao.mall.pojo.order.model.OmsOrderItem;
+import org.apache.ibatis.annotations.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -16,4 +17,7 @@ public interface OmsOrderItemMapper {
     // 如果一个订单中商品较多,就需要循环连接数据库进行新增,频繁连接数据库效率低
     // 想实现连接一次数据库新增多条数据,就需要动态sql,参数设计为List<OmsOrderItem>
     int insertOrderItemList(List<OmsOrderItem> omsOrderItems);
+
+    // 根据订单id查询订单项列表
+    List<OmsOrderItem> selectOrderItemsByOrderId(@Param("orderId") Long orderId);
 }

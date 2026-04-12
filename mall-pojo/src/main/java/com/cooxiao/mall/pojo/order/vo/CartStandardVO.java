@@ -66,6 +66,12 @@ public class CartStandardVO implements Serializable {
     private Integer quantity;
 
     /**
+     * 是否选中，1=选中，0=未选中
+     */
+    @ApiModelProperty(value="是否选中，1=选中，0=未选中")
+    private Integer isChecked;
+
+    /**
      * 数据创建时间
      */
     @ApiModelProperty(value="数据创建时间")

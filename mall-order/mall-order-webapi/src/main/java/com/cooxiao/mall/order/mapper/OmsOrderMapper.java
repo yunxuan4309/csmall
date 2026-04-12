@@ -19,6 +19,9 @@ public interface OmsOrderMapper extends BaseMapper<OmsOrder> {
     // 新增订单的方法
     int insertOrder(OmsOrder omsOrder);
 
+    // 根据订单id查询订单详情
+    OmsOrder selectOrderById(Long id);
+
     // 查询当前登录用户指定时间范围内所有订单信息（支持分页）
     IPage<OrderListVO> selectOrderBetweenTimes(Page<OrderListVO> page, @Param("dto") OrderListTimeDTO orderListTimeDTO);
 

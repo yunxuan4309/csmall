@@ -24,6 +24,6 @@ public class SpuDetailStandardVO implements Serializable {
      * SPU详情，应该使用HTML富文本，通常内容是若干张图片
      */
     @ApiModelProperty(value = "SPU详情，应该使用HTML富文本，通常内容是若干张图片", position = 3)
-    private String detail;
+    private String content;
 
 }

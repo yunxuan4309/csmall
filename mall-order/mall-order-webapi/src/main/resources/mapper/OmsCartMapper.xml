@@ -9,14 +9,16 @@
         <result column="user_id" property="userId" />
         <result column="sku_id" property="skuId" />
         <result column="title" property="title" />
-        <result column="main_picture" property="mainPicture" />
+        <result column="picture_url" property="mainPicture" />
         <result column="price" property="price" />
         <result column="quantity" property="quantity" />
+        <result column="data" property="data" />
+        <result column="bar_code" property="barCode" />
+        <result column="is_checked" property="isChecked" />
         <result column="gmt_create" property="gmtCreate" />
         <result column="gmt_modified" property="gmtModified" />
-        <result column="bar_code" property="barCode"/>
-        <result column="data" property="data"/>
     </resultMap>
+
 <!--定义查询oms_cart表时使用的列名sql片段-->
     <sql id="SimpleQueryFields">
         <if test="true">
@@ -24,19 +26,23 @@
             user_id,
             sku_id,
             title,
-            main_picture,
+            picture_url,
             price,
             quantity,
+            data,
+            bar_code,
+            is_checked,
             gmt_create,
             gmt_modified
 
         </if>
 
     </sql>
+
 <!--判断当前登录用户购物车中是否包含指定skuId的商品-->
-<select id="selectExistCart" resultMap="BaseResultMap">
-    select <include refid="SimpleQueryFields"/> from oms_cart where user_id=#{userId} and sku_id=#{skuId}
-</select>
+    <select id="selectExistCart" resultMap="BaseResultMap">
+        select <include refid="SimpleQueryFields"/> from oms_cart where user_id=#{userId} and sku_id=#{skuId}
+    </select>
 
     <!--  查询(判断)当前登录用户购物车中是否包含指定skuId的商品  -->
     <select id="selectExistsCart" resultMap="BaseResultMap">
@@ -56,16 +62,20 @@
             user_id,
             sku_id,
             title,
-            main_picture,
+            picture_url,
             price,
-            quantity
+            quantity,
+            data,
+            bar_code
         ) values(
                     #{userId},
                     #{skuId},
                     #{title},
                     #{mainPicture},
                     #{price},
-                    #{quantity}
+                    #{quantity},
+                    #{data},
+                    #{barCode}
                 )
     </insert>
     <!--  修改购物车中sku商品数量  -->
@@ -113,16 +123,6 @@
     </delete>
 
     <!--  根据当前登录用户id查询此用户购物车中所有sku信息  -->
-    <!--
-           MyBatis框架有默认的映射规则
-           数据中下划线规则会按驼峰命名规则转换
-           例如:
-           列名            属性名
-           id               id
-           user_id          userId
-           sku_id           skuId
-           title            title
-    -->
     <select id="selectCartByUserId"
             resultType="com.cooxiao.mall.pojo.order.vo.CartStandardVO" >
         select

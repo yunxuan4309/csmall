@@ -26,7 +26,7 @@ public class SpuDetailMapperTests {
     void testInsertSuccessfully() {
         SpuDetail spuDetail = new SpuDetail();
         spuDetail.setSpuId(1L);
-        spuDetail.setDetail("1号SPU的详情");
+        spuDetail.setContent("1号SPU的详情");
         int rows = mapper.insert(spuDetail);
         Assertions.assertEquals(DMLConst.AffectedRows.ONE, rows);
         Assertions.assertEquals(DMLConst.RowId.FIRST, spuDetail.getId());

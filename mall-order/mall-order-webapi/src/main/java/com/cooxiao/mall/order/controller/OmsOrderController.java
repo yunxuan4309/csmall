@@ -7,16 +7,15 @@ import com.cooxiao.mall.pojo.order.dto.OrderAddDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderListTimeDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderStateUpdateDTO;
 import com.cooxiao.mall.pojo.order.vo.OrderAddVO;
+import com.cooxiao.mall.pojo.order.vo.OrderDetailVO;
 import com.cooxiao.mall.pojo.order.vo.OrderListVO;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * @author=java.cooxiao.com QQ:25380243
@@ -53,6 +52,15 @@ public class OmsOrderController {
     public JsonResult updateOrderState(@Validated OrderStateUpdateDTO orderStateUpdateDTO){
         omsOrderService.updateOrderState(orderStateUpdateDTO);
         return JsonResult.ok("修改完成!");
+    }
+
+    @GetMapping("/detail")
+    @ApiOperation("根据订单id查询订单详情")
+    @PreAuthorize("hasRole('user')")
+    public JsonResult<OrderDetailVO> getOrderDetail(
+            @ApiParam(value = "订单id", required = true) @RequestParam Long id) {
+        OrderDetailVO detail = omsOrderService.getOrderDetail(id);
+        return JsonResult.ok(detail);
     }
 
 }

@@ -152,6 +152,6 @@ public class SpuAddNewDTO implements SpuRegExpression, Serializable {
      */
     @ApiModelProperty(value = "SPU的详情", required = true)
     @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请填写详情！")
-    private String detail;
+    private String content;
 
 }

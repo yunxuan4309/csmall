@@ -62,7 +62,7 @@
         <result column="is_deleted" property="deleted"/>
         <result column="is_published" property="published"/>
         <result column="is_new_arrival" property="newArrival"/>
-        <result column="is_recommended" property="recommended"/>
+        <result column="is_recommend" property="recommend"/>
         <result column="is_checked" property="checked"/>
         <result column="check_user" property="checkUser"/>
         <result column="gmt_check" property="gmtCheck"/>
@@ -113,7 +113,7 @@
         <result column="is_deleted" property="deleted"/>
         <result column="is_published" property="published"/>
         <result column="is_new_arrival" property="newArrival"/>
-        <result column="is_recommended" property="recommended"/>
+        <result column="is_recommend" property="recommend"/>
         <result column="is_checked" property="checked"/>
         <result column="check_user" property="checkUser"/>
         <result column="gmt_check" property="gmtCheck"/>
@@ -211,7 +211,7 @@
                     is_deleted=#{deleted},
                 </if>
                 <if test="published != null">
-                    is_publish=#{published},
+                    is_published=#{published},
                 </if>
                 <if test="newArrival != null">
                     is_new_arrival=#{newArrival},

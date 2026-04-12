@@ -15,20 +15,16 @@ USE cs_mall_seckill;
 DROP TABLE IF EXISTS `seckill_spu`;
 CREATE TABLE `seckill_spu` (
   `id` bigint(20) NOT NULL COMMENT '秒杀 SPU id',
-  `name` varchar(128) NOT NULL COMMENT 'SPU 名称',
-  `title` varchar(255) NOT NULL COMMENT '秒杀标题',
-  `original_price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '原价',
-  `seckill_price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '秒杀价',
-  `stock` int(11) NOT NULL DEFAULT '0' COMMENT '秒杀库存',
+  `spu_id` bigint(20) NOT NULL COMMENT '商品 SPU id',
+  `list_price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '秒杀价格',
   `start_time` datetime NOT NULL COMMENT '秒杀开始时间',
   `end_time` datetime NOT NULL COMMENT '秒杀结束时间',
-  `status` int(1) DEFAULT '0' COMMENT '状态，0=未开始，1=进行中，2=已结束',
-  `sort` int(11) DEFAULT '0' COMMENT '排序序号',
   `gmt_create` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `gmt_modified` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
   PRIMARY KEY (`id`),
-  KEY `idx_status` (`status`),
-  KEY `idx_start_time` (`start_time`)
+  KEY `idx_spu_id` (`spu_id`),
+  KEY `idx_start_time` (`start_time`),
+  KEY `idx_time_range` (`start_time`, `end_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='秒杀 SPU 表';
 
 -- ----------------------------
@@ -37,15 +33,11 @@ CREATE TABLE `seckill_spu` (
 DROP TABLE IF EXISTS `seckill_sku`;
 CREATE TABLE `seckill_sku` (
   `id` bigint(20) NOT NULL COMMENT '秒杀 SKU id',
-  `spu_id` bigint(20) NOT NULL COMMENT '秒杀 SPU id',
   `sku_id` bigint(20) NOT NULL COMMENT '商品 SKU id',
-  `title` varchar(255) NOT NULL COMMENT '商品标题',
-  `picture_url` varchar(500) DEFAULT NULL COMMENT '商品图片 URL',
-  `original_price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '原价',
+  `spu_id` bigint(20) NOT NULL COMMENT '秒杀 SPU id',
+  `seckill_stock` int(11) NOT NULL DEFAULT '0' COMMENT '秒杀库存',
   `seckill_price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '秒杀价',
-  `stock` int(11) NOT NULL DEFAULT '0' COMMENT '秒杀库存',
-  `sold_count` int(11) DEFAULT '0' COMMENT '已售数量',
-  `limit_count` int(11) DEFAULT '1' COMMENT '限购数量',
+  `seckill_limit` int(11) DEFAULT '1' COMMENT '限购数量',
   `gmt_create` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `gmt_modified` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
   PRIMARY KEY (`id`),

@@ -34,10 +34,10 @@ public interface SpuDetailMapper {
      * 修改SPU详情
      *
      * @param spuId  SPU id
-     * @param detail 封新的SPU详情
+     * @param content 新的SPU详情
      * @return 受影响的行数
      */
-    int updateDetailBySpuId(@Param("spuId") Long spuId, @Param("detail") String detail);
+    int updateDetailBySpuId(@Param("spuId") Long spuId, @Param("content") String content);
 
     /**
      * 根据Spu id查询Spu详情

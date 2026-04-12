@@ -5,7 +5,7 @@
     <!-- 标准查询字段列表 -->
     <sql id="StandardQueryFields">
         <if test="true">
-            id, spu_id, detail
+            id, spu_id, content
         </if>
     </sql>
 
@@ -13,13 +13,13 @@
     <resultMap id="StandardResultMap" type="com.cooxiao.mall.pojo.product.vo.SpuDetailStandardVO">
         <id column="id" property="id"/>
         <result column="spu_id" property="spuId"/>
-        <result column="detail" property="detail"/>
+        <result column="content" property="content"/>
     </resultMap>
 
     <!-- int insert(SpuDetail spuDetail); -->
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into pms_spu_detail (spu_id, detail)
-        values (#{spuId}, #{detail})
+        insert into pms_spu_detail (spu_id, content)
+        values (#{spuId}, #{content})
     </insert>
 
     <!-- int deleteBySpuId(Long spuId); -->
@@ -29,10 +29,10 @@
         where spu_id = #{spuId}
     </delete>
 
-    <!-- int updateDetailBySpuId(@Param("spuId") Long spuId, @Param("detail") String detail); -->
+    <!-- int updateDetailBySpuId(@Param("spuId") Long spuId, @Param("content") String content); -->
     <update id="updateDetailBySpuId">
         update pms_spu_detail
-        set detail=#{detail}
+        set content=#{content}
         where spu_id = #{spuId}
     </update>
 

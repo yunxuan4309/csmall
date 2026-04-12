@@ -278,9 +278,9 @@ USE cs_mall_ums;
 -- 20. 测试用户数据
 -- ----------------------------
 INSERT INTO `ums_user` (`id`, `username`, `password`, `nickname`, `phone`, `email`, `enable`) VALUES 
-(1, 'testuser1', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iDJfYR5sILt8BPLu5mZFBqg5RE0S', '测试用户 1', '13800138001', 'test1@example.com', 1),
-(2, 'testuser2', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iDJfYR5sILt8BPLu5mZFBqg5RE0S', '测试用户 2', '13800138002', 'test2@example.com', 1),
-(3, 'zhangsan', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iDJfYR5sILt8BPLu5mZFBqg5RE0S', '张三', '13800138003', 'zhangsan@example.com', 1);
+(1, 'testuser1', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '测试用户 1', '13800138001', 'test1@example.com', 1),
+(2, 'testuser2', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '测试用户 2', '13800138002', 'test2@example.com', 1),
+(3, 'zhangsan', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '张三', '13800138003', 'zhangsan@example.com', 1);
 
 
 -- =====================================================

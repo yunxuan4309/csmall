@@ -217,5 +217,9 @@
         id=#{id}
     </update>
 
+    <!-- 根据订单id查询订单详情 -->
+    <select id="selectOrderById" resultMap="BaseResultMap">
+        SELECT * FROM oms_order WHERE id=#{id}
+    </select>
 
 </mapper>

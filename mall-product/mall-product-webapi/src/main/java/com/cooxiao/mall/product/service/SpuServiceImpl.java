@@ -107,10 +107,10 @@ public class SpuServiceImpl implements ISpuService {
         }
 
         // 如果还提交了详情，则插入详情
-        if (spuAddNewDTO.getDetail() != null) {
+        if (spuAddNewDTO.getContent() != null) {
             SpuDetail spuDetail = new SpuDetail();
             spuDetail.setSpuId(spuId);
-            spuDetail.setDetail(spuAddNewDTO.getDetail());
+            spuDetail.setContent(spuAddNewDTO.getContent());
             rows = spuDetailMapper.insert(spuDetail);
             if (rows != 1) {
                 throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "新增SPU失败，服务器忙，请稍后再次尝试！");
@@ -122,9 +122,9 @@ public class SpuServiceImpl implements ISpuService {
     public void updateById(Long id, SpuUpdateDTO spuDTO) {
         Spu spu = new Spu();
         BeanUtils.copyProperties(spuDTO, spu);
-        String detail = spuDTO.getDetail();
-        if (detail != null && detail.trim().length() > 0) {
-            spuDetailMapper.updateDetailBySpuId(spu.getId(), spuDTO.getDetail());
+        String content = spuDTO.getContent();
+        if (content != null && content.trim().length() > 0) {
+            spuDetailMapper.updateDetailBySpuId(spu.getId(), spuDTO.getContent());
         }
         spuMapper.update(spu);
     }

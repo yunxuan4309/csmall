@@ -1,4 +1,4 @@
-# Git 提交日志
+# Git 提交日志(登录功能bug修复1)
 
 ## 提交类型：修复 + 改进
 
@@ -103,3 +103,88 @@ git commit -m "fix(sso): 修复管理员登录功能的多个技术问题
 
 ### 根目录
 - `pom.xml` - 添加 JAXB API 版本管理
+
+---
+
+# Git 提交日志(订单购物车秒杀服务修复)
+
+## 提交类型：修复 + 新增功能
+
+---
+
+## 提交信息
+
+```
+fix(order,seckill): 修复订单详情查询、购物车字段映射、秒杀数据库结构问题
+
+1. 订单模块修复
+   - 实现 getOrderDetail() 方法，添加订单详情查询功能
+   - 添加 OmsOrderMapper.selectOrderById() 方法
+   - 添加 OmsOrderItemMapper.selectOrderItemsByOrderId() 方法
+   - 修复 OmsOrderItemMapper.xml 字段映射 (picture_url, sku_properties)
+   - 在 OmsOrderController 添加 /detail 接口
+
+2. 购物车模块修复
+   - 修复 OmsCartMapper.xml 字段映射 (picture_url)
+   - 添加 bar_code、data、is_checked 字段映射
+   - OmsCart.java 添加 isChecked 属性
+   - CartStandardVO.java 添加 isChecked 属性
+
+3. 秒杀模块修复
+   - 修复 05-seckill.sql 表结构匹配代码实体类
+   - seckill_spu 表: 添加 spu_id, list_price 字段
+   - seckill_sku 表: 修改为 sku_id, spu_id, seckill_stock 等字段
+
+4. 网关跨域配置
+   - 新增 CorsConfig.java 配置类
+   - 解决前端 CORS 跨域请求问题
+
+5. 数据库脚本更新
+   - 03-oms-order.sql: 添加 bar_code 字段
+   - 05-seckill.sql: 完全重构表结构
+```
+
+---
+
+## Git 命令
+
+```bash
+# 添加所有修改的文件
+git add .
+
+# 提交
+git commit -m "fix(order,seckill): 修复订单详情查询、购物车字段映射、秒杀数据库结构问题
+
+1. 订单模块: 实现getOrderDetail方法,添加详情查询接口
+2. 购物车模块: 修复字段映射,添加isChecked属性
+3. 秒杀模块: 修复数据库表结构匹配代码
+4. 网关: 添加CORS跨域配置
+5. 数据库: 更新oms和seckill表结构"
+```
+
+---
+
+## 修改文件清单
+
+### mall-gateway-server 模块
+- `config/CorsConfig.java` - 新增 CORS 跨域配置类
+
+### mall-order 模块
+- `controller/OmsOrderController.java` - 添加 getOrderDetail 接口
+- `mapper/OmsOrderMapper.java` - 添加 selectOrderById 方法
+- `mapper/OmsOrderItemMapper.java` - 添加 selectOrderItemsByOrderId 方法
+- `service/impl/OmsOrderServiceImpl.java` - 实现 getOrderDetail 方法
+- `resources/mapper/OmsOrderMapper.xml` - 添加查询SQL
+- `resources/mapper/OmsOrderItemMapper.xml` - 修复字段映射,添加查询SQL
+- `resources/mapper/OmsCartMapper.xml` - 修复字段映射
+
+### mall-pojo 模块
+- `order/model/OmsCart.java` - 添加 isChecked 属性
+- `order/vo/CartStandardVO.java` - 添加 isChecked 属性
+
+### database 数据库脚本
+- `03-oms-order.sql` - 添加 bar_code 字段
+- `05-seckill.sql` - 重构 seckill_spu 和 seckill_sku 表结构
+
+### 文档
+- `秒杀购物车订单服务修改1.md` - 新增修改记录文档

@@ -76,4 +76,8 @@ public class OmsCart implements Serializable {
 
     private String data;
     private String barCode;
+    /**
+     * 是否选中，1=选中，0=未选中
+     */
+    private Integer isChecked;
 }

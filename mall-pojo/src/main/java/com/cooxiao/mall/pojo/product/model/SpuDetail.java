@@ -29,7 +29,7 @@ public class SpuDetail implements Serializable {
     /**
      * SPU详情，应该使用HTML富文本，通常内容是若干张图片
      */
-    private String detail;
+    private String content;
 
     /**
      * 数据创建时间

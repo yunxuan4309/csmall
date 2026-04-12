@@ -20,6 +20,7 @@ import com.cooxiao.mall.pojo.order.model.OmsOrder;
 import com.cooxiao.mall.pojo.order.model.OmsOrderItem;
 import com.cooxiao.mall.pojo.order.vo.OrderAddVO;
 import com.cooxiao.mall.pojo.order.vo.OrderDetailVO;
+import com.cooxiao.mall.pojo.order.vo.OrderItemListVO;
 import com.cooxiao.mall.pojo.order.vo.OrderListVO;
 import com.cooxiao.mall.product.service.order.IForOrderSkuService;
 import io.seata.spring.annotation.GlobalTransactional;
@@ -233,7 +234,25 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
 
     @Override
     public OrderDetailVO getOrderDetail(Long id) {
-        return null;
+        // 根据订单id查询订单信息
+        OmsOrder order = omsOrderMapper.selectOrderById(id);
+        if(order == null){
+            return null;
+        }
+        // 根据订单id查询订单项列表
+        List<OmsOrderItem> orderItems = omsOrderItemMapper.selectOrderItemsByOrderId(id);
+        // 转换为VO类型
+        List<OrderItemListVO> orderItemVOs = new ArrayList<>();
+        for(OmsOrderItem item : orderItems){
+            OrderItemListVO vo = new OrderItemListVO();
+            BeanUtils.copyProperties(item, vo);
+            orderItemVOs.add(vo);
+        }
+        // 创建OrderDetailVO并赋值
+        OrderDetailVO detailVO = new OrderDetailVO();
+        BeanUtils.copyProperties(order, detailVO);
+        detailVO.setOrderItems(orderItemVOs);
+        return detailVO;
     }
 
 
