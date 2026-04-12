@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
  */
 
 @Service
+@Slf4j
 public class OmsCartServiceImpl implements IOmsCartService {
     @Autowired
     private OmsCartMapper omsCartMapper;
@@ -97,11 +99,25 @@ public class OmsCartServiceImpl implements IOmsCartService {
     // 支持批量删除购物车中商品的方法
     @Override
     public void removeCart(Long[] ids) {
-        // 直接将ids参数赋值到mapper中
-        int rows=omsCartMapper.deleteBatchIds(java.util.Arrays.asList(ids));
+        // 获取当前登录用户ID
+        Long userId = getUserId();
+        log.info("删除购物车 - 用户ID: {}, 要删除的购物车ID: {}", userId, ids == null ? "null" : java.util.Arrays.toString(ids));
+        
+        // 参数校验
+        if (ids == null || ids.length == 0) {
+            throw new CoolSharkServiceException(
+                    ResponseCode.BAD_REQUEST,"请选择要删除的购物车商品!");
+        }
+        
+        // 只删除属于当前用户的购物车商品，防止越权删除
+        LambdaQueryWrapper<OmsCart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(OmsCart::getId, java.util.Arrays.asList(ids))
+               .eq(OmsCart::getUserId, userId);
+        int rows = omsCartMapper.delete(wrapper);
+        log.info("删除购物车 - 影响行数: {}", rows);
         if(rows==0){
             throw new CoolSharkServiceException(
-                    ResponseCode.NOT_FOUND,"您要删除的商品已经删除了!");
+                    ResponseCode.NOT_FOUND,"未找到您要删除的购物车商品!");
         }
     }
 

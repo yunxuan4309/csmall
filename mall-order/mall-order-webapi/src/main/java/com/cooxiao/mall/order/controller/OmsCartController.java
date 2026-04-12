@@ -46,7 +46,7 @@ public class OmsCartController {
     @PostMapping("/delete")
     @ApiOperation("根据id数组删除购物车中商品")
     @ApiImplicitParam(value = "要删除的id数组",name="ids",
-            required = true,dataType = "array")
+            required = true,dataType = "array", allowMultiple = true)
     @PreAuthorize("hasAuthority('ROLE_user')")
     public JsonResult removeCartsByIds(Long[] ids){
         omsCartService.removeCart(ids);

@@ -1,5 +1,7 @@
 package com.cooxiao.mall.pojo.product.model;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
@@ -19,6 +21,7 @@ public class Picture implements Serializable {
     /**
      * 记录id
      */
+    @TableId(value = "id", type = IdType.ASSIGN_ID)
     private Long id;
 
     /**

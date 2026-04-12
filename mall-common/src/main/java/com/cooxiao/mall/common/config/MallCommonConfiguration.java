@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ComponentScan({
         "com.cooxiao.mall.common.exception.handler",
-        "com.cooxiao.mall.common.utils"})
+        "com.cooxiao.mall.common.utils",
+        "com.cooxiao.mall.common.config"})
 public class MallCommonConfiguration {
 }
