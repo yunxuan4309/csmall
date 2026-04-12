@@ -1,5 +1,6 @@
 package com.cooxiao.mall.pojo.order.model;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -44,7 +45,7 @@ public class OmsCart implements Serializable {
     /**
      * 商品SKU图片URL（第1张）（冗余）
      */
-
+    @TableField("picture_url")
     private String mainPicture;
 
     /**

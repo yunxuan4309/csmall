@@ -39,7 +39,7 @@ public class SkuController {
     @ApiOperation(value = "新增SKU", notes = "需要商品后台【写】权限：/pms/product/update")
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/addnew")
-    public JsonResult<Void> addNew(@Valid SkuAddNewDTO skuAddNewDTO) {
+    public JsonResult<Void> addNew(@Valid @RequestBody SkuAddNewDTO skuAddNewDTO) {
         skuService.addNew(skuAddNewDTO);
         return JsonResult.ok();
     }
@@ -54,7 +54,7 @@ public class SkuController {
     })
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/{id:[0-9]+}/update")
-    public JsonResult<Void> updateById(@PathVariable Long id, @Valid SkuUpdateFullInfoDTO skuUpdateFullInfoDTO) {
+    public JsonResult<Void> updateById(@PathVariable Long id, @Valid @RequestBody SkuUpdateFullInfoDTO skuUpdateFullInfoDTO) {
         skuService.updateFullInfoById(id, skuUpdateFullInfoDTO);
         return JsonResult.ok();
     }

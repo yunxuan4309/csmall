@@ -18,3 +18,9 @@ spring:
         #动态路由,发现的服务都会自动添加到路由中
         locator:
           enabled: true
+      routes:
+        # 订单服务路由 - 将 /oms/** 路径转发到 mall-order 服务
+        - id: mall-order
+          uri: lb://mall-order
+          predicates:
+            - Path=/oms/**

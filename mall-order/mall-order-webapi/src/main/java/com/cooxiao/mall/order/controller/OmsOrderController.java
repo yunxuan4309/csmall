@@ -31,7 +31,7 @@ public class OmsOrderController {
     @PostMapping("/add")
     @ApiOperation("执行新增订单的方法")
     @PreAuthorize("hasRole('user')")
-    public JsonResult<OrderAddVO> addOrder(@Validated OrderAddDTO orderAddDTO){
+    public JsonResult<OrderAddVO> addOrder(@Validated @RequestBody OrderAddDTO orderAddDTO){
         OrderAddVO orderAddVO=omsOrderService.addOrder(orderAddDTO);
         return JsonResult.ok(orderAddVO);
     }
@@ -49,7 +49,7 @@ public class OmsOrderController {
     @PostMapping("/update/state")
     @ApiOperation("根据订单id修改订单状态")
     @PreAuthorize("hasRole('user')")
-    public JsonResult updateOrderState(@Validated OrderStateUpdateDTO orderStateUpdateDTO){
+    public JsonResult updateOrderState(@Validated @RequestBody OrderStateUpdateDTO orderStateUpdateDTO){
         omsOrderService.updateOrderState(orderStateUpdateDTO);
         return JsonResult.ok("修改完成!");
     }

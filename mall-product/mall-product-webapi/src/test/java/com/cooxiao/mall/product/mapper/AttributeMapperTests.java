@@ -77,7 +77,7 @@ public class AttributeMapperTests {
         attribute.setTemplateId(1L);
         attribute.setName("修改后的颜色");
         attribute.setDescription("修改后的小米手机12 Pro的手机颜色");
-        int rows = mapper.update(attribute);
+        int rows = mapper.updateById(attribute);
         Assertions.assertEquals(DMLConst.AffectedRows.ONE, rows);
         log.debug("测试通过！");
     }
@@ -90,7 +90,7 @@ public class AttributeMapperTests {
         Attribute attribute = new Attribute();
         attribute.setId(id);
         attribute.setName("修改后的颜色");
-        int rows = mapper.update(attribute);
+        int rows = mapper.updateById(attribute);
         Assertions.assertEquals(DMLConst.AffectedRows.ZERO, rows);
         log.debug("测试通过！");
     }

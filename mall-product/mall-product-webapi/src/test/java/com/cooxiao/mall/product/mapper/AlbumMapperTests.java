@@ -66,7 +66,7 @@ public class AlbumMapperTests {
         album.setName("修改后的小米手机12 Pro的相册");
         album.setDescription("修改后的小米手机12 Pro的相册的描述");
         album.setSort(99);
-        int rows = mapper.update(album);
+        int rows = mapper.updateById(album);
         Assertions.assertEquals(DMLConst.AffectedRows.ONE, rows);
         log.debug("测试通过！");
     }
@@ -79,7 +79,7 @@ public class AlbumMapperTests {
         Album album = new Album();
         album.setId(id);
         album.setName("修改后的小米手机12 Pro的相册");
-        int rows = mapper.update(album);
+        int rows = mapper.updateById(album);
         Assertions.assertEquals(DMLConst.AffectedRows.ZERO, rows);
         log.debug("测试通过！");
     }
@@ -106,7 +106,8 @@ public class AlbumMapperTests {
     @Test
     @Sql(scripts = {SqlScript.TRUNCATE_ALL_TABLE, SqlScript.INSERT_ALL_TEST_DATA})
     void testList() {
-        List<?> list = mapper.list();
+        // AlbumMapper继承BaseMapper，使用selectList查询全部
+        List<?> list = mapper.selectList(null);
         log.debug("记录数：{}", list.size());
         for (Object item : list) {
             log.debug("{}", item);

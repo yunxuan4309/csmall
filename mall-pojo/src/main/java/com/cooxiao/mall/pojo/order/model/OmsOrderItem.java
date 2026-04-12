@@ -1,5 +1,6 @@
 package com.cooxiao.mall.pojo.order.model;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
@@ -50,12 +51,13 @@ public class OmsOrderItem implements Serializable {
     /**
      * 商品SKU全部属性，使用JSON格式表示（冗余）
      */
+    @TableField("sku_properties")
     private String data;
 
     /**
      * 商品SKU图片URL（第1张）（冗余）
      */
-
+    @TableField("picture_url")
     private String mainPicture;
 
     /**
@@ -69,6 +71,16 @@ public class OmsOrderItem implements Serializable {
      */
 
     private Integer quantity;
+
+    /**
+     * 商品总价
+     */
+    private BigDecimal totalPrice;
+
+    /**
+     * SPU名称（冗余）
+     */
+    private String spuName;
 
     /**
      * 数据创建时间

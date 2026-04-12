@@ -38,7 +38,7 @@ public class OmsCartController {
     // @Validated注解激活SpringValidation框架验证参数的功能
     // CartAddDTO参数中如果规定非null的属性出现null值,就会引发异常
     // 抛出BindException,由全局异常处理类处理
-    public JsonResult addCart(@Validated CartAddDTO cartAddDTO){
+    public JsonResult addCart(@Validated @RequestBody CartAddDTO cartAddDTO){
         omsCartService.addCart(cartAddDTO);
         return JsonResult.ok("新增sku操作完成");
     }
@@ -69,7 +69,7 @@ public class OmsCartController {
     @PostMapping("/update/quantity")
     @ApiOperation("修改购物车中sku商品数量")
     @PreAuthorize("hasRole('user')")
-    public JsonResult updateQuantity(@Validated CartUpdateDTO cartUpdateDTO){
+    public JsonResult updateQuantity(@Validated @RequestBody CartUpdateDTO cartUpdateDTO){
         omsCartService.updateQuantity(cartUpdateDTO);
         return JsonResult.ok("修改完成!");
     }

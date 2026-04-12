@@ -64,7 +64,7 @@ public class AttributeTemplateMapperTests {
         AttributeTemplate attributeTemplate = new AttributeTemplate();
         attributeTemplate.setId(id);
         attributeTemplate.setName("修改后的小米手机12的属性模版");
-        int rows = mapper.update(attributeTemplate);
+        int rows = mapper.updateById(attributeTemplate);
         Assertions.assertEquals(DMLConst.AffectedRows.ONE, rows);
         log.debug("测试通过！");
     }
@@ -77,7 +77,7 @@ public class AttributeTemplateMapperTests {
         AttributeTemplate attributeTemplate = new AttributeTemplate();
         attributeTemplate.setId(id);
         attributeTemplate.setName("修改后的小米手机12的属性模版");
-        int rows = mapper.update(attributeTemplate);
+        int rows = mapper.updateById(attributeTemplate);
         Assertions.assertEquals(DMLConst.AffectedRows.ZERO, rows);
         log.debug("测试通过！");
     }

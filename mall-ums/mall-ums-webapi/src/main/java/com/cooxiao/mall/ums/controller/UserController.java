@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 
@@ -49,7 +50,7 @@ public class UserController {
     @ApiOperation(value="注册用户")
     @PostMapping("/register")
     @PreAuthorize("permitAll()")
-    public JsonResult doRegister(UserRegistryDTO userRegistyDTO){
+    public JsonResult doRegister(@RequestBody UserRegistryDTO userRegistyDTO){
         userService.doRegister(userRegistyDTO);
         return JsonResult.ok();
     }
@@ -73,7 +74,7 @@ public class UserController {
     @ApiOperation(value="修改登录密码")
     @PostMapping("/renew/password")
     @PreAuthorize("hasRole('user')")
-    public JsonResult renewPassword(@Valid ChangePasswordDTO changePasswordDTO, HttpServletRequest request,@RequestHeader("Authorization") String authToken){
+    public JsonResult renewPassword(@Valid @RequestBody ChangePasswordDTO changePasswordDTO, HttpServletRequest request,@RequestHeader("Authorization") String authToken){
         String ip = LoginUtils.getIpAddress(request);
         changePasswordDTO.setIp(ip);
         String userAgent = request.getHeader("User-Agent");

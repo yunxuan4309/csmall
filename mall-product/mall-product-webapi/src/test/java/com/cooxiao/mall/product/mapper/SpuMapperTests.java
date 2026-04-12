@@ -11,6 +11,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.jdbc.Sql;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.cooxiao.mall.pojo.product.vo.SpuListItemVO;
+
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -154,7 +157,8 @@ public class SpuMapperTests {
     void testListByTypeNumber() {
         SpuQuery spuQuery = new SpuQuery();
         spuQuery.setTypeNumber("MI20121201");
-        List<?> list = mapper.listByCustomCondition(spuQuery);
+        Page<SpuListItemVO> page = new Page<>(1, 10);
+        List<?> list = mapper.listByCustomCondition(page, spuQuery).getRecords();
         log.debug("记录数：{}", list.size());
         for (Object item : list) {
             log.debug("{}", item);
@@ -166,7 +170,8 @@ public class SpuMapperTests {
     void testListByBrandId() {
         SpuQuery spuQuery = new SpuQuery();
         spuQuery.setBrandId(1L);
-        List<?> list = mapper.listByCustomCondition(spuQuery);
+        Page<SpuListItemVO> page = new Page<>(1, 10);
+        List<?> list = mapper.listByCustomCondition(page, spuQuery).getRecords();
         log.debug("记录数：{}", list.size());
         for (Object item : list) {
             log.debug("{}", item);
@@ -178,7 +183,8 @@ public class SpuMapperTests {
     void testListByCategoryId() {
         SpuQuery spuQuery = new SpuQuery();
         spuQuery.setCategoryId(1L);
-        List<?> list = mapper.listByCustomCondition(spuQuery);
+        Page<SpuListItemVO> page = new Page<>(1, 10);
+        List<?> list = mapper.listByCustomCondition(page, spuQuery).getRecords();
         log.debug("记录数：{}", list.size());
         for (Object item : list) {
             log.debug("{}", item);

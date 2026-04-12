@@ -303,7 +303,7 @@ public class CategoryMapperTests {
     @Test
     @Sql(scripts = {SqlScript.TRUNCATE_ALL_TABLE, SqlScript.INSERT_ALL_TEST_DATA})
     void testList() {
-        List<?> list = mapper.list();
+        List<?> list = mapper.selectAllCategories();
         log.debug("记录数：{}", list.size());
         for (Object item : list) {
             log.debug("{}", item);

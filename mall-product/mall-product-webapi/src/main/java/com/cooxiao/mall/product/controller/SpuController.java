@@ -41,7 +41,7 @@ public class SpuController {
     @ApiOperation(value = "新增SPU", notes = "需要商品后台【写】权限：/pms/product/update")
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/addnew")
-    public JsonResult<Void> addNew(@Valid SpuAddNewDTO spuAddnewDTO) {
+    public JsonResult<Void> addNew(@Valid @RequestBody SpuAddNewDTO spuAddnewDTO) {
         spuService.addNew(spuAddnewDTO);
         return JsonResult.ok();
     }
@@ -56,7 +56,7 @@ public class SpuController {
     })
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/{id:[0-9]+}/update")
-    public JsonResult<Void> updateById(@PathVariable("id") Long id, @Valid SpuUpdateDTO spuDTO) {
+    public JsonResult<Void> updateById(@PathVariable("id") Long id, @Valid @RequestBody SpuUpdateDTO spuDTO) {
         spuService.updateById(id, spuDTO);
         return JsonResult.ok();
     }

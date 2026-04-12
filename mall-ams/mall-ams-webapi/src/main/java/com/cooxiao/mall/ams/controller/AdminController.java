@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import org.springframework.web.bind.annotation.RestController;
@@ -73,7 +74,7 @@ public class AdminController {
     @ApiOperation(value="编辑后台用户")
     @PostMapping("/update")
     @PreAuthorize("hasAuthority('/ams/admin/update')")
-    public JsonResult updateAdmin(AdminUpdateDTO adminUpdateDTO){
+    public JsonResult updateAdmin(@RequestBody AdminUpdateDTO adminUpdateDTO){
         adminService.updateAdmin(adminUpdateDTO);
         return JsonResult.ok();
     }

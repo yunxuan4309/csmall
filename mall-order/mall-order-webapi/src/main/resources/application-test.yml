@@ -27,7 +27,7 @@ spring:
     password:
 dubbo:
   application:
-    name: mall-order
+    name: mall-order-dubbo
   protocol:
     port: -1
     name: dubbo
