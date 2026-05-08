@@ -15,6 +15,7 @@ import com.cooxiao.mall.pojo.order.dto.OrderAddDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderItemAddDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderListTimeDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderStateUpdateDTO;
+import com.cooxiao.mall.pojo.order.dto.PayOrderDTO;
 import com.cooxiao.mall.pojo.order.model.OmsCart;
 import com.cooxiao.mall.pojo.order.model.OmsOrder;
 import com.cooxiao.mall.pojo.order.model.OmsOrderItem;
@@ -22,6 +23,7 @@ import com.cooxiao.mall.pojo.order.vo.OrderAddVO;
 import com.cooxiao.mall.pojo.order.vo.OrderDetailVO;
 import com.cooxiao.mall.pojo.order.vo.OrderItemListVO;
 import com.cooxiao.mall.pojo.order.vo.OrderListVO;
+import com.cooxiao.mall.pojo.order.vo.PayOrderVO;
 import com.cooxiao.mall.product.service.order.IForOrderSkuService;
 import io.seata.spring.annotation.GlobalTransactional;
 import lombok.extern.slf4j.Slf4j;
@@ -184,6 +186,10 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         OmsOrder order=new OmsOrder();
         // orderStateUpdateDTO参数属性只有id和state,实现修改订单状态,进行赋值
         BeanUtils.copyProperties(orderStateUpdateDTO,order);
+        // 如果状态变更为已支付(3)，自动设置支付时间
+        if (order.getState() != null && order.getState() == 3) {
+            order.setGmtPay(LocalDateTime.now());
+        }
         // 调用动态修改方法,因为参数中只有state有值,所以只是修改订单状态
         omsOrderMapper.updateOrderById(order);
     }
@@ -231,6 +237,63 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         }
     }
 
+
+    // 支付订单
+    @Override
+    public PayOrderVO payOrder(PayOrderDTO payOrderDTO) {
+        // 1.查询订单信息
+        OmsOrder order = omsOrderMapper.selectOrderById(payOrderDTO.getId());
+        if (order == null) {
+            throw new CoolSharkServiceException(ResponseCode.BAD_REQUEST, "订单不存在");
+        }
+        // 2.校验订单状态，只有未支付(0)的订单才能支付
+        if (order.getState() != 0) {
+            throw new CoolSharkServiceException(ResponseCode.BAD_REQUEST, "当前订单状态不支持支付");
+        }
+        // 3.校验订单所属用户
+        if (!order.getUserId().equals(getUserId())) {
+            throw new CoolSharkServiceException(ResponseCode.FORBIDDEN, "无权操作此订单");
+        }
+
+        // ========== 支付渠道处理 ==========
+        // 根据paymentType走不同的支付流程
+        // 当前版本：所有渠道均模拟支付成功
+        // 后续版本：根据paymentType调用对应的支付SDK
+        //   paymentType=1 → 微信支付
+        //   paymentType=2 → 支付宝支付
+        //   paymentType=0 → 银联支付
+        Integer paymentType = payOrderDTO.getPaymentType();
+        if (paymentType == null) {
+            // 如果未指定支付方式，使用订单创建时选择的方式
+            paymentType = order.getPaymentType();
+            if (paymentType == null) {
+                paymentType = 0;
+            }
+        }
+        // TODO 后续接入真实支付：根据paymentType调用微信/支付宝/银联支付接口
+        // if (paymentType == 1) { 微信支付逻辑 }
+        // if (paymentType == 2) { 支付宝支付逻辑 }
+        // 当前直接模拟支付成功
+
+        // 4.更新订单状态为已支付(3)，设置支付时间和支付方式
+        OmsOrder updateOrder = new OmsOrder();
+        updateOrder.setId(order.getId());
+        updateOrder.setState(3); // 已支付
+        updateOrder.setGmtPay(LocalDateTime.now()); // 支付时间
+        updateOrder.setPaymentType(paymentType); // 支付方式
+        omsOrderMapper.updateOrderById(updateOrder);
+
+        // 5.查询更新后的订单信息并返回
+        OmsOrder updatedOrder = omsOrderMapper.selectOrderById(order.getId());
+        PayOrderVO payOrderVO = new PayOrderVO();
+        payOrderVO.setId(updatedOrder.getId());
+        payOrderVO.setSn(updatedOrder.getSn());
+        payOrderVO.setPaymentType(updatedOrder.getPaymentType());
+        payOrderVO.setPayAmount(updatedOrder.getAmountOfActualPay());
+        payOrderVO.setGmtPay(updatedOrder.getGmtPay());
+        payOrderVO.setState(updatedOrder.getState());
+        return payOrderVO;
+    }
 
     @Override
     public OrderDetailVO getOrderDetail(Long id) {

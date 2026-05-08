@@ -90,8 +90,7 @@ public class SeckillOrderAddDTO implements SeckillOrderRegExpression,Serializabl
     /**
      * 街道-代号（冗余，历史）
      */
-    @ApiModelProperty(value="街道-代号",notes="冗余，历史",example = "00005",required = true)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX+"请填写街道代号")
+    @ApiModelProperty(value="街道-代号",notes="冗余，历史，可选",example = "00005",required = false)
     private String streetCode;
 
     /**

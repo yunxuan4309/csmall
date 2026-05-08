@@ -24,7 +24,7 @@
         <dependency>
             <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-order-service</artifactId>
-            <version>1.0.0</version>
+            <version>${project.version}</version>
         </dependency>
         <!--要调用减库存-->
         <dependency>

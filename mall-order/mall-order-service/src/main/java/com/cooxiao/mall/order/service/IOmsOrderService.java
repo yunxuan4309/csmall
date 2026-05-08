@@ -4,9 +4,11 @@ import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.pojo.order.dto.OrderAddDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderListTimeDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderStateUpdateDTO;
+import com.cooxiao.mall.pojo.order.dto.PayOrderDTO;
 import com.cooxiao.mall.pojo.order.vo.OrderAddVO;
 import com.cooxiao.mall.pojo.order.vo.OrderDetailVO;
 import com.cooxiao.mall.pojo.order.vo.OrderListVO;
+import com.cooxiao.mall.pojo.order.vo.PayOrderVO;
 
 /**
  * <p>
@@ -42,4 +44,12 @@ public interface IOmsOrderService{
      * @return
      */
     OrderDetailVO getOrderDetail(Long id);
+
+    /**
+     * 支付订单
+     * 当前版本为模拟支付，后续将接入微信/支付宝支付
+     * @param payOrderDTO 支付参数（订单id、支付方式）
+     * @return 支付结果
+     */
+    PayOrderVO payOrder(PayOrderDTO payOrderDTO);
 }

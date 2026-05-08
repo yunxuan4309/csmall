@@ -6,9 +6,11 @@ import com.cooxiao.mall.order.service.IOmsOrderService;
 import com.cooxiao.mall.pojo.order.dto.OrderAddDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderListTimeDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderStateUpdateDTO;
+import com.cooxiao.mall.pojo.order.dto.PayOrderDTO;
 import com.cooxiao.mall.pojo.order.vo.OrderAddVO;
 import com.cooxiao.mall.pojo.order.vo.OrderDetailVO;
 import com.cooxiao.mall.pojo.order.vo.OrderListVO;
+import com.cooxiao.mall.pojo.order.vo.PayOrderVO;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -52,6 +54,14 @@ public class OmsOrderController {
     public JsonResult updateOrderState(@Validated @RequestBody OrderStateUpdateDTO orderStateUpdateDTO){
         omsOrderService.updateOrderState(orderStateUpdateDTO);
         return JsonResult.ok("修改完成!");
+    }
+
+    @PostMapping("/pay")
+    @ApiOperation("支付订单（当前为模拟支付，后续将接入微信/支付宝）")
+    @PreAuthorize("hasRole('user')")
+    public JsonResult<PayOrderVO> payOrder(@Validated @RequestBody PayOrderDTO payOrderDTO) {
+        PayOrderVO payOrderVO = omsOrderService.payOrder(payOrderDTO);
+        return JsonResult.ok(payOrderVO);
     }
 
     @GetMapping("/detail")
