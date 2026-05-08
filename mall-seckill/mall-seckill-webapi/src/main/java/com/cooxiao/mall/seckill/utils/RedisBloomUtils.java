@@ -77,6 +77,9 @@ public class RedisBloomUtils {
     }
 
     private RedisScript<List> generateScript(String script, String[] values) {
+        if(values == null || values.length == 0){
+            throw new IllegalArgumentException("布隆过滤器批量操作参数不能为空");
+        }
         StringBuilder sb = new StringBuilder();
         for(int i = 1; i <= values.length; i ++){
             if(i != 1){

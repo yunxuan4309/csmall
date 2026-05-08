@@ -85,10 +85,8 @@ public class SeckillInitialJob implements Job {
                     // 如果这个key不存在,就要将数据库中sku的库存数保存到redis里
                     stringRedisTemplate.boundValueOps(skuStockKey).set(
                             sku.getSeckillStock()+"",//加引号变字符串
-                            // 保存时间=秒杀持续时间+提前的5分钟+防雪崩随机数30秒
-                            // 1000*60*60*2+1000*60*5+ RandomUtils.nextInt(1000*30),
-                            // 为了方便测试,保存五分钟
-                            1000*60*5+ ThreadLocalRandom.current().nextInt(10000),//雪崩:数据同时消失或者同时回来
+                            // 保存时间=秒杀持续时间2小时+提前的5分钟+防雪崩随机数30秒
+                            1000*60*60*2+1000*60*5+ ThreadLocalRandom.current().nextInt(1000*30),
                             TimeUnit.MILLISECONDS);
                     log.info("{}号sku库存数成功预热到缓存!",sku.getSkuId());
                 }
@@ -112,8 +110,8 @@ public class SeckillInitialJob implements Job {
                 int randCode= ThreadLocalRandom.current().nextInt(900000)+100000;
                 redisTemplate.boundValueOps(randCodeKey).set(
                         randCode,
-                        // 为了方便测试,保存五分钟
-                        1000*60*5+ThreadLocalRandom.current().nextInt(10000),
+                        // 保存时间=秒杀持续时间2小时+提前的5分钟+防雪崩随机数30秒
+                        1000*60*60*2+1000*60*5+ThreadLocalRandom.current().nextInt(1000*30),
                         TimeUnit.MILLISECONDS);
                 log.info("{}号spu商品的随机码生成保存完成!值为:{}",spu.getSpuId(),randCode);
             }

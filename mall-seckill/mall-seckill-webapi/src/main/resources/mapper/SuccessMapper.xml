@@ -21,6 +21,7 @@
     <!--  新增Success对象到数据库的方法  -->
     <insert id="saveSuccess" >
         insert into success(
+            id,
             user_id,
             user_phone,
             sku_id,
@@ -32,6 +33,7 @@
             data,
             order_sn
         )values(
+                   #{id},
                    #{userId},
                    #{userPhone},
                    #{skuId},

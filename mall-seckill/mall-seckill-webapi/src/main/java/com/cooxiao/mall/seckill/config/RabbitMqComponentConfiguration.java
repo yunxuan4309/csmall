@@ -4,6 +4,8 @@ import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -29,5 +31,10 @@ public class RabbitMqComponentConfiguration {
     @Bean
     public Binding seckillBinding(){
         return BindingBuilder.bind(seckillQueue()).to(seckillExchange()).with(SECKILL_RK);
+    }
+    // 使用JSON序列化替代Java默认序列化，跨服务兼容性更好
+    @Bean
+    public MessageConverter jackson2JsonMessageConverter(){
+        return new Jackson2JsonMessageConverter();
     }
 }

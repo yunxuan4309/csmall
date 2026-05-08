@@ -37,25 +37,21 @@ public class QuartzConfig {
     }
     //以下是bloom过滤器的触发信息
 
- //   @Bean
-//               ↓↓↓↓↓
+    @Bean
     public JobDetail bloomInitJobDetail(){
-        //                              ↓↓↓↓↓
         return JobBuilder.newJob(SeckillBloomInitialJob.class)
-                //                 ↓↓↓↓↓
                 .withIdentity("bloomInitJobDetail")
                 .storeDurably()
                 .build();
     }
- //   @Bean
-//             ↓↓↓↓↓
+    @Bean
     public Trigger bloomInitTrigger(){
+        // 每分钟运行一次，与预热Job同步
+        // 生产环境可改为与秒杀时段匹配的cron
         CronScheduleBuilder cron=
                 CronScheduleBuilder.cronSchedule("0 0/1 * * * ?");
         return TriggerBuilder.newTrigger()
-                //          ↓↓↓↓↓
                 .forJob(bloomInitJobDetail())
-                //                 ↓↓↓↓↓
                 .withIdentity("bloomInitTrigger")
                 .withSchedule(cron)
                 .build();

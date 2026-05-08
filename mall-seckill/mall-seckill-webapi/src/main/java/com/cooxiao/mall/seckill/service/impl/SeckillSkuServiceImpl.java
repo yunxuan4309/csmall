@@ -9,7 +9,6 @@ import com.cooxiao.mall.pojo.seckill.vo.SeckillSkuVO;
 import com.cooxiao.mall.product.service.seckill.IForSeckillSkuService;
 import com.cooxiao.mall.seckill.mapper.SeckillSkuMapper;
 import com.cooxiao.mall.seckill.service.ISeckillSkuService;
-import com.cooxiao.mall.seckill.utils.RedisBloomUtils;
 import com.cooxiao.mall.seckill.utils.SeckillCacheUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.dubbo.config.annotation.DubboReference;
@@ -41,28 +40,28 @@ public class SeckillSkuServiceImpl implements ISeckillSkuService {
     @Autowired
     private RedisTemplate redisTemplate;
 
-    // 装配操作布隆过滤器的对象
-    @Autowired
-    private RedisBloomUtils redisBloomUtils;
-
 
     @Override
     public List<SeckillSkuVO> listSeckillSkus(Long spuId) {
-        // 这里应该先从Redis中获取布隆过滤器
+        // 从Redis中获取缓存Set(防缓存穿透)
+        // 使用Redis Set替代布隆过滤器,SISMEMBER判断spuId是否存在
         String bloomDayKey=SeckillCacheUtils
                 .getBloomFilterKey(LocalDate.now());
         // 判断这个key是否存在
         if( ! redisTemplate.hasKey(bloomDayKey)){
             throw new CoolSharkServiceException(
-                    ResponseCode.INTERNAL_SERVER_ERROR,"布隆过滤器未创建");
+                    ResponseCode.INTERNAL_SERVER_ERROR,"秒杀商品缓存未创建");
         }
-        // 使用布隆过滤器判断参数spuId是否在数据库中存在,如果不存在直接抛出异常
-        if( ! redisBloomUtils.bfexists(bloomDayKey,spuId+"")){
-            // 进if表示当前spuId不在布隆过滤器中,布隆过滤器生效,防止了缓存穿透
+        // 使用Set判断参数spuId是否在数据库中存在,如果不存在直接抛出异常
+        if( ! redisTemplate.boundSetOps(bloomDayKey).isMember(spuId+"")){
+            // 进if表示当前spuId不在缓存中,防缓存穿透生效
             throw new CoolSharkServiceException(
-                    ResponseCode.NOT_FOUND,"您访问的商品不存在(布隆过滤器生效)");
+                    ResponseCode.NOT_FOUND,"您访问的商品不存在");
         }
-        //以上为布隆过滤器判断某个spu是否在redis中,防止redis穿透;
+        //以上为防缓存穿透判断;
+
+        // TODO 部署到Linux服务器安装RedisBloom模块后,替换为布隆过滤器实现:
+        // if(!redisBloomUtils.bfexists(bloomDayKey,spuId+"")){...}
 
         // 根据spuId查询sku列表
         List<SeckillSku> seckillSkus=seckillSkuMapper
@@ -97,7 +96,7 @@ public class SeckillSkuServiceImpl implements ISeckillSkuService {
                 // 将赋好值的对象seckillSkuVO,保存到Redis中
                 redisTemplate.boundValueOps(skuVOKey).set(
                         seckillSkuVO,
-                        1000*60*5 + ThreadLocalRandom.current().nextInt(10000),
+                        1000*60*60*2+1000*60*5 + ThreadLocalRandom.current().nextInt(1000*30),
                         TimeUnit.MILLISECONDS);
             }
             // if-else结束后,seckillSkuVO一定已经被赋值了

@@ -51,15 +51,21 @@ CREATE TABLE `seckill_sku` (
 DROP TABLE IF EXISTS `success`;
 CREATE TABLE `success` (
   `id` bigint(20) NOT NULL COMMENT '记录 id',
-  `seckill_sku_id` bigint(20) NOT NULL COMMENT '秒杀 SKU id',
+  `seckill_id` bigint(20) DEFAULT NULL COMMENT '关联秒杀id',
   `user_id` bigint(20) NOT NULL COMMENT '用户 id',
-  `phone` varchar(20) NOT NULL COMMENT '用户手机号',
-  `status` int(1) DEFAULT '0' COMMENT '状态，0=待支付，1=已支付，2=已取消',
-  `order_id` bigint(20) DEFAULT NULL COMMENT '订单 id',
+  `user_phone` varchar(20) DEFAULT NULL COMMENT '用户手机号',
+  `sku_id` bigint(20) NOT NULL COMMENT '商品 SKU id',
+  `title` varchar(255) DEFAULT NULL COMMENT '商品SKU标题(冗余)',
+  `main_picture` varchar(500) DEFAULT NULL COMMENT '商品SKU图片URL',
+  `seckill_price` decimal(10,2) DEFAULT NULL COMMENT '秒杀商品单价',
+  `quantity` int(11) DEFAULT '1' COMMENT '秒杀商品数量',
+  `bar_code` varchar(100) DEFAULT NULL COMMENT '条形码',
+  `data` text DEFAULT NULL COMMENT '附加数据',
+  `order_sn` varchar(64) DEFAULT NULL COMMENT '订单编号',
   `gmt_create` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `gmt_modified` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_seckill_user` (`seckill_sku_id`,`user_id`),
+  UNIQUE KEY `uk_sku_user` (`sku_id`,`user_id`),
   KEY `idx_user_id` (`user_id`),
-  KEY `idx_order_id` (`order_id`)
+  KEY `idx_order_sn` (`order_sn`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='秒杀成功记录表';

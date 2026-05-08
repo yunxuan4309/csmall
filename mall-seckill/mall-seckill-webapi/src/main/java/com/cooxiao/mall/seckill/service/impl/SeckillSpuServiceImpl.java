@@ -119,7 +119,7 @@ public class SeckillSpuServiceImpl implements ISeckillSpuService {
             // 将seckillSpuVO对象保存到Redis中,方便后面的请求从Redis中获取
             redisTemplate.boundValueOps(spuVOKey).set(
                     seckillSpuVO,
-                    1000*60*5 + ThreadLocalRandom.current().nextInt(10000),
+                    1000*60*60*2+1000*60*5 + ThreadLocalRandom.current().nextInt(1000*30),
                     TimeUnit.MILLISECONDS);
         }
         // 到此为止,seckillSpuVO对象只有url属性没有赋值了
@@ -176,7 +176,7 @@ public class SeckillSpuServiceImpl implements ISeckillSpuService {
             // 保存到 Redis 中
             redisTemplate.boundValueOps(spuDetailKey).set(
                     simpleVO,
-                    1000*60*5+ThreadLocalRandom.current().nextInt(10000),
+                    1000*60*60*2+1000*60*5+ThreadLocalRandom.current().nextInt(1000*30),
                     TimeUnit.MILLISECONDS);
         }
         // 最后别忘了返回 !!!!

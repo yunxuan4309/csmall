@@ -36,6 +36,15 @@ spring:
     #username: user
     #password: 123456
     virtual-host: /
+    # 开启手动确认模式，防止消息处理异常时丢失
+    listener:
+      simple:
+        acknowledge-mode: manual
+        # 消费端重试: 最大重试3次,间隔1秒
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000
 
 dubbo:
   application:
@@ -49,6 +58,20 @@ dubbo:
     use-as-config-center: false
   consumer:
     check: false
+    timeout: 5000
+#seata分布式事务
+seata:
+  tx-service-group: csmall_group
+  service:
+    vgroup-mapping:
+      csmall_group: default
+    grouplist:
+      default: ${my.server.addr}:8091
+  client:
+    undo:
+      log-serialization: jackson
 logging:
   level:
-    com.cooxiao.mall: trace
+    com.cooxiao.mall: info
+    # 需要调试时可将具体包改为debug,如:
+    # com.cooxiao.mall.seckill.service: debug

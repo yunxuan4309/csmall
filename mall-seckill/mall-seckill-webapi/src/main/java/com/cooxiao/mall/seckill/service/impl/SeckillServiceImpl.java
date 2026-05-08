@@ -13,6 +13,7 @@ import com.cooxiao.mall.pojo.seckill.vo.SeckillCommitVO;
 import com.cooxiao.mall.seckill.config.RabbitMqComponentConfiguration;
 import com.cooxiao.mall.seckill.service.ISeckillService;
 import com.cooxiao.mall.seckill.utils.SeckillCacheUtils;
+import io.seata.spring.annotation.GlobalTransactional;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.BeanUtils;
@@ -48,6 +49,8 @@ public class SeckillServiceImpl implements ISeckillService {
     3.使用消息队列(RabbitMQ)将秒杀成功记录信息保存到success表中
     4.秒杀订单信息返回
      */
+    // 秒杀订单提交涉及跨服务Dubbo调用(order模块),需要Seata保证分布式事务一致性
+    @GlobalTransactional
     @Override
     public SeckillCommitVO commitSeckill(SeckillOrderAddDTO seckillOrderAddDTO) {
         // 第一步:判断用户是否为重复购买和Redis中该Sku是否有库存
@@ -68,7 +71,7 @@ public class SeckillServiceImpl implements ISeckillService {
         Long seckillTimes=stringRedisTemplate
                 .boundValueOps(reSeckillCheckKey).increment();
         // 返回值seckillTimes大于1
-        if(seckillTimes>100){//为了测试方便这里修改为100;原本为1,限制只能购买一次;
+        if(seckillTimes>1){
             // 已经购买过了,抛出异常,终止程序
             throw new CoolSharkServiceException(
                     ResponseCode.FORBIDDEN,"您已经购买过这个商品了,谢谢您的支持");
@@ -90,7 +93,7 @@ public class SeckillServiceImpl implements ISeckillService {
                 .boundValueOps(skuStockKey).decrement();
         // leftStock是库存数-1之后,剩余的库存数
         // leftStock为0时,表示当前用户买到了最后一个库存,只有小于0时,才是库存不足
-        if(leftStock<-100){//原本为leftStock<0;这里修改为-100,为了测试方便
+        if(leftStock<0){
             // 库存不足,要抛出异常终止程序,
             // 但是上面代码中已经记录了当前用户购买当前商品的次数,要恢复为0,才不影响用户下次购买
             stringRedisTemplate.boundValueOps(reSeckillCheckKey).decrement();
@@ -111,6 +114,8 @@ public class SeckillServiceImpl implements ISeckillService {
         // 使用消息队列,实现这个效果,典型的削峰填谷
         // 实例化Success对象,然后收集相关信息
         Success success=new Success();
+        // 手动生成雪花算法ID(saveSuccess是自定义XML,不会触发MyBatis-Plus的ASSIGN_ID)
+        success.setId(com.baomidou.mybatisplus.core.toolkit.IdWorker.getId());
         // 将订单项中的同名属性赋值到success中,大部分属性就被赋值了
         BeanUtils.copyProperties(
                 seckillOrderAddDTO.getSeckillOrderItemAddDTO(),

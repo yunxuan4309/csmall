@@ -37,7 +37,7 @@
         spu_id=#{spuId}
     </select>
 
-    <!--  根据skuId减少秒杀库存数  -->
+    <!--  根据skuId减少秒杀库存数,添加库存充足条件防止超卖  -->
     <update id="updateReduceStockBySkuId" >
         update
             seckill_sku
@@ -45,6 +45,7 @@
             seckill_stock=seckill_stock-#{quantity}
         where
             sku_id=#{skuId}
+            and seckill_stock >= #{quantity}
     </update>
 
 </mapper>
