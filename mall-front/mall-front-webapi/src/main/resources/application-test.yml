@@ -7,6 +7,9 @@ logging:
   level:
     com.cooxiao.mall: trace
 spring:
+  threads:
+    virtual:
+      enabled: true
   application:
     name: mall-front
   jackson:

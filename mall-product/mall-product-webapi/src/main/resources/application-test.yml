@@ -15,6 +15,9 @@ logging:
     com.cooxiao.mall: trace
 # Spring相关配置
 spring:
+  threads:
+    virtual:
+      enabled: true
   # 数据源配置
   datasource:
     url: jdbc:mysql://${my.server.addr}:3306/cs_mall_pms?useSSL=false&useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowMultiQueries=true&allowPublicKeyRetrieval=true

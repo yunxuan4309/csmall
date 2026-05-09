@@ -37,7 +37,6 @@ public class JacksonConfig implements WebMvcConfigurer {
         // 设置支持的媒体类型
         List<MediaType> supportedMediaTypes = new ArrayList<>();
         supportedMediaTypes.add(MediaType.APPLICATION_JSON);
-        supportedMediaTypes.add(MediaType.APPLICATION_JSON_UTF8);
         supportedMediaTypes.add(MediaType.TEXT_PLAIN);
         converter.setSupportedMediaTypes(supportedMediaTypes);
         return converter;

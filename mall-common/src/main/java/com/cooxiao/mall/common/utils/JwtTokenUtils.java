@@ -8,7 +8,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -40,9 +40,9 @@ public class JwtTokenUtils {
      */
     private String generateToken(Map<String, Object> claims) {
         String token = Jwts.builder()
-                .setClaims(claims)//自定义载荷
-                .setExpiration(generateExpirationDate()) // 默认载荷属性过期时间
-                .signWith(SignatureAlgorithm.HS512, secret) // 签名算法,和签名密码
+                .claims(claims)//自定义载荷
+                .expiration(generateExpirationDate()) // 默认载荷属性过期时间
+                .signWith(Keys.hmacShaKeyFor(secret.getBytes()), Jwts.SIG.HS512) // 签名算法,和签名密码
                 .compact();
         log.info("根据载荷，hash算法，和密码生成有效Token：{}", token);
         return token;
@@ -55,9 +55,10 @@ public class JwtTokenUtils {
         Claims claims = null;
         try {
             claims = Jwts.parser()
-                    .setSigningKey(secret)
-                    .parseClaimsJws(token)
-                    .getBody();
+                    .verifyWith(Keys.hmacShaKeyFor(secret.getBytes()))
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
             log.info("当需要解析Token时，获取载荷");
         } catch (Exception e) {
             log.info("JWT格式验证失败：{}", token);
@@ -161,6 +162,9 @@ public class JwtTokenUtils {
      */
     private Date getExpiredDateFromToken(String token) {
         Claims claims = getClaimsFromToken(token);
+        if (claims == null) {
+            return new Date(0);
+        }
         return claims.getExpiration();
     }
 

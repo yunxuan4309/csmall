@@ -3,6 +3,9 @@ my:
     #localhost,192.168.137.150
     addr: localhost
 spring:
+  threads:
+    virtual:
+      enabled: true
   datasource:
     url: jdbc:mysql://${my.server.addr}:3306/cs_mall_seckill?useSSL=false&useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowMultiQueries=true
     username: root

@@ -3,6 +3,9 @@ my:
     addr: localhost
     #addr: 106.75.107.22
 spring:
+  threads:
+    virtual:
+      enabled: true
   application:
     name: gateway-server
   cloud:

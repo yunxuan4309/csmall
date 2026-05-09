@@ -12,6 +12,9 @@ server:
 
 # Spring相关配置
 spring:
+  threads:
+    virtual:
+      enabled: true
   # 文件上传核心配置
   servlet:
     multipart:

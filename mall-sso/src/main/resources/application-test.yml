@@ -4,6 +4,9 @@ my:
     #addr: localhost,192.168.137.150
 
 spring:
+  threads:
+    virtual:
+      enabled: true
   cloud:
     nacos:
       discovery:

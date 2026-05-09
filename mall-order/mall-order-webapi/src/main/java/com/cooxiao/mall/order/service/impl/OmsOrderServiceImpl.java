@@ -25,7 +25,7 @@ import com.cooxiao.mall.pojo.order.vo.OrderItemListVO;
 import com.cooxiao.mall.pojo.order.vo.OrderListVO;
 import com.cooxiao.mall.pojo.order.vo.PayOrderVO;
 import com.cooxiao.mall.product.service.order.IForOrderSkuService;
-import io.seata.spring.annotation.GlobalTransactional;
+import org.apache.seata.spring.annotation.GlobalTransactional;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.apache.dubbo.config.annotation.DubboService;

@@ -13,7 +13,7 @@ import com.cooxiao.mall.pojo.seckill.vo.SeckillCommitVO;
 import com.cooxiao.mall.seckill.config.RabbitMqComponentConfiguration;
 import com.cooxiao.mall.seckill.service.ISeckillService;
 import com.cooxiao.mall.seckill.utils.SeckillCacheUtils;
-import io.seata.spring.annotation.GlobalTransactional;
+import org.apache.seata.spring.annotation.GlobalTransactional;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.BeanUtils;

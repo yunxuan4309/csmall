@@ -3,6 +3,9 @@ my:
     #localhost,192.168.137.150
     addr: localhost
 spring:
+  threads:
+    virtual:
+      enabled: true
   application:
     name: mall-search
   jackson:

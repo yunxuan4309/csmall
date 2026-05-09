@@ -5,7 +5,7 @@ import com.cooxiao.mall.common.restful.ResponseCode;
 import com.cooxiao.mall.pojo.product.vo.SkuStandardVO;
 import com.cooxiao.mall.product.mapper.SkuMapper;
 import com.cooxiao.mall.product.service.order.IForOrderSkuService;
-import io.seata.spring.annotation.GlobalTransactional;
+import org.apache.seata.spring.annotation.GlobalTransactional;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

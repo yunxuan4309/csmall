@@ -36,7 +36,7 @@
 
 
     <properties>
-        <java.version>17</java.version>
+        <java.version>21</java.version>
         <mall-pojo.version>0.0.1-SNAPSHOT</mall-pojo.version>
         <mall-common.version>0.0.1-SNAPSHOT</mall-common.version>
         <mall-mapper.version>1.0.0</mall-mapper.version>
@@ -60,8 +60,7 @@
         <spring-security-test.version>6.2.4</spring-security-test.version> <!-- 修改：与Spring Boot主版本保持一致 -->
         <fastjson.version>2.0.43</fastjson.version> <!-- 修改：使用阿里云镜像中稳定可用的FastJSON 2.x版本 -->
         <druid.version>1.2.24</druid.version> <!-- 修改：使用最新稳定版本 -->
-        <jjwt.version>0.9.1</jjwt.version> <!-- 修改：使用阿里云镜像中广泛支持的兼容版本 -->
-        <jaxb-api.version>2.3.1</jaxb-api.version> <!-- JAXB API for Java 9+ -->
+        <jjwt.version>0.12.6</jjwt.version> <!-- JJWT 0.12.x 支持 JDK 21，不再依赖 javax.xml.bind -->
         <redisson.version>3.24.3</redisson.version> <!-- 修改：使用阿里云镜像中可用的稳定版本 -->
         <swagger-annotations.version>1.6.14</swagger-annotations.version> <!-- Swagger 2 注解兼容 -->
         <springdoc-openapi.version>2.5.0</springdoc-openapi.version>
@@ -321,17 +320,25 @@
                 <artifactId>fastjson</artifactId>
                 <version>${fastjson.version}</version>
             </dependency>
-            <!-- JJWT -->
+            <!-- JJWT API -->
             <dependency>
                 <groupId>io.jsonwebtoken</groupId>
-                <artifactId>jjwt</artifactId>
+                <artifactId>jjwt-api</artifactId>
                 <version>${jjwt.version}</version>
             </dependency>
-            <!-- JAXB API for Java 9+ (JJWT 0.9.x 需要) -->
+            <!-- JJWT Implementation (runtime) -->
             <dependency>
-                <groupId>javax.xml.bind</groupId>
-                <artifactId>jaxb-api</artifactId>
-                <version>${jaxb-api.version}</version>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+                <scope>runtime</scope>
+            </dependency>
+            <!-- JJWT Jackson (runtime) -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
+                <scope>runtime</scope>
             </dependency>
             <!-- Spring Boot Test：测试 -->
             <dependency>
@@ -360,15 +367,15 @@
                 <version>${redisson.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.seata</groupId>
+                <groupId>org.apache.seata</groupId>
                 <artifactId>seata-serializer-kryo</artifactId>
-                <version>1.4.2</version>
+                <version>2.1.0</version>
             </dependency>
             <!-- Seata Spring Boot Starter -->
             <dependency>
-                <groupId>io.seata</groupId>
+                <groupId>org.apache.seata</groupId>
                 <artifactId>seata-spring-boot-starter</artifactId>
-                <version>1.7.1</version>
+                <version>2.1.0</version>
             </dependency>
             <!-- Spring Cloud Starter Dubbo (Dubbo 3.x for Spring Boot 3.x) -->
             <dependency>
