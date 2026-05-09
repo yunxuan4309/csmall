@@ -14,7 +14,7 @@ import com.cooxiao.mall.pojo.product.dto.SkuUpdateFullInfoDTO;
 import com.cooxiao.mall.pojo.product.model.Sku;
 import com.cooxiao.mall.pojo.product.model.SkuSpecification;
 import com.cooxiao.mall.pojo.product.vo.SkuStandardVO;
-import com.cooxiao.mall.product.utils.IdGeneratorUtils;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.cooxiao.mall.product.utils.ListConvertUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -42,7 +42,7 @@ public class SkuServiceImpl implements ISkuService {
     @Override
     public void addNew(SkuAddNewDTO skuAddNewDTO) {
         log.debug("skuAddNewDTO = {}", skuAddNewDTO);
-        Long skuId = IdGeneratorUtils.getDistributeId(IdGeneratorUtils.Key.SKU);
+        Long skuId = IdWorker.getId();
 
         Sku sku = new Sku();
         BeanUtils.copyProperties(skuAddNewDTO, sku);

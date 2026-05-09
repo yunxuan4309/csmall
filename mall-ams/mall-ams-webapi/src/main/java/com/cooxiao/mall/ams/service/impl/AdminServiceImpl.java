@@ -7,7 +7,7 @@ import com.cooxiao.mall.ams.exception.CoolSharkException;
 import com.cooxiao.mall.ams.mapper.AdminRoleMapper;
 import com.cooxiao.mall.ams.mapper.AdminMapper;
 import com.cooxiao.mall.ams.service.IAdminService;
-import com.cooxiao.mall.ams.utils.IdGeneratorUtils;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.pojo.admin.dto.AdminAddDTO;
 import com.cooxiao.mall.pojo.admin.dto.AdminUpdateDTO;
@@ -47,7 +47,7 @@ public class AdminServiceImpl implements IAdminService {
         Admin admin= new Admin();
         BeanUtils.copyProperties(adminDTO,admin);
         //补充id
-        Long id= IdGeneratorUtils.generatId("admin");
+        Long id= IdWorker.getId();
         admin.setId(id);
         //密码加密
         admin.setPassword(passwordEncoder.encode(admin.getPassword()));

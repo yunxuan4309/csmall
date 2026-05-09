@@ -10,7 +10,7 @@ import com.cooxiao.mall.order.mapper.OmsOrderItemMapper;
 import com.cooxiao.mall.order.mapper.OmsOrderMapper;
 import com.cooxiao.mall.order.service.IOmsCartService;
 import com.cooxiao.mall.order.service.IOmsOrderService;
-import com.cooxiao.mall.order.utils.IdGeneratorUtils;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.cooxiao.mall.pojo.order.dto.OrderAddDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderItemAddDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderListTimeDTO;
@@ -95,8 +95,8 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
             // 将正在遍历的addDTO的同名属性赋值到omsOrderItem中
             BeanUtils.copyProperties(addDTO,omsOrderItem);
             // 将addDTO中没有的属性(id和orderId)赋值
-            // id也是Leaf生成
-            Long itemId= IdGeneratorUtils.getDistributeId("order_item");
+            // id由MyBatis-Plus IdWorker生成
+            Long itemId= IdWorker.getId();
             omsOrderItem.setId(itemId);
             // orderId属性直接中order对象中获取
             omsOrderItem.setOrderId(order.getId());
@@ -140,8 +140,8 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
     }
     // 给order对象补全所有属性的方法
     private void loadOrder(OmsOrder order) {
-        // 先通过leaf获取当前order订单的id
-        Long id= IdGeneratorUtils.getDistributeId("order");
+        // 通过MyBatis-Plus IdWorker生成当前order订单的id
+        Long id= IdWorker.getId();
         order.setId(id);
         // 生成一个给用户看的订单编号,是UUID
         order.setSn(UUID.randomUUID().toString());

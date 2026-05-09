@@ -23,7 +23,8 @@
         <module>mall-common</module>              <!-- 公共组件服务：包含通用配置、工具类、异常处理等 -->
         <module>mall-front</module>               <!-- 前端服务：面向用户的功能接口，商品展示、分类浏览等 -->
         <module>mall-gateway-server</module>      <!-- API网关服务：统一入口、路由转发、鉴权等 -->
-        <module>mall-leaf</module>                <!-- 雪花算法分布式ID生成服务 -->
+        <!--mall-leaf已弃用，不再参与聚合构建，详见mall-leaf/DEPRECATED.md-->
+        <!--<module>mall-leaf</module>-->
         <module>mall-order</module>               <!-- 订单服务：购物车、订单处理、支付流程管理 -->
         <module>mall-pojo</module>                <!-- 数据模型服务：存放实体类、DTO、VO等数据传输对象 -->
         <module>mall-product</module>             <!-- 商品服务：商品信息管理，包括SPU/SKU、品牌、分类等 -->
@@ -100,11 +101,14 @@
                 <artifactId>mall-gateway-server</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
+            <!--mall-leaf已弃用，不再作为依赖管理-->
+            <!--
             <dependency>
                 <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-leaf</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
+            -->
             <dependency>
                 <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-order</artifactId>

@@ -11,7 +11,7 @@ import com.cooxiao.mall.pojo.ums.vo.UserVO;
 import com.cooxiao.mall.ums.mapper.ChangePasswordLogMapper;
 import com.cooxiao.mall.ums.mapper.UserMapper;
 import com.cooxiao.mall.ums.service.IUserService;
-import com.cooxiao.mall.ums.utils.IdGeneratorUtils;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.springframework.beans.BeanUtils;
@@ -56,7 +56,7 @@ public class UserServiceImpl implements IUserService {
         //转化对象
         User user=new User();
         BeanUtils.copyProperties(userRegistyDTO,user);
-        user.setId(IdGeneratorUtils.getDistributeId("user"));
+        user.setId(IdWorker.getId());
         //加密密码
         user.setPassword(passwordEncoder.encode(userRegistyDTO.getPassword()));
         //写入数据库

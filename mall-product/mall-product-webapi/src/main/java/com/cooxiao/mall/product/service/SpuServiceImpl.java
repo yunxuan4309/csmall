@@ -16,7 +16,7 @@ import com.cooxiao.mall.pojo.product.vo.SpuListItemVO;
 import com.cooxiao.mall.pojo.product.vo.SpuStandardVO;
 import com.cooxiao.mall.product.constant.DataCommonConst;
 import com.cooxiao.mall.product.mapper.*;
-import com.cooxiao.mall.product.utils.IdGeneratorUtils;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,8 +47,8 @@ public class SpuServiceImpl implements ISpuService {
 
     @Override
     public void addNew(SpuAddNewDTO spuAddNewDTO) {
-        // 获取分布式ID
-        Long spuId = IdGeneratorUtils.getDistributeId(IdGeneratorUtils.Key.SPU);
+        // 通过MyBatis-Plus IdWorker生成分布式ID
+        Long spuId = IdWorker.getId();
 
         // 获取类别ID
         Long categoryId = spuAddNewDTO.getCategoryId();
