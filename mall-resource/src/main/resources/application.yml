@@ -25,8 +25,8 @@ spring:
 jwt:
   # JWT存储的请求头
   tokenHeader: Authorization
-  # JWT加解密使用的密钥
-  secret: mySecret
+  # JWT加解密使用的密钥(HS512要求>=64字节)
+  secret: CooxiaoMall2026JwtSecretKeyForHs512AlgorithmMustBeAtLeast64BytesLong
   # JWT的超期限时间(60*60*24)
   expiration: 604800
   tokenHead: Bearer

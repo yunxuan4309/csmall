@@ -48,7 +48,7 @@ public class SSOFilter extends OncePerRequestFilter {
         // 获取AUTHORIZATION头
         String authHeader = httpServletRequest.getHeader(REQUEST_HEADER_AUTHORIZATION);
         if (authHeader != null && authHeader.startsWith(jwtTokenHead)) {
-            String authToken = authHeader.substring(jwtTokenHead.length());
+            String authToken = authHeader.substring(jwtTokenHead.length()).trim();
             //从redis验证是否已经退出登录
             //写入redis 锁住 这里采用list分日期存储,方便后续定时清理
             String lockedTokenList="token_list_.lock";

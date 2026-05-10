@@ -27,7 +27,7 @@ public class UserInfoServiceImpl implements IUserInfoService {
     private static final String jwtTokenHead ="Bearer";
     @Override
     public UserInfoVO userInfo(String authToken) {
-        String token=authToken.substring(jwtTokenHead.length());
+        String token=authToken.substring(jwtTokenHead.length()).trim();
         log.info("获取token:{}",token);
         CsmallAuthenticationInfo userInfo = jwtTokenUtils.getUserInfo(token);
         String type=userInfo.getUserType();

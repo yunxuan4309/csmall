@@ -83,7 +83,7 @@ public class UserSSOServiceImpl implements IUserSSOService {
     public void doLogout(String token){
         if (token != null && token.startsWith(tokenHead)) {
             //拿到jwt token
-            String authToken = token.substring(tokenHead.length());
+            String authToken = token.substring(tokenHead.length()).trim();
             //写入redis 锁住 这里采用list分日期存储,方便后续定时清理
             String lockedTokenList="token_list_.lock";
             stringRedisTemplate.boundSetOps(lockedTokenList).add(authToken);

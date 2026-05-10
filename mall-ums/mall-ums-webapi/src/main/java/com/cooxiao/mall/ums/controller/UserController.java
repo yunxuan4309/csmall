@@ -87,6 +87,6 @@ public class UserController {
         if (authToken==null||!(authToken.startsWith("Bearer "))){
             throw new CoolSharkServiceException(ResponseCode.BAD_REQUEST,"无法从请求中拿到token");
         }
-        return authToken.substring(tokenHead.length());
+        return authToken.substring(tokenHead.length()).trim();
     }
 }

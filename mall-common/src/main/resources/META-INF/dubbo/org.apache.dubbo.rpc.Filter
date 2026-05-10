@@ -1,0 +1,2 @@
+seataTransactionConsumerFilter=com.cooxiao.mall.common.dubbo.SeataTransactionConsumerFilter
+seataTransactionProviderFilter=com.cooxiao.mall.common.dubbo.SeataTransactionProviderFilter
