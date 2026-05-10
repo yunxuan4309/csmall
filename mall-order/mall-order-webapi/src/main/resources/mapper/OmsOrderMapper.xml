@@ -153,6 +153,9 @@
             oo.gmt_create &gt;= #{dto.startTime}
           AND
             oo.gmt_create &lt;= #{dto.endTime}
+          <if test="dto.state != null">
+            AND oo.state = #{dto.state}
+          </if>
         ORDER BY oo.gmt_modified DESC
     </select>
     <!--  利用动态sql,实现对订单对象中指定字段的修改  -->
