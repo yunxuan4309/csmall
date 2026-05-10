@@ -1,7 +1,14 @@
+# ##################################################################### #
+#                            【生产】环境配置                              #
+# ##################################################################### #
+#  当前文件是Profile配置，需要主配置文件中通过spring.profiles.active激活后生效   #
+# ##################################################################### #
+
+# 部署到阿里云后，将此地址替换为服务器内网IP或127.0.0.1(单机部署)
 my:
   server:
-    addr: 192.168.137.150
-    #addr: 106.75.107.22
+    addr: ${ALIYUN_SERVER_IP:127.0.0.1}
+
 spring:
   application:
     name: gateway-server
@@ -15,6 +22,47 @@ spring:
         server-addr: ${my.server.addr}:8848
     gateway:
       discovery:
-        #动态路由,发现的服务都会自动添加到路由中
+        # 生产环境关闭动态路由，防止内部服务暴露
         locator:
-          enabled: true
+          enabled: false
+      # 手动定义只对外暴露的路由
+      routes:
+        # 前台商品展示
+        - id: mall-front
+          uri: lb://mall-front
+          predicates:
+            - Path=/front/**
+        # 订单服务
+        - id: mall-order
+          uri: lb://mall-order
+          predicates:
+            - Path=/oms/**
+        # 搜索服务
+        - id: mall-search
+          uri: lb://mall-search
+          predicates:
+            - Path=/search/**
+        # SSO 登录认证
+        - id: mall-sso
+          uri: lb://mall-sso
+          predicates:
+            - Path=/sso/**,/admin/sso/**,/user/sso/**
+        # 文件资源
+        - id: mall-resource
+          uri: lb://mall-resource
+          predicates:
+            - Path=/resource/**
+        # 秒杀服务
+        - id: mall-seckill
+          uri: lb://mall-seckill
+          predicates:
+            - Path=/seckill/**
+        # 以下服务不对外暴露，仅通过Dubbo RPC内部调用：
+        # mall-ams（后台管理）、mall-ums（用户管理）、mall-product（商品管理）
+
+knife4j:
+  production: true
+
+logging:
+  level:
+    com.cooxiao.mall: info

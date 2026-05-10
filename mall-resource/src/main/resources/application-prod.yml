@@ -33,10 +33,10 @@ knife4j:
 custom:
   # 文件上传
   file-upload:
-    # 上传到的根文件夹
-    server-local-base-path: E:/csmall-upload
-    # 上传后文件的主机名
-    resource-host: http://localhost:${server.port}/
+    # 上传到的根文件夹（Linux路径，部署前需先创建：sudo mkdir -p /data/csmall-upload）
+    server-local-base-path: /data/csmall-upload
+    # 上传后文件的主机名（部署后替换为你的域名或公网IP）
+    resource-host: ${RESOURCE_HOST:http://127.0.0.1:${server.port}/}
     # 图片（例如商品图片）文件配置
     picture:
       # 文件夹名称

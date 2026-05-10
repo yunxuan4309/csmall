@@ -65,8 +65,7 @@ public class SSOWebSecurityConfig {
         http.csrf(csrf -> csrf.disable());
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
         http.sessionManagement(session -> {
-            session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED);
-            session.sessionFixation().none();
+            session.sessionCreationPolicy(SessionCreationPolicy.STATELESS);
         });
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers(permitList).permitAll()
