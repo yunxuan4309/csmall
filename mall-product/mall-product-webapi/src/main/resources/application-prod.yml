@@ -53,6 +53,11 @@ seata:
     undo:
       log-serialization: jackson
 
+custom:
+  file-upload:
+    server-local-path: /data/csmall-upload
+    resource-host: ${RESOURCE_HOST:http://8.156.85.160/}
+
 knife4j:
   production: true
 
