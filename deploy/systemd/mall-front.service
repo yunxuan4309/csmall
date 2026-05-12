@@ -1,0 +1,22 @@
+[Unit]
+Description=CoolShark Front Service (mall-front)
+After=network.target redis.service mall-product.service
+Wants=nacos.service
+
+[Service]
+Type=simple
+User=ecs-user
+EnvironmentFile=/data/jars/csmall.env
+ExecStart=/usr/bin/java -jar /data/jars/mall-front-webapi-1.0.0.jar --spring.profiles.active=prod
+ExecStop=/bin/kill -15 $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=10
+
+StandardOutput=append:/data/jars/logs/mall-front.log
+StandardError=append:/data/jars/logs/mall-front.log
+
+[Install]
+WantedBy=multi-user.target
