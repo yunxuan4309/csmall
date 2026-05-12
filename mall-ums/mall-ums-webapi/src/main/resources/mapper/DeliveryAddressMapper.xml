@@ -77,6 +77,7 @@
     </select>
     <insert id="insertDeliveryAddress">
         insert into ums_delivery_address(
+            id,
             user_id,
             contact_name,
             mobile_phone,
@@ -93,6 +94,7 @@
             tag,
             is_default
         ) values (
+            #{id},
             #{userId},
             #{contactName},
             #{mobilePhone},

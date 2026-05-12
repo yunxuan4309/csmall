@@ -20,9 +20,10 @@ spring:
   jackson:
     # 总是显示
     default-property-inclusion: always
-  redis:
-    host: ${my.server.addr}
-    port: 6379
+  data:
+    redis:
+      host: ${my.server.addr}
+      port: 6379
 
 dubbo:
   application:

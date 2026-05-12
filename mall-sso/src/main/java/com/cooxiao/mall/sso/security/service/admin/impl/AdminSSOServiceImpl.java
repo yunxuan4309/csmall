@@ -1,5 +1,6 @@
 package com.cooxiao.mall.sso.security.service.admin.impl;
 
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.utils.JwtTokenUtils;
 import com.cooxiao.mall.pojo.admin.model.AdminLoginLog;
@@ -59,6 +60,7 @@ public class AdminSSOServiceImpl implements IAdminSSOService {
         token = jwtTokenUtils.generateToken(csmallAuthenticationInfo);
         //记录登录日志
         AdminLoginLog adminLoginLog=new AdminLoginLog();
+        adminLoginLog.setId(IdWorker.getId());
         adminLoginLog.setAdminId(userDetails.getId());
         LocalDateTime now=LocalDateTime.now();
         adminLoginLog.setGmtCreate(now);

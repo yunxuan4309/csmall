@@ -1,5 +1,6 @@
 package com.cooxiao.mall.ums.service.impl;
 
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -99,6 +100,7 @@ public class UserServiceImpl implements IUserService {
         userMapper.updatePasswordById(userId,encodedNewPassword);
         //记录日志
         ChangePasswordLog changePasswordLog=new ChangePasswordLog();
+        changePasswordLog.setId(IdWorker.getId());
         LocalDateTime now = LocalDateTime.now();
         changePasswordLog.setGmtChangePassword(now);
         changePasswordLog.setGmtCreate(now);

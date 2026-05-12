@@ -1,5 +1,6 @@
 package com.cooxiao.mall.ams.service.impl;
 
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.cooxiao.mall.ams.mapper.RoleMapper;
 import com.cooxiao.mall.ams.mapper.AdminRoleMapper;
 import com.cooxiao.mall.ams.service.IAdminRoleService;
@@ -34,7 +35,7 @@ public class AdminRoleServiceImpl implements IAdminRoleService {
                 continue;
             }
             //账号角色关联写入数据库。
-            adminRoleMapper.insertAdminRole(adminId,roleId);
+            adminRoleMapper.insertAdminRole(IdWorker.getId(), adminId,roleId);
 
         }
     }

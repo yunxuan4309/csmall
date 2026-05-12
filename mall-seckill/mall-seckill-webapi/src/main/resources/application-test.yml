@@ -25,11 +25,12 @@ spring:
       transport:
         port: 8870
         dashboard: 127.0.0.1:8080
-  redis:
-    # ${my.server.addr}；192.168.137.150
-    host: ${my.server.addr}
-    port: 6379
-    password:
+  data:
+    redis:
+      # ${my.server.addr}；192.168.137.150
+      host: ${my.server.addr}
+      port: 6379
+      password:
   rabbitmq:
     host: ${my.server.addr}
     port: 5672

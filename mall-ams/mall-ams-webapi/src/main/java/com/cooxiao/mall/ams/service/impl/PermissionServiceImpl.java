@@ -2,6 +2,7 @@ package com.cooxiao.mall.ams.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.ams.exception.CoolSharkException;
 import com.cooxiao.mall.ams.mapper.RolePermissionMapper;
@@ -49,6 +50,7 @@ public class PermissionServiceImpl implements IPermissionService {
         //转化对象
         Permission permission=new Permission();
         BeanUtils.copyProperties(permissionAddDTO,permission);
+        permission.setId(IdWorker.getId());
         permissionMapper.insertPermission(permission);
     }
 

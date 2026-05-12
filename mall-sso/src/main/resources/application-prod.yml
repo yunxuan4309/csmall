@@ -9,7 +9,13 @@ my:
   server:
     addr: ${ALIYUN_SERVER_IP:127.0.0.1}
 
+# 优雅关闭：收到 SIGTERM 后等待在途请求处理完毕再退出（配合 systemd TimeoutStopSec=30）
+server:
+  shutdown: graceful
+
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   cloud:
     nacos:
       discovery:
@@ -29,10 +35,11 @@ spring:
       password: ${MYSQL_PASSWORD:root}
       type: com.alibaba.druid.pool.DruidDataSource
       driver-class-name: com.mysql.cj.jdbc.Driver
-  redis:
-    host: ${my.server.addr}
-    port: 6379
-    password: ${REDIS_PASSWORD:}
+  data:
+    redis:
+      host: ${my.server.addr}
+      port: 6379
+      password: ${REDIS_PASSWORD:}
 
 knife4j:
   production: true

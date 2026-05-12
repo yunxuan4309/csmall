@@ -6,23 +6,59 @@ my:
     addr: 106.75.107.221
     #华为云
     #addr: 114.116.199.250
+
 # 日志显示级别
 logging:
   level:
     com.cooxiao.mall: trace
+
 spring:
   application:
     name: gateway-server
   cloud:
     nacos:
       config:
-        server-addr: ${my.server.addr}:8848
-        group: DEFAULT_GROUP
-        file-extension: yml
+        # 开发环境使用本地配置，禁用远程 Nacos
+        enabled: false
       discovery:
-        server-addr: ${my.server.addr}:8848
+        # 开发环境禁用服务发现（使用静态路由直连本地服务）
+        enabled: false
     gateway:
       discovery:
-        #动态路由,发现的服务都会自动添加到路由中
+        # 开发环境关闭动态路由，使用手动路由直连本地服务
         locator:
-          enabled: true
+          enabled: false
+      # 手动路由配置（开发环境直连本地服务）
+      routes:
+        # 前台商品展示
+        - id: mall-front
+          uri: http://localhost:10004
+          predicates:
+            - Path=/front/**
+        # 订单服务
+        - id: mall-order
+          uri: http://localhost:10005
+          predicates:
+            - Path=/oms/**
+        # 搜索服务
+        - id: mall-search
+          uri: http://localhost:10008
+          predicates:
+            - Path=/search/**
+        # SSO 登录认证
+        - id: mall-sso
+          uri: http://localhost:10009
+          predicates:
+            - Path=/sso/**,/admin/sso/**,/user/sso/**,/user/info/**
+        # 文件资源
+        - id: mall-resource
+          uri: http://localhost:9060
+          predicates:
+            - Path=/resource/**,/upload/**
+        # 秒杀服务
+        - id: mall-seckill
+          uri: http://localhost:10007
+          predicates:
+            - Path=/seckill/**
+        # 以下服务不对外暴露，仅通过 Dubbo RPC 内部调用：
+        # mall-ams（后台管理）、mall-ums（用户管理）、mall-product（商品管理）

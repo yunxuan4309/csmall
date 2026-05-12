@@ -29,10 +29,11 @@ spring:
       type: com.alibaba.druid.pool.DruidDataSource
       driver-class-name: com.mysql.cj.jdbc.Driver
   #redis
-  redis:
-    host: ${my.server.addr}
-    port: 6379
-    password:
+  data:
+    redis:
+      host: ${my.server.addr}
+      port: 6379
+      password:
 
 logging:
   level:

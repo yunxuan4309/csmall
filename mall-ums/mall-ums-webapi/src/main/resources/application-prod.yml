@@ -9,7 +9,13 @@ my:
   server:
     addr: ${ALIYUN_SERVER_IP:127.0.0.1}
 
+# 优雅关闭：收到 SIGTERM 后等待在途请求处理完毕再退出（配合 systemd TimeoutStopSec=30）
+server:
+  shutdown: graceful
+
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   datasource:
     url: jdbc:mysql://${my.server.addr}:3306/cs_mall_ums?useSSL=false&useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowMultiQueries=true
     username: ${MYSQL_USERNAME:root}
@@ -28,10 +34,11 @@ spring:
     nacos:
       discovery:
         server-addr: ${my.server.addr}:8848
-  redis:
-    host: ${my.server.addr}
-    port: 6379
-    password: ${REDIS_PASSWORD:}
+  data:
+    redis:
+      host: ${my.server.addr}
+      port: 6379
+      password: ${REDIS_PASSWORD:}
 
 dubbo:
   application:

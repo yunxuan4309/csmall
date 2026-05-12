@@ -21,8 +21,10 @@
     </select>
     <insert id="insertAdminRole">
         insert into ams_admin_role (
+        id,
         admin_id,
         role_id) values (
+        #{id},
         #{adminId},
         #{roleId});
     </insert>

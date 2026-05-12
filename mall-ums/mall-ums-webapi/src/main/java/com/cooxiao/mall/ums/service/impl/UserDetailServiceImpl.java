@@ -1,5 +1,6 @@
 package com.cooxiao.mall.ums.service.impl;
 
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -37,6 +38,7 @@ public class UserDetailServiceImpl implements IUserDetailService {
         if(userDetailStandardVO==null){
             //转化对象
             BeanUtils.copyProperties(userDetailAddDTO,userDetail);
+            userDetail.setId(IdWorker.getId());
             userDetail.setUserId(userId);
             userDetailMapper.insertUserDetail(userDetail);
         }else{

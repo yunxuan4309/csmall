@@ -2,8 +2,9 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.cooxiao.mall.sso.mapper.admin.AdminLoginLogMapper">
 
-    <insert id="insertAdminLoginLog" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insertAdminLoginLog">
         insert into ams_login_log (
+        id,
         admin_id,
         username,
         ip_address,
@@ -11,6 +12,7 @@
         login_time,
         gmt_create
         ) values (
+        #{id},
         #{adminId},
         #{username},
         #{ip},

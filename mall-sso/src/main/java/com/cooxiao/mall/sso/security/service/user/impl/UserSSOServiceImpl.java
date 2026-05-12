@@ -1,5 +1,6 @@
 package com.cooxiao.mall.sso.security.service.user.impl;
 
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -49,6 +50,7 @@ public class UserSSOServiceImpl implements IUserSSOService {
         token = jwtTokenUtils.generateToken(userInfo);
         //记录登录时间
         UserLoginLog userLoginLog=new UserLoginLog();
+        userLoginLog.setId(IdWorker.getId());
         userLoginLog.setUserId(userDetails.getId());
         LocalDateTime now=LocalDateTime.now();
         userLoginLog.setGmtCreate(now);

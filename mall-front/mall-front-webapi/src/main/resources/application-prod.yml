@@ -9,7 +9,13 @@ my:
   server:
     addr: ${ALIYUN_SERVER_IP:127.0.0.1}
 
+# 优雅关闭：收到 SIGTERM 后等待在途请求处理完毕再退出（配合 systemd TimeoutStopSec=30）
+server:
+  shutdown: graceful
+
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   application:
     name: mall-front
   jackson:
@@ -18,10 +24,11 @@ spring:
     nacos:
       discovery:
         server-addr: ${my.server.addr}:8848
-  redis:
-    host: ${my.server.addr}
-    port: 6379
-    password: ${REDIS_PASSWORD:}
+  data:
+    redis:
+      host: ${my.server.addr}
+      port: 6379
+      password: ${REDIS_PASSWORD:}
 
 dubbo:
   application:
@@ -37,6 +44,17 @@ dubbo:
     check: false
   cloud:
     subscribed-services: mall-product
+
+seata:
+  tx-service-group: csmall_group
+  service:
+    vgroup-mapping:
+      csmall_group: default
+    grouplist:
+      default: ${my.server.addr}:8091
+  client:
+    undo:
+      log-serialization: jackson
 
 knife4j:
   production: true

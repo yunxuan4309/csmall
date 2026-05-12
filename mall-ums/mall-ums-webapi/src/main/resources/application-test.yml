@@ -24,10 +24,11 @@ spring:
     nacos:
       discovery:
         server-addr: ${my.server.addr}:8848
-  redis:
-    host: ${my.server.addr}
-    port: 6379
-    password:
+  data:
+    redis:
+      host: ${my.server.addr}
+      port: 6379
+      password:
 dubbo:
   application:
     name: mall-ums

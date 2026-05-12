@@ -9,7 +9,13 @@ my:
   server:
     addr: ${ALIYUN_SERVER_IP:127.0.0.1}
 
+# 优雅关闭：收到 SIGTERM 后等待在途请求处理完毕再退出（配合 systemd TimeoutStopSec=30）
+server:
+  shutdown: graceful
+
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   application:
     name: gateway-server
   cloud:
@@ -46,12 +52,12 @@ spring:
         - id: mall-sso
           uri: lb://mall-sso
           predicates:
-            - Path=/sso/**,/admin/sso/**,/user/sso/**
+            - Path=/sso/**,/admin/sso/**,/user/sso/**,/user/info/**
         # 文件资源
         - id: mall-resource
           uri: lb://mall-resource
           predicates:
-            - Path=/resource/**
+            - Path=/resource/**,/upload/**
         # 秒杀服务
         - id: mall-seckill
           uri: lb://mall-seckill

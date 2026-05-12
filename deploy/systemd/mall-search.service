@@ -7,7 +7,7 @@ Wants=nacos.service
 Type=simple
 User=ecs-user
 EnvironmentFile=/data/jars/csmall.env
-ExecStart=/usr/bin/java -jar /data/jars/mall-search-webapi-1.0.0.jar --spring.profiles.active=prod
+ExecStart=/usr/bin/java -jar /data/jars/mall-search-webapi-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod
 ExecStop=/bin/kill -15 $MAINPID
 KillMode=mixed
 KillSignal=SIGTERM

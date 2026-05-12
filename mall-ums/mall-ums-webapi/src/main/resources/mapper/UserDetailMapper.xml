@@ -55,6 +55,7 @@
     </resultMap>
     <insert id="insertUserDetail">
         insert into ums_user_detail (
+        id,
         user_id,
         day_of_birth,
         country,
@@ -66,6 +67,7 @@
         industry,
         career
         ) values (
+        #{id},
         #{userId},
         #{dayOfBirth},
         #{country},

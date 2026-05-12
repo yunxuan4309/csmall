@@ -37,11 +37,13 @@
     </select>
     <insert id="insertPermission">
         insert into ams_permission (
+        id,
         name,
         code,
         sort,
         description)
-        codes (
+        values (
+        #{id},
         #{name},
         #{code},
         #{sort},
@@ -54,7 +56,7 @@
                 name like concat("%",#{name},"%")
             </if>
             <if test="code!=null">
-                and code like contcat("%",#{code},"%")
+                and code like concat("%",#{code},"%")
             </if>
         </where>
     </select>

@@ -2,6 +2,7 @@ package com.cooxiao.mall.ams.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.ams.exception.CoolSharkException;
 import com.cooxiao.mall.ams.mapper.AdminRoleMapper;
@@ -78,6 +79,7 @@ public class RoleServiceImpl implements IRoleService {
     public void addRole(RoleAddDTO roleAddDTO) {
         Role role=new Role();
         BeanUtils.copyProperties(roleAddDTO,role);
+        role.setId(IdWorker.getId());
         roleMapper.insertRole(role);
     }
 

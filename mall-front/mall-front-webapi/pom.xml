@@ -91,6 +91,11 @@
             <groupId>org.apache.dubbo</groupId>
             <artifactId>dubbo-spring-boot-starter</artifactId>
         </dependency>
+        <!-- Seata 分布式事务（必需，mall-common 的 SeataTransactionConsumerFilter 依赖此类） -->
+        <dependency>
+            <groupId>org.apache.seata</groupId>
+            <artifactId>seata-spring-boot-starter</artifactId>
+        </dependency>
         <!--引入redis-->
         <dependency>
             <groupId>org.springframework.boot</groupId>

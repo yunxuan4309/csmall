@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
  * @since 2022-02-22
  */
 @Data
-@TableName("ums_user_login_log")
+@TableName("ums_login_log")
 public class UserLoginLog implements Serializable {
     private static final long serialVersionUID = 1L;
 

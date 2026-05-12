@@ -8,9 +8,13 @@
 server:
   # 端口号
   port: 9060
+  # 优雅关闭：收到 SIGTERM 后等待在途请求处理完毕再退出（配合 systemd TimeoutStopSec=30）
+  shutdown: graceful
 
 # Spring相关配置
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   # 文件上传核心配置
   servlet:
     multipart:

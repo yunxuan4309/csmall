@@ -34,10 +34,12 @@
     </select>
     <insert id="insertRole">
         insert into ams_role (
+        id,
         name,
         description,
         sort
         ) values (
+        #{id},
         #{name},
         #{description},
         #{sort})
