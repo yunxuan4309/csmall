@@ -225,6 +225,92 @@ INSERT INTO `pms_spu_detail` (`id`, `spu_id`, `content`) VALUES
 (19, 19, '<div><h2>iPhone 15</h2><p>A16 仿生芯片，灵动岛设计，4800万像素</p></div>'),
 (20, 20, '<div><h2>Redmi K70 Pro</h2><p>骁龙 8 Gen3，2K中国屏，5000mAh</p></div>');
 
+-- ----------------------------
+-- 21. 商品图片数据补充（SPU 组图）
+-- 图片文件存放于 mall-resource/src/main/resources/static/ 目录
+-- URL 使用纯相对路径，由服务层 ImageUrlPrefixHelper 自动拼接 resource-host 前缀
+-- ----------------------------
+-- 手机数码
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_1_1.jpg','spu_1_2.jpg') WHERE id = 1;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_2_1.jpg','spu_2_2.jpg') WHERE id = 2;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_3_1.jpg','spu_3_2.jpg') WHERE id = 3;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_4_1.jpg','spu_4_2.jpg') WHERE id = 4;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_5_1.jpg','spu_5_2.jpg') WHERE id = 5;
+-- 平板电脑
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_6_1.jpg','spu_6_2.jpg') WHERE id = 6;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_7_1.jpg','spu_7_2.jpg') WHERE id = 7;
+-- 笔记本
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_8_1.jpg','spu_8_2.jpg') WHERE id = 8;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_9_1.jpg','spu_9_2.jpg') WHERE id = 9;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_10_1.jpg','spu_10_2.jpg') WHERE id = 10;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_11_1.jpg','spu_11_2.jpg') WHERE id = 11;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_12_1.jpg','spu_12_2.jpg') WHERE id = 12;
+-- 台式机
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_13_1.jpg','spu_13_2.jpg') WHERE id = 13;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_14_1.jpg','spu_14_2.jpg') WHERE id = 14;
+-- 男装
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_15_1.jpg') WHERE id = 15;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_16_1.jpg','spu_16_2.jpg') WHERE id = 16;
+-- 女装
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_17_1.jpg') WHERE id = 17;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_18_1.jpg','spu_18_2.jpg') WHERE id = 18;
+-- 更多手机
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_19_1.jpg','spu_19_2.jpg') WHERE id = 19;
+UPDATE pms_spu SET pictures = JSON_ARRAY('spu_20_1.jpg','spu_20_2.jpg') WHERE id = 20;
+
+-- ----------------------------
+-- 22. SKU 图片数据补充（复用所属 SPU 的首图）
+-- ----------------------------
+UPDATE pms_sku s JOIN pms_spu sp ON s.spu_id = sp.id SET s.pictures = CONCAT('[',SUBSTRING_INDEX(REPLACE(REPLACE(sp.pictures,'[',''),']',''),',',1),']');
+
+-- ----------------------------
+-- 23. 品牌 Logo 数据补充
+-- ----------------------------
+UPDATE pms_brand SET logo_url = 'brand_1.jpg' WHERE id = 1;
+UPDATE pms_brand SET logo_url = 'brand_2.jpg' WHERE id = 2;
+UPDATE pms_brand SET logo_url = 'brand_3.jpg' WHERE id = 3;
+UPDATE pms_brand SET logo_url = 'brand_4.jpg' WHERE id = 4;
+UPDATE pms_brand SET logo_url = 'brand_5.jpg' WHERE id = 5;
+UPDATE pms_brand SET logo_url = 'brand_6.jpg' WHERE id = 6;
+UPDATE pms_brand SET logo_url = 'brand_7.jpg' WHERE id = 7;
+
+-- ----------------------------
+-- 24. 分类图标数据补充
+-- ----------------------------
+UPDATE pms_category SET icon = 'category_1.png' WHERE id = 1;
+UPDATE pms_category SET icon = 'category_2.png' WHERE id = 2;
+UPDATE pms_category SET icon = 'category_3.png' WHERE id = 3;
+UPDATE pms_category SET icon = 'category_4.png' WHERE id = 4;
+UPDATE pms_category SET icon = 'category_5.png' WHERE id = 5;
+UPDATE pms_category SET icon = 'category_6.png' WHERE id = 6;
+UPDATE pms_category SET icon = 'category_7.png' WHERE id = 7;
+UPDATE pms_category SET icon = 'category_8.png' WHERE id = 8;
+UPDATE pms_category SET icon = 'category_9.png' WHERE id = 9;
+
+-- ----------------------------
+-- 25. SPU 详情富文本图片补充（嵌入商品图）
+-- ----------------------------
+UPDATE pms_spu_detail SET content = '<div><h2>iPhone 15 Pro</h2><img src="spu_1_1.jpg" alt="iPhone 15 Pro" style="max-width:100%"/><p>A17 Pro 芯片，钛金属设计，4800万像素主摄</p></div>' WHERE id = 1;
+UPDATE pms_spu_detail SET content = '<div><h2>华为 Mate 60 Pro</h2><img src="spu_2_1.jpg" alt="华为 Mate 60 Pro" style="max-width:100%"/><p>麒麟 9000S 芯片，卫星通话，超感知影像</p></div>' WHERE id = 2;
+UPDATE pms_spu_detail SET content = '<div><h2>小米 14 Pro</h2><img src="spu_3_1.jpg" alt="小米 14 Pro" style="max-width:100%"/><p>骁龙 8 Gen3，徕卡专业光学镜头，2K 屏幕</p></div>' WHERE id = 3;
+UPDATE pms_spu_detail SET content = '<div><h2>华为 P60 Pro</h2><img src="spu_4_1.jpg" alt="华为 P60 Pro" style="max-width:100%"/><p>超聚光XMAGE影像，昆仑玻璃，双向北斗卫星消息</p></div>' WHERE id = 4;
+UPDATE pms_spu_detail SET content = '<div><h2>小米 14</h2><img src="spu_5_1.jpg" alt="小米 14" style="max-width:100%"/><p>骁龙 8 Gen3，小尺寸旗舰，1.5K 屏幕</p></div>' WHERE id = 5;
+UPDATE pms_spu_detail SET content = '<div><h2>iPad Pro 12.9</h2><img src="spu_6_1.jpg" alt="iPad Pro 12.9" style="max-width:100%"/><p>M2 芯片，Liquid Retina XDR 显示屏</p></div>' WHERE id = 6;
+UPDATE pms_spu_detail SET content = '<div><h2>MatePad Pro 13.2</h2><img src="spu_7_1.jpg" alt="MatePad Pro 13.2" style="max-width:100%"/><p>星闪连接，PC级办公，13.2英寸OLED</p></div>' WHERE id = 7;
+UPDATE pms_spu_detail SET content = '<div><h2>MacBook Pro 14</h2><img src="spu_8_1.jpg" alt="MacBook Pro 14" style="max-width:100%"/><p>M3 Pro 芯片，18小时续航，Liquid Retina XDR</p></div>' WHERE id = 8;
+UPDATE pms_spu_detail SET content = '<div><h2>ThinkPad X1 Carbon</h2><img src="spu_9_1.jpg" alt="ThinkPad X1 Carbon" style="max-width:100%"/><p>Intel Evo 认证，14英寸2.8K OLED，轻至1.12kg</p></div>' WHERE id = 9;
+UPDATE pms_spu_detail SET content = '<div><h2>RedmiBook Pro 15</h2><img src="spu_10_1.jpg" alt="RedmiBook Pro 15" style="max-width:100%"/><p>AMD R7 7840HS，3.2K 120Hz 屏幕</p></div>' WHERE id = 10;
+UPDATE pms_spu_detail SET content = '<div><h2>Dell XPS 13 Plus</h2><img src="spu_11_1.jpg" alt="Dell XPS 13 Plus" style="max-width:100%"/><p>Intel i7，OLED 触控屏，极致轻薄</p></div>' WHERE id = 11;
+UPDATE pms_spu_detail SET content = '<div><h2>MacBook Air 15</h2><img src="spu_12_1.jpg" alt="MacBook Air 15" style="max-width:100%"/><p>M3 芯片，18小时续航，15.3英寸大屏</p></div>' WHERE id = 12;
+UPDATE pms_spu_detail SET content = '<div><h2>天逸510S</h2><img src="spu_13_1.jpg" alt="天逸510S" style="max-width:100%"/><p>Intel i5-13400，16GB内存，512GB SSD</p></div>' WHERE id = 13;
+UPDATE pms_spu_detail SET content = '<div><h2>OptiPlex 7010</h2><img src="spu_14_1.jpg" alt="OptiPlex 7010" style="max-width:100%"/><p>Intel i7-13700，商务稳定之选</p></div>' WHERE id = 14;
+UPDATE pms_spu_detail SET content = '<div><h2>Air Max 270</h2><img src="spu_15_1.jpg" alt="Air Max 270" style="max-width:100%"/><p>大容量Air气垫缓震，透气网面鞋面</p></div>' WHERE id = 15;
+UPDATE pms_spu_detail SET content = '<div><h2>三叶草经典卫衣</h2><img src="spu_16_1.jpg" alt="三叶草经典卫衣" style="max-width:100%"/><p>法式毛圈面料，经典三叶草Logo</p></div>' WHERE id = 16;
+UPDATE pms_spu_detail SET content = '<div><h2>Dunk Low</h2><img src="spu_17_1.jpg" alt="Dunk Low" style="max-width:100%"/><p>复古篮球鞋设计，日常百搭潮流</p></div>' WHERE id = 17;
+UPDATE pms_spu_detail SET content = '<div><h2>Aeroready 训练长裤</h2><img src="spu_18_1.jpg" alt="Aeroready 训练长裤" style="max-width:100%"/><p>吸湿速干面料，运动自由舒适</p></div>' WHERE id = 18;
+UPDATE pms_spu_detail SET content = '<div><h2>iPhone 15</h2><img src="spu_19_1.jpg" alt="iPhone 15" style="max-width:100%"/><p>A16 仿生芯片，灵动岛设计，4800万像素</p></div>' WHERE id = 19;
+UPDATE pms_spu_detail SET content = '<div><h2>Redmi K70 Pro</h2><img src="spu_20_1.jpg" alt="Redmi K70 Pro" style="max-width:100%"/><p>骁龙 8 Gen3，2K中国屏，5000mAh</p></div>' WHERE id = 20;
+
 
 -- =====================================================
 -- 后台管理模块测试数据

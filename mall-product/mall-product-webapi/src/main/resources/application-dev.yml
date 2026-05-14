@@ -67,8 +67,8 @@ seata:
   client:
     undo:
       log-serialization: kryo
-#后期删除
 custom:
   file-upload:
     server-local-path: 1
-    resource-host: 1
+    # 开发环境：静态资源由 mall-resource (9060) 提供
+    resource-host: http://localhost:9060/

@@ -13,6 +13,7 @@ import com.cooxiao.mall.pojo.product.dto.BrandAddNewDTO;
 import com.cooxiao.mall.pojo.product.dto.BrandUpdateDTO;
 import com.cooxiao.mall.pojo.product.model.Brand;
 import com.cooxiao.mall.pojo.product.vo.BrandStandardVO;
+import com.cooxiao.mall.product.utils.ImageUrlPrefixHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +36,8 @@ public class BrandServiceImpl implements IBrandService {
     private BrandMapper brandMapper;
     @Autowired
     private SpuMapper spuMapper;
+    @Autowired
+    private ImageUrlPrefixHelper imageUrlPrefixHelper;
 
     @Override
     public void addNew(BrandAddNewDTO brandAddNewDTO) {
@@ -108,6 +111,7 @@ public class BrandServiceImpl implements IBrandService {
         if (brandStandardVO == null) {
             throw new CoolSharkServiceException(ResponseCode.NOT_FOUND, "获取品牌详情失败，尝试访问的数据不存在！");
         }
+        brandStandardVO.setLogo(imageUrlPrefixHelper.processUrl(brandStandardVO.getLogo()));
         return brandStandardVO;
     }
 
@@ -150,6 +154,7 @@ public class BrandServiceImpl implements IBrandService {
         }
         BrandStandardVO vo = new BrandStandardVO();
         BeanUtils.copyProperties(brand, vo);
+        vo.setLogo(imageUrlPrefixHelper.processUrl(vo.getLogo()));
         return vo;
     }
 

@@ -14,6 +14,7 @@ import com.cooxiao.mall.pojo.product.vo.SpuStandardVO;
 import com.cooxiao.mall.product.service.front.IForFrontSpuService;
 import com.cooxiao.mall.product.mapper.SpuDetailMapper;
 import com.cooxiao.mall.product.mapper.SpuMapper;
+import com.cooxiao.mall.product.utils.ImageUrlPrefixHelper;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +30,8 @@ public class ForFrontSpuServiceImpl implements IForFrontSpuService {
     private SpuMapper spuMapper;
     @Autowired
     private SpuDetailMapper spuDetailMapper;
+    @Autowired
+    private ImageUrlPrefixHelper imageUrlPrefixHelper;
 
     @Override
     public JsonPage<SpuListItemVO> listSpuByCategoryId(Long categoryId, Integer page, Integer pageSize) {
@@ -59,6 +62,7 @@ public class ForFrontSpuServiceImpl implements IForFrontSpuService {
         if (spuStandardVO == null) {
             throw new CoolSharkServiceException(ResponseCode.NOT_FOUND, "查询SPU详情失败，尝试访问的SPU数据不存在！");
         }
+        spuStandardVO.setPictures(imageUrlPrefixHelper.processPictures(spuStandardVO.getPictures()));
         return spuStandardVO;
     }
 
@@ -85,6 +89,7 @@ public class ForFrontSpuServiceImpl implements IForFrontSpuService {
         }
         SpuListItemVO vo = new SpuListItemVO();
         BeanUtils.copyProperties(spu, vo);
+        vo.setPictures(imageUrlPrefixHelper.processPictures(spu.getPictures()));
         return vo;
     }
 }

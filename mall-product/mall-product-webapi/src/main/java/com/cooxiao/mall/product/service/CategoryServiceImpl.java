@@ -14,6 +14,7 @@ import com.cooxiao.mall.pojo.product.dto.CategoryUpdateBaseInfoDTO;
 import com.cooxiao.mall.pojo.product.dto.CategoryUpdateFullInfoDTO;
 import com.cooxiao.mall.pojo.product.model.Category;
 import com.cooxiao.mall.pojo.product.vo.CategoryStandardVO;
+import com.cooxiao.mall.product.utils.ImageUrlPrefixHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,8 @@ public class CategoryServiceImpl implements ICategoryService {
     private CategoryMapper categoryMapper;
     @Autowired
     private CategoryAttributeTemplateMapper categoryAttributeTemplateMapper;
+    @Autowired
+    private ImageUrlPrefixHelper imageUrlPrefixHelper;
 
     @Override
     public Long addNew(CategoryAddNewDTO categoryAddNewDTO) {
@@ -270,6 +273,7 @@ public class CategoryServiceImpl implements ICategoryService {
         if (categoryStandardVO == null) {
             throw new CoolSharkServiceException(ResponseCode.NOT_FOUND, "获取类别详情失败，尝试访问的数据不存在！");
         }
+        categoryStandardVO.setIcon(imageUrlPrefixHelper.processUrl(categoryStandardVO.getIcon()));
         return categoryStandardVO;
     }
 
@@ -311,6 +315,7 @@ public class CategoryServiceImpl implements ICategoryService {
         }
         CategoryStandardVO vo = new CategoryStandardVO();
         BeanUtils.copyProperties(category, vo);
+        vo.setIcon(imageUrlPrefixHelper.processUrl(vo.getIcon()));
         return vo;
     }
 
