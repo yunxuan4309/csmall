@@ -1,0 +1,28 @@
+package com.cooxiao.mall.ai.security;
+
+import com.cooxiao.mall.common.restful.JsonResult;
+import com.cooxiao.mall.common.restful.ResponseCode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.stereotype.Component;
+
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+@Component
+public class MyAuthenticationEntryPoint implements AuthenticationEntryPoint {
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Override
+    public void commence(HttpServletRequest httpServletRequest,
+                         HttpServletResponse httpServletResponse,
+                         AuthenticationException e) throws IOException, ServletException {
+        JsonResult jsonResult = JsonResult.failed(ResponseCode.UNAUTHORIZED, "您没有登录！");
+        httpServletResponse.setContentType("application/json;charset=utf-8");
+        httpServletResponse.getWriter().write(objectMapper.writeValueAsString(jsonResult));
+        httpServletResponse.flushBuffer();
+    }
+}

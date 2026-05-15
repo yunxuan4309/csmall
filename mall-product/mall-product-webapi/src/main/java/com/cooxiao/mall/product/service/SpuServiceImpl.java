@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
+import com.cooxiao.mall.ai.service.ISpuSyncService;
 import com.cooxiao.mall.pojo.product.dto.SpuAddNewDTO;
 import com.cooxiao.mall.pojo.product.dto.SpuUpdateDTO;
 import com.cooxiao.mall.pojo.product.model.Spu;
@@ -44,6 +45,9 @@ public class SpuServiceImpl implements ISpuService {
     private CategoryMapper categoryMapper;
     @Autowired
     private SpuDetailMapper spuDetailMapper;
+
+    @org.apache.dubbo.config.annotation.DubboReference(check = false)
+    private ISpuSyncService spuSyncService;
 
     @Override
     public void addNew(SpuAddNewDTO spuAddNewDTO) {
@@ -116,6 +120,13 @@ public class SpuServiceImpl implements ISpuService {
                 throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "新增SPU失败，服务器忙，请稍后再次尝试！");
             }
         }
+
+        // 异步通知 mall-ai 同步到 ES（失败不影响主流程）
+        try {
+            spuSyncService.syncSpu(spuId);
+        } catch (Exception e) {
+            log.warn("通知 mall-ai 同步 SPU 失败: spuId={}", spuId, e);
+        }
     }
 
     @Override
@@ -127,6 +138,13 @@ public class SpuServiceImpl implements ISpuService {
             spuDetailMapper.updateDetailBySpuId(spu.getId(), spuDTO.getContent());
         }
         spuMapper.update(spu);
+
+        // 异步通知 mall-ai 同步到 ES（失败不影响主流程）
+        try {
+            spuSyncService.syncSpu(id);
+        } catch (Exception e) {
+            log.warn("通知 mall-ai 同步 SPU 失败: spuId={}", id, e);
+        }
     }
 
     @Override

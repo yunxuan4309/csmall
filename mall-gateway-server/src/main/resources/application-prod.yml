@@ -63,6 +63,11 @@ spring:
           uri: lb://mall-seckill
           predicates:
             - Path=/seckill/**
+        # AI 智能导购
+        - id: mall-ai
+          uri: http://127.0.0.1:10010
+          predicates:
+            - Path=/ai/**
         # 以下服务不对外暴露，仅通过Dubbo RPC内部调用：
         # mall-ams（后台管理）、mall-ums（用户管理）、mall-product（商品管理）
 

@@ -60,5 +60,10 @@ spring:
           uri: http://localhost:10007
           predicates:
             - Path=/seckill/**
+        # AI 智能导购
+        - id: mall-ai
+          uri: http://localhost:10010
+          predicates:
+            - Path=/ai/**
         # 以下服务不对外暴露，仅通过 Dubbo RPC 内部调用：
         # mall-ams（后台管理）、mall-ums（用户管理）、mall-product（商品管理）

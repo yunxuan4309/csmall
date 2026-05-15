@@ -36,6 +36,12 @@
             <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-product-service</artifactId>
         </dependency>
+        <!-- AI Service模块（Dubbo consumer） -->
+        <dependency>
+            <groupId>com.cooxiao.mall</groupId>
+            <artifactId>mall-ai-service</artifactId>
+            <version>1.0.0</version>
+        </dependency>
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

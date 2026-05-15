@@ -142,3 +142,109 @@ scp -r mall-resource/src/main/resources/static/*.png ecs-user@8.156.85.160:/data
 # 3. 确认 spring.web.resources.static-locations 配置包含 file:${custom.file-upload.server-local-base-path}
 # 4. 重新打包部署，确认图片仍可访问
 ```
+
+ai模块把这个 Key 添加到服务器上的 /data/jars/csmall.env 里。
+
+---
+
+## 5. 【AI 导购】Embedding 向量语义检索扩展点
+
+### 背景
+当前 RAG 问答（`POST /ai/ask`）使用 **ES IK 分词全文检索**（`multi_match`），不依赖 embedding API，功能完整可用。DeepSeek V4 当前不提供专用的 embedding API 端点（`/v1/embeddings` 返回 404），因此在代码中保留了向量语义检索的完整实现，通过配置开关控制。
+
+### 扩展点清单
+
+| 位置 | 说明 |
+|------|------|
+| `AiProperties.embeddingEnabled` | 检索模式开关：`false`=全文检索（当前），`true`=向量语义检索 |
+| `application.yml` → `cooxiao.ai.embedding-enabled` | 运行时配置，改后重启即可切换 |
+| `RagServiceImpl.vectorSearch()` | 向量检索方法已完整实现，开关翻为 `true` 后直接调用 |
+| `VectorSyncServiceImpl.syncAll()/syncSpu()` | 商品数据同步到 ES，当前写入所有 text 字段但略过向量。接入 embedding 后需恢复向量生成逻辑 |
+
+### 接入步骤（待完成）
+
+1. **选择一个 embedding 供应商**（阿里通义千问、智谱 GLM、百度千帆等均有中文 embedding API）
+2. **实现 embedding 客户端**：在 `client` 包下新建 `AliYunEmbeddingClient.java`（或其它供应商），实现 `AiClient` 接口的 `embed()` / `embedBatch()` 方法
+3. **配置切换**：将 `application.yml` 中 `embedding-enabled` 改为 `true`，配置供应商的 `api-key`
+4. **恢复向量同步**：`VectorSyncServiceImpl` 中取消 embedding 调用代码的注释，调用 `/ai/sync` 重新生成全量商品向量
+5. **验证**：发起 RAG 问答请求，日志中出现「使用向量语义检索模式」即表示切换成功
+
+### 注意事项
+- 全量向量同步会产生少量 API 费用（商品数 × 百万 tokens 单价，约几元）
+- ES 索引 `cool_shark_mall_ai` 中 `semanticVector` 字段已定义好（dense_vector, dims=512），同步后即可使用
+- 切换后预算控制（`TokenBudgetService`）会自动计入 embedding API 的费用
+
+---
+
+## 6. 【AI 导购】商品变更自动同步（场景二）✅ 已实现
+
+### 实现方式
+
+mall-product 新增/修改商品后，通过 **Dubbo RPC** 自动触发 mall-ai 同步到 ES：
+
+| 组件 | 文件 | 说明 |
+|------|------|------|
+| Dubbo 接口 | `mall-ai-service/.../ISpuSyncService.java` | `syncSpu(Long spuId)` |
+| Dubbo 提供者 | `mall-ai-webapi/.../SpuSyncDubboServiceImpl.java` | `@DubboService` |
+| Dubbo 消费者 | `mall-product-webapi/.../SpuServiceImpl.java` | `@DubboReference`，在 `addNew()` 和 `updateById()` 末尾调用 |
+
+### 注意事项
+- `@DubboReference(check = false)`：mall-ai 不可用时不影响商品增删改主流程
+- 同步失败仅记录 warn 日志，不抛异常
+
+---
+
+## 7. 【AI 导购】第四阶段：智能搜索增强（TODO）
+
+> 原计划 Phase 4 为向量语义搜索，因 DeepSeek V4 不提供 embedding API，改用以下三个子功能替代。
+
+### 7.1 AI 语义重排序 `POST /ai/search`
+
+**功能**：用户搜索关键词 → ES 全文检索 Top-15 → AI 按用户意图重排序 → 返回 Top-5
+
+**原理**：
+```
+"学生党高性价比手机"
+  → ES multi_match Top-15（IK 分词，快但不理解"学生"语义）
+  → AI: "你是导购，按学生预算有限且性能够用重新排序以下 15 个商品"
+  → 返回 AI 重排后的 Top-5
+```
+
+**不依赖 embedding**，纯靠 AI Chat 做语义理解。
+
+**新增文件**：
+- `mall-ai-webapi/.../service/impl/SearchServiceImpl.java` — 核心逻辑
+- `AiController.java` — 新增 `POST /ai/search`
+
+### 7.2 搜索自动补全 `GET /ai/search/suggest`
+
+**功能**：用户输入部分文字 → ES Completion Suggester + IK → 返回补全候选
+
+**原理**：ES `completion` suggester 字段，IK 分词实时匹配
+
+**新增文件**：
+- EsIndexInitializer 中添加 completion 字段 mapping
+- SearchServiceImpl 中 suggest 方法
+
+### 7.3 相关商品推荐 `GET /ai/product/{id}/related`
+
+**功能**：商品详情页 → 基于当前商品推荐相似商品
+
+**原理**：ES `more_like_this` 查询，按名称+标题+描述+标签相似度排序
+
+### 预估工作量
+
+| 子功能 | 难度 | 耗时 |
+|--------|------|------|
+| AI 语义重排序 | ⭐⭐ | 1.5h |
+| 搜索自动补全 | ⭐ | 0.5h |
+| 相关商品推荐 | ⭐ | 0.5h |
+| **合计** | — | **2.5h** |
+
+### 风险
+
+| 风险 | 应对 |
+|------|------|
+| AI 重排 token 消耗 | 每次约 500 tokens ≈ 0.001 元，TokenBudgetService 已覆盖 |
+| 重排延迟 | ES 200ms + AI ~2s，总计 <3s，可接受 |
+| AI 排序不稳定 | temperature=0，固定 prompt |

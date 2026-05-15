@@ -1,0 +1,46 @@
+server:
+  port: 10010
+spring:
+  profiles:
+    active: test
+  application:
+    name: mall-ai
+
+seata:
+  enabled: false
+
+cooxiao:
+  ai:
+    api-key: ${AI_API_KEY:sk-placeholder}
+    base-url: ${AI_API_BASE_URL:https://api.deepseek.com}
+    chat-model: deepseek-v4-flash
+    compare-model: deepseek-v4-flash
+    temperature: 0.7
+    max-tokens: 2000
+    timeout: 15000
+    # Embedding 向量检索（当前关闭，预留扩展）
+    embedding-enabled: false
+    embedding-model: deepseek-v4-flash
+    embedding-dimensions: 512
+    # 每日预算 10 元
+    daily-budget: 10.0
+    chat-input-price-per-million: 1.0
+    chat-output-price-per-million: 2.0
+    embedding-price-per-million: 1.0
+
+knife4j:
+  enable: true
+  production: false
+  basic:
+    enable: false
+    username: root
+    password: root
+
+jwt:
+  # JWT存储的请求头
+  tokenHeader: Authorization
+  # JWT加解密使用的密钥(HS512要求>=64字节)
+  secret: CooxiaoMall2026JwtSecretKeyForHs512AlgorithmMustBeAtLeast64BytesLong
+  # JWT的超期限时间(60*60*24)
+  expiration: 604800
+  tokenHead: Bearer

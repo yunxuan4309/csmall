@@ -33,6 +33,7 @@
         <module>mall-seckill</module>             <!-- 秒杀服务：限时抢购、促销活动功能 -->
         <module>mall-sso</module>                 <!-- 单点登录服务：统一身份认证和登录 -->
         <module>mall-ums</module>                 <!-- 用户管理服务：普通用户账户、收货地址、积分等管理 -->
+        <module>mall-ai</module>                 <!-- AI 智能导购：AI商品对比、RAG问答、多轮对话、语义搜索 -->
     </modules>
 
 
@@ -142,6 +143,12 @@
             <dependency>
                 <groupId>com.cooxiao.mall</groupId>
                 <artifactId>mall-ums</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <!-- AI 智能导购模块 -->
+            <dependency>
+                <groupId>com.cooxiao.mall</groupId>
+                <artifactId>mall-ai</artifactId>
                 <version>0.0.1-SNAPSHOT</version>
             </dependency>
             <!-- Mapper模块 -->
