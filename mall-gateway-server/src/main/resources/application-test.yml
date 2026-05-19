@@ -27,3 +27,8 @@ spring:
           uri: lb://mall-order
           predicates:
             - Path=/oms/**
+        # 用户注册路由（前端注册接口需要通过 Gateway 访问）
+        - id: mall-ums-register
+          uri: lb://mall-ums
+          predicates:
+            - Path=/ums/user/register,/ums/user/checkValue
