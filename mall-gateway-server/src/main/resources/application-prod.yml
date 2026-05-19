@@ -35,7 +35,7 @@ spring:
       routes:
         # 前台商品展示
         - id: mall-front
-          uri: lb://mall-front
+          uri: http://127.0.0.1:10004
           predicates:
             - Path=/front/**
         # 订单服务
@@ -45,7 +45,7 @@ spring:
             - Path=/oms/**
         # 搜索服务
         - id: mall-search
-          uri: lb://mall-search
+          uri: http://127.0.0.1:10008
           predicates:
             - Path=/search/**
         # SSO 登录认证
@@ -60,7 +60,7 @@ spring:
             - Path=/resource/**,/upload/**
         # 秒杀服务
         - id: mall-seckill
-          uri: lb://mall-seckill
+          uri: http://127.0.0.1:10007
           predicates:
             - Path=/seckill/**
         # AI 智能导购
@@ -70,7 +70,7 @@ spring:
             - Path=/ai/**
         # 用户注册（仅开放注册和校验接口，其他 UMS 管理接口不对外暴露）
         - id: mall-ums-register
-          uri: lb://mall-ums
+          uri: http://127.0.0.1:10006
           predicates:
             - Path=/ums/user/register,/ums/user/checkValue
         # 以下服务不对外暴露，仅通过Dubbo RPC内部调用：
