@@ -51,9 +51,13 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public void doRegister(UserRegistryDTO userRegistyDTO) {
+    public User doRegister(UserRegistryDTO userRegistyDTO) {
         //校验一下password是否正确
         validatePassword(userRegistyDTO);
+        //校验用户名、手机号、邮箱是否已存在（防止并发重复注册）
+        checkValue(userRegistyDTO.getUsername(), "username");
+        checkValue(userRegistyDTO.getPhone(), "phone");
+        checkValue(userRegistyDTO.getEmail(), "email");
         //转化对象
         User user=new User();
         BeanUtils.copyProperties(userRegistyDTO,user);
@@ -62,6 +66,7 @@ public class UserServiceImpl implements IUserService {
         user.setPassword(passwordEncoder.encode(userRegistyDTO.getPassword()));
         //写入数据库
         userMapper.insertUser(user);
+        return user;
     }
 
     @Override

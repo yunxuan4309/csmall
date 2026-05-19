@@ -2,6 +2,7 @@ package com.cooxiao.mall.ums.service;
 
 import com.cooxiao.mall.pojo.ums.dto.ChangePasswordDTO;
 import com.cooxiao.mall.pojo.ums.dto.UserRegistryDTO;
+import com.cooxiao.mall.pojo.ums.model.User;
 import com.cooxiao.mall.pojo.ums.vo.UserVO;
 
 /**
@@ -16,7 +17,7 @@ public interface IUserService{
 
     UserVO queryOneUser(String username);
 
-    void doRegister(UserRegistryDTO userRegistyDTO);
+    User doRegister(UserRegistryDTO userRegistyDTO);
 
     void checkValue(String value, String type);
 

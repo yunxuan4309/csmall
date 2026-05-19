@@ -68,8 +68,13 @@ spring:
           uri: http://127.0.0.1:10010
           predicates:
             - Path=/ai/**
+        # 用户注册（仅开放注册和校验接口，其他 UMS 管理接口不对外暴露）
+        - id: mall-ums-register
+          uri: lb://mall-ums
+          predicates:
+            - Path=/ums/user/register,/ums/user/checkValue
         # 以下服务不对外暴露，仅通过Dubbo RPC内部调用：
-        # mall-ams（后台管理）、mall-ums（用户管理）、mall-product（商品管理）
+        # mall-ams（后台管理）、mall-product（商品管理）
 
 knife4j:
   production: true

@@ -65,5 +65,10 @@ spring:
           uri: http://localhost:10010
           predicates:
             - Path=/ai/**
+        # 用户注册（仅开放注册和校验接口，其他 UMS 管理接口不对外暴露）
+        - id: mall-ums-register
+          uri: http://localhost:10006
+          predicates:
+            - Path=/ums/user/register,/ums/user/checkValue
         # 以下服务不对外暴露，仅通过 Dubbo RPC 内部调用：
-        # mall-ams（后台管理）、mall-ums（用户管理）、mall-product（商品管理）
+        # mall-ams（后台管理）、mall-product（商品管理）

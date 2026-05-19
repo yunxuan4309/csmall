@@ -248,3 +248,53 @@ mall-product 新增/修改商品后，通过 **Dubbo RPC** 自动触发 mall-ai 
 | AI 重排 token 消耗 | 每次约 500 tokens ≈ 0.001 元，TokenBudgetService 已覆盖 |
 | 重排延迟 | ES 200ms + AI ~2s，总计 <3s，可接受 |
 | AI 排序不稳定 | temperature=0，固定 prompt |
+
+---
+
+## 8. 【秒杀】RabbitMQ 不可用时的降级方案
+
+### 背景
+
+当前秒杀下单流程：Redis 扣库存成功 → 发 RabbitMQ 消息 → 消费者异步落库。如果 RabbitMQ 挂掉，`rabbitTemplate.convertAndSend()` 会抛异常，导致 `@GlobalTransactional` 回滚。但 Redis 库存扣减不在 Seata 事务管理范围内，**无法自动回滚**，导致库存"蒸发"。
+
+### 方案对比
+
+| 方案 | 复杂度 | 优点 | 缺点 |
+|------|--------|------|------|
+| **方案一 ★（已选中）** 本地表缓冲 | ⭐⭐ | 不依赖额外中间件，MQ 恢复后自动补发 | 引入额外表和定时任务 |
+| 方案二：消息确认 + 重试 | ⭐ | 配置简单，Spring Boot 原生支持 | MQ 本身挂了时无法解决 |
+| 方案三：RabbitMQ 集群 | ⭐⭐⭐⭐⭐ | 高可用，单节点挂了不影响 | 需要额外服务器资源，当前单机条件不支持 |
+| 方案四：Redis 库存回滚 | ⭐ | 实现简单 | 并发下计数不准确 |
+
+### 方案一详细设计（待实现）
+
+**在 `mall-seckill` 中新增 `seckill_message_retry` 表：**
+
+```sql
+CREATE TABLE seckill_message_retry (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    sku_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    quantity INT NOT NULL DEFAULT 1,
+    order_sn VARCHAR(64),
+    message_body TEXT COMMENT '序列化的 Success 对象',
+    status TINYINT DEFAULT 0 COMMENT '0-待发送 1-发送成功 2-发送失败(已达重试上限)',
+    retry_count INT DEFAULT 0,
+    create_time DATETIME,
+    update_time DATETIME
+);
+```
+
+**改动点：**
+
+| 位置 | 改动 |
+|------|------|
+| `SeckillServiceImpl.commitSeckill()` | Redis 扣库存成功后，先 `INSERT` 一条消息记录到 `seckill_message_retry`（status=0），再发 MQ。发送成功后将 status 更新为 1 |
+| 新增 `MessageRetryTask` | 定时任务（每 5 秒）扫描 `seckill_message_retry` 中 status=0 且 retry_count < 3 的记录，重新发送 MQ 消息 |
+| `SeckillQueueConsumer.process()` | 消费者处理成功后，回调查 `seckill_message_retry` 将 status 更新为 1 |
+| 新增 `MessageRetryMapper` | MyBatis Plus 操作 `seckill_message_retry` 表 |
+
+### 执行状态
+
+- [ ] 方案一已选中，面试结束后实施
+- [ ] 面试前不做任何代码修改，避免引入不稳定因素
