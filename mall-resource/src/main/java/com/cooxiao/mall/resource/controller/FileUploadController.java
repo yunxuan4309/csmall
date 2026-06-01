@@ -1,8 +1,12 @@
 package com.cooxiao.mall.resource.controller;
 
+import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonResult;
 import com.cooxiao.mall.common.restful.ResponseCode;
+import com.cooxiao.mall.common.utils.JwtTokenUtils;
+import com.cooxiao.mall.resource.pojo.entity.UploadRecord;
+import com.cooxiao.mall.resource.service.IUploadRecordService;
 import com.cooxiao.mall.resource.util.FileUploadUtils;
 import com.cooxiao.mall.resource.util.ImageUtils;
 import com.cooxiao.mall.resource.vo.ImageFileVO;
@@ -11,7 +15,9 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiImplicitParam;
 import io.swagger.annotations.ApiImplicitParams;
 import io.swagger.annotations.ApiOperation;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -58,6 +64,11 @@ public class FileUploadController {
     @Value("${custom.file-upload.brand-logo.content-type}")
     private List<String> brandLogoContentType;
 
+    @Autowired
+    private JwtTokenUtils jwtTokenUtils;
+    @Autowired
+    private IUploadRecordService uploadRecordService;
+
     /**
      * 上传品牌LOGO
      */
@@ -67,9 +78,9 @@ public class FileUploadController {
             @ApiImplicitParam(name = "brandNamePinyin", value = "品牌名称的拼音（不区别大小写）", required = true)
     )
     @PostMapping(value = "/brand-logo")
-    public JsonResult<ImageFileVO> uploadBrandLogo(@RequestParam MultipartFile file, String brandNamePinyin) {
+    public JsonResult<ImageFileVO> uploadBrandLogo(@RequestParam MultipartFile file, String brandNamePinyin, HttpServletRequest request) {
         String imageFileName = FileUploadUtils.generateFileNameByCurrentDateTime();
-        return uploadImage(file, brandLogoSizeLimit, brandLogoContentType, brandLogoDirName, brandNamePinyin.toLowerCase(), imageFileName);
+        return uploadImage(file, brandLogoSizeLimit, brandLogoContentType, brandLogoDirName, brandNamePinyin.toLowerCase(), imageFileName, request);
     }
 
     /**
@@ -81,9 +92,9 @@ public class FileUploadController {
             @ApiImplicitParam(name = "categoryNamePinyin", value = "类别名称的拼音（不区别大小写）", required = true)
     )
     @PostMapping(value = "/category-icon")
-    public JsonResult<ImageFileVO> uploadCategoryIcon(@RequestParam MultipartFile file, String categoryNamePinyin) {
+    public JsonResult<ImageFileVO> uploadCategoryIcon(@RequestParam MultipartFile file, String categoryNamePinyin, HttpServletRequest request) {
         String imageFileName = FileUploadUtils.generateFileNameByCurrentDateTime();
-        return uploadImage(file, categoryIconSizeLimit, categoryIconContentType, categoryIconDirName, categoryNamePinyin.toLowerCase(), imageFileName);
+        return uploadImage(file, categoryIconSizeLimit, categoryIconContentType, categoryIconDirName, categoryNamePinyin.toLowerCase(), imageFileName, request);
     }
 
     /**
@@ -92,11 +103,14 @@ public class FileUploadController {
     @ApiOperationSupport(order = 12)
     @ApiOperation("上传商品图片（单张）")
     @PostMapping(value = "/picture/single")
-    public JsonResult<ImageFileVO> uploadSinglePicture(@RequestParam MultipartFile file) {
+    public JsonResult<ImageFileVO> uploadSinglePicture(@RequestParam MultipartFile file, HttpServletRequest request) {
         String subDirName = FileUploadUtils.generateDirNameByDate();
         String imageFileName = FileUploadUtils.generateFileNameByCurrentDateTime();
-        return uploadImage(file, pictureSizeLimit, pictureContentType, pictureDirName, subDirName, imageFileName);
+        return uploadImage(file, pictureSizeLimit, pictureContentType, pictureDirName, subDirName, imageFileName, request);
     }
+
+    @Value("${jwt.tokenHead}")
+    private String jwtTokenHead;
 
     /**
      * 上传图片
@@ -107,9 +121,10 @@ public class FileUploadController {
      * @param targetParentDirName 目标文件的父级文件夹名，例如image、brand_logo等
      * @param targetSubDirName    目标文件的子级文件夹名，可多层级，不同的图片的子级文件夹设计可能不同
      * @param targetFileName      目标文件名，不含扩展名
+     * @param request             HTTP 请求（用于提取上传者身份）
      * @return 成功上传的图片文件详情
      */
-    private JsonResult<ImageFileVO> uploadImage(MultipartFile file, String sizeLimit, List<String> contentType, String targetParentDirName, String targetSubDirName, String targetFileName) {
+    private JsonResult<ImageFileVO> uploadImage(MultipartFile file, String sizeLimit, List<String> contentType, String targetParentDirName, String targetSubDirName, String targetFileName, HttpServletRequest request) {
         // 检查是否提交了上传数据
         if (file == null || file.isEmpty()) {
             throw new CoolSharkServiceException(ResponseCode.BAD_REQUEST, "上传文件失败，请提交文件！");
@@ -157,9 +172,40 @@ public class FileUploadController {
         imageFileVO.setSize(file.getSize());
         imageFileVO.setWidth(imageInfo.getWidth());
         imageFileVO.setHeight(imageInfo.getHeight());
+
+        // 尝试从请求中提取上传者身份并保存上传记录
+        try {
+            CsmallAuthenticationInfo userInfo = extractUserFromRequest(request);
+            if (userInfo != null) {
+                UploadRecord record = new UploadRecord();
+                record.setUserId(userInfo.getId());
+                record.setUsername(userInfo.getUsername());
+                record.setUrl(imageUrl);
+                record.setContentType(file.getContentType());
+                record.setFileSize(file.getSize());
+                record.setWidth(imageInfo.getWidth());
+                record.setHeight(imageInfo.getHeight());
+                record.setOriginalFilename(file.getOriginalFilename());
+                uploadRecordService.saveRecord(record);
+            }
+        } catch (Exception e) {
+            // 记录上传出错不影响主流程，仅打印警告
+            log.warn("保存上传记录失败：{}", e.getMessage());
+        }
+
         // 执行响应
         return JsonResult.ok(imageFileVO);
     }
 
-
+    /**
+     * 从请求中提取当前登录用户的信息
+     */
+    private CsmallAuthenticationInfo extractUserFromRequest(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith(jwtTokenHead)) {
+            String authToken = authHeader.substring(jwtTokenHead.length()).trim();
+            return jwtTokenUtils.getUserInfo(authToken);
+        }
+        return null;
+    }
 }

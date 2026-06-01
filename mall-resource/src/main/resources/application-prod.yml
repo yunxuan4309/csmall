@@ -4,6 +4,11 @@
 #  当前文件是Profile配置，需要主配置文件中通过spring.profiles.active激活后生效   #
 # ##################################################################### #
 
+# 部署到阿里云后，将此地址替换为服务器内网IP或127.0.0.1(单机部署)
+my:
+  server:
+    addr: ${ALIYUN_SERVER_IP:127.0.0.1}
+
 # 服务器配置
 server:
   # 端口号
@@ -15,6 +20,13 @@ server:
 spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  # 数据源
+  datasource:
+    url: jdbc:mysql://${my.server.addr}:3306/cs_mall_resource?useSSL=false&useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowMultiQueries=true&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:root}
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
   # 文件上传核心配置
   servlet:
     multipart:

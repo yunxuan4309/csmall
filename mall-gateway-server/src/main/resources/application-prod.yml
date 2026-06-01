@@ -55,7 +55,7 @@ spring:
             - Path=/sso/**,/admin/sso/**,/user/sso/**,/user/info/**
         # 文件资源
         - id: mall-resource
-          uri: lb://mall-resource
+          uri: http://127.0.0.1:9060
           predicates:
             - Path=/resource/**,/upload/**
         # 秒杀服务

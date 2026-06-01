@@ -30,6 +30,11 @@
    - 表数量：3 张
    - 功能：秒杀活动、秒杀商品、秒杀记录管理
 
+6. **08-resource-upload-record.sql** - 资源服务（Resource）
+   - 数据库：cs_mall_resource
+   - 表数量：1 张
+   - 功能：用户上传文件记录，关联上传者身份
+
 ## 🚀 执行方式
 
 ### 方式一：使用命令行批量执行（推荐）
@@ -46,6 +51,7 @@ source D:\java\csmall\database\02-ams-admin.sql;
 source D:\java\csmall\database\03-oms-order.sql;
 source D:\java\csmall\database\04-ums-user.sql;
 source D:\java\csmall\database\05-seckill.sql;
+source D:\java\csmall\database\08-resource-upload-record.sql;
 ```
 
 ### 方式二：使用图形化工具
@@ -87,8 +93,8 @@ source D:\java\csmall\database\05-seckill.sql;
 
 ## 📊 数据库统计
 
-- 总数据库数：5 个
-- 总表数：26 张
+- 总数据库数：6 个
+- 总表数：27 张
 - 字符集：utf8mb4
 - 存储引擎：InnoDB
 

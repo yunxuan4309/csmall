@@ -31,6 +31,12 @@ jwt:
   expiration: 604800
   tokenHead: Bearer
 
+# MyBatis-Plus 配置
+mybatis-plus:
+  configuration:
+    # 下划线命名转驼峰
+    map-underscore-to-camel-case: true
+
 # knife4j配置
 knife4j:
   # 开启增强配置
