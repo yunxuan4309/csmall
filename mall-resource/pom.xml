@@ -56,11 +56,7 @@
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
         </dependency>
-        <!-- Druid 连接池 -->
-        <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>druid</artifactId>
-        </dependency>
+        <!-- HikariCP：Spring Boot 自带连接池，高性能，无需额外引入 -->
         <!-- MyBatis-Plus Spring Boot3 启动器 -->
         <dependency>
             <groupId>com.baomidou</groupId>
