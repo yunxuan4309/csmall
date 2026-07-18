@@ -43,6 +43,9 @@ cooxiao:
     sync-auto-on-startup: true
     # 生产环境：sync 接口不加入白名单，需要鉴权
     sync-whitelisted: false
+    # 向量检索（硅基流动 BGE-M3，生产默认关闭，按需开启）
+    embedding-enabled: false
+    embedding-api-key: ${EMBEDDING_API_KEY:sk-placeholder}
 
 knife4j:
   production: true

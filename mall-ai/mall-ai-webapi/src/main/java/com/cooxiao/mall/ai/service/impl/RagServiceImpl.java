@@ -6,6 +6,7 @@ import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.json.JsonData;
 import com.alibaba.fastjson.JSONArray;
 import com.cooxiao.mall.ai.client.AiClient;
+import com.cooxiao.mall.ai.client.SiliconFlowEmbeddingClient;
 import com.cooxiao.mall.ai.config.AiProperties;
 import com.cooxiao.mall.ai.service.TokenBudgetService;
 import com.cooxiao.mall.pojo.ai.vo.AskResultVO;
@@ -44,6 +45,9 @@ public class RagServiceImpl {
     private AiClient aiClient;
 
     @Autowired
+    private SiliconFlowEmbeddingClient embeddingClient;
+
+    @Autowired
     private ElasticsearchClient esClient;
 
     @Autowired
@@ -76,8 +80,8 @@ public class RagServiceImpl {
         // 1. 检索相关商品（根据配置选择全文检索或向量检索）
         List<Map<String, Object>> hits;
         if (aiProperties.isEmbeddingEnabled()) {
-            log.info("使用向量语义检索模式");
-            float[] queryVector = aiClient.embed(question);
+            log.info("使用向量语义检索模式（硅基流动 BGE-M3）");
+            float[] queryVector = embeddingClient.embed(question);
             hits = vectorSearch(queryVector, topK);
         } else {
             log.info("使用 ES 全文检索模式");
@@ -98,13 +102,103 @@ public class RagServiceImpl {
         return result;
     }
 
-    // ========== ES 全文检索（当前默认） ==========
+    // ========== ES 结构化检索（AI 意图提取后使用） ==========
+
+    /** 简化的结构化搜索，用于 SearchPipeline 多路召回 */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> structuredSearch(String keywords, Double budgetMin,
+                                                       Double budgetMax, String brand, int topK) {
+        try {
+            SearchResponse<Map<String, Object>> response = esClient.search(s -> {
+                s.index(INDEX_NAME).size(topK);
+                s.query(q -> q.bool(b -> {
+                    if (keywords != null && !keywords.isBlank()) {
+                        b.must(m -> m.multiMatch(mm -> mm.query(keywords).fields(SEARCH_FIELDS)));
+                    } else {
+                        b.must(m -> m.matchAll(ma -> ma));
+                    }
+                    if (budgetMin != null)
+                        b.filter(f -> f.range(r -> r.field("listPrice").gte(JsonData.of(budgetMin))));
+                    if (budgetMax != null)
+                        b.filter(f -> f.range(r -> r.field("listPrice").lte(JsonData.of(budgetMax))));
+                    if (brand != null && !brand.isBlank())
+                        b.filter(f -> f.term(t -> t.field("brandName").value(brand)));
+                    return b;
+                }));
+                return s;
+            }, (Class<Map<String, Object>>) (Class<?>) Map.class);
+            return response.hits().hits().stream().map(Hit::source)
+                    .filter(s -> s != null).collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("结构化检索失败", e);
+            return List.of();
+        }
+    }
+
+    List<Map<String, Object>> intentSearch(Object intentObj, int topK) {
+        com.cooxiao.mall.ai.model.SearchIntent intent =
+                (com.cooxiao.mall.ai.model.SearchIntent) intentObj;
+        try {
+            Double budgetMin = intent.getBudgetMin();
+            Double budgetMax = intent.getBudgetMax();
+            String brand = intent.getBrand();
+            String category = intent.getCategory();
+            String keywords = intent.getKeywords();
+
+            // 将分类词合并到关键词中，利用 multi_match 的 IK 分词模糊匹配
+            // 避免 term 精确过滤导致"衣服"匹配不到"男装/女装"
+            String searchText = keywords;
+            if (category != null && !category.isBlank()) {
+                searchText = (searchText != null && !searchText.isBlank())
+                        ? searchText + " " + category : category;
+            }
+
+            final String finalSearchText = searchText;
+            SearchResponse<Map<String, Object>> response = esClient.search(s -> {
+                s.index(INDEX_NAME).size(topK);
+                s.query(q -> q.bool(b -> {
+                    if (finalSearchText != null && !finalSearchText.isBlank()) {
+                        b.must(m -> m.multiMatch(mm -> mm
+                                .query(finalSearchText).fields(SEARCH_FIELDS)));
+                    } else {
+                        b.must(m -> m.matchAll(ma -> ma));
+                    }
+                    if (budgetMin != null)
+                        b.filter(f -> f.range(r -> r.field("listPrice").gte(JsonData.of(budgetMin))));
+                    if (budgetMax != null)
+                        b.filter(f -> f.range(r -> r.field("listPrice").lte(JsonData.of(budgetMax))));
+                    if (brand != null && !brand.isBlank())
+                        b.filter(f -> f.term(t -> t.field("brandName").value(brand)));
+                    return b;
+                }));
+                String sort = intent.getSortBy();
+                if ("sales".equals(sort)) {
+                    s.sort(srt -> srt.field(f -> f.field("sales").order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)));
+                } else if ("price_asc".equals(sort)) {
+                    s.sort(srt -> srt.field(f -> f.field("listPrice").order(co.elastic.clients.elasticsearch._types.SortOrder.Asc)));
+                } else if ("price_desc".equals(sort)) {
+                    s.sort(srt -> srt.field(f -> f.field("listPrice").order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)));
+                }
+                return s;
+            }, (Class<Map<String, Object>>) (Class<?>) Map.class);
+
+            return response.hits().hits().stream()
+                    .map(Hit::source)
+                    .filter(s -> s != null)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("结构化 ES 检索失败", e);
+            return List.of();
+        }
+    }
+
+    // ========== ES 全文检索 ==========
 
     /**
      * 纯文本搜索，不过滤价格（用于价格过滤结果为空时的降级兜底）
      */
     @SuppressWarnings("unchecked")
-    List<Map<String, Object>> fullTextSearchNoPrice(String question, int topK) {
+    public List<Map<String, Object>> fullTextSearchNoPrice(String question, int topK) {
         try {
             SearchResponse<Map<String, Object>> response = esClient.search(s -> s
                             .index(INDEX_NAME)
@@ -174,6 +268,12 @@ public class RagServiceImpl {
 
     /** 从用户问题中提取价格范围 */
     private PriceRange extractPriceRange(String question) {
+        // "降低X/减少X" 等是相对调整，不是绝对价格，跳过
+        if (Pattern.compile("(降低|减少|下调|砍|降|减)\\s*\\d").matcher(question).find()) {
+            log.info("检测到相对价格调整表述，跳过价格提取");
+            return null;
+        }
+
         // "X元以上" / "超过X" / "高于X" / "X起" / "X+"
         Matcher above = Pattern.compile("(\\d{4,5})\\s*元?\\s*(以上|及以上|往上|起)").matcher(question);
         if (above.find()) {
@@ -372,7 +472,7 @@ public class RagServiceImpl {
      * 从 ES 中取出的 pictures 字段（JSON 数组字符串，相对路径）
      * 提取第一张图片并拼接完整的访问 URL
      */
-    private String extractFirstPicture(Object picturesObj) {
+    public String extractFirstPicture(Object picturesObj) {
         if (picturesObj == null) {
             return "";
         }

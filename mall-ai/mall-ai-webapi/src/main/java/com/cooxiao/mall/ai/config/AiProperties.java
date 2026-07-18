@@ -30,10 +30,16 @@ public class AiProperties {
     /** API 调用超时时间（毫秒） */
     private int timeout = 15000;
 
-    /** Embedding 模型名称 */
-    private String embeddingModel = "text-embedding-v3";
+    /** Embedding 服务 API Key（硅基流动等第三方供应商） */
+    private String embeddingApiKey;
 
-    /** 向量维度 */
+    /** Embedding 服务基础地址（默认硅基流动） */
+    private String embeddingBaseUrl = "https://api.siliconflow.cn";
+
+    /** Embedding 模型名称（硅基流动 BGE-M3，免费） */
+    private String embeddingModel = "BAAI/bge-m3";
+
+    /** 向量维度（BGE-M3 = 1024） */
     private int embeddingDimensions = 1024;
 
     /** 是否启用向量语义检索（默认关闭，使用 ES 全文检索） */

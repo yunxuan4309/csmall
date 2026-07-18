@@ -2,7 +2,7 @@ package com.cooxiao.mall.ai.service.impl;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
-import com.cooxiao.mall.ai.client.AiClient;
+import com.cooxiao.mall.ai.client.SiliconFlowEmbeddingClient;
 import com.cooxiao.mall.ai.config.AiProperties;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.pojo.product.model.Spu;
@@ -33,7 +33,7 @@ public class VectorSyncServiceImpl {
     private IForFrontSpuService spuService;
 
     @Autowired
-    private AiClient aiClient;
+    private SiliconFlowEmbeddingClient embeddingClient;
 
     @Autowired
     private ElasticsearchClient esClient;
@@ -66,7 +66,7 @@ public class VectorSyncServiceImpl {
                 // 2. 批量调用 embedding API（仅在启用向量检索时）
                 List<float[]> vectors = null;
                 if (aiProperties.isEmbeddingEnabled()) {
-                    vectors = aiClient.embedBatch(texts);
+                    vectors = embeddingClient.embedBatch(texts);
                 }
 
                 // 3. 构建 bulk 操作并写入 ES
@@ -104,7 +104,7 @@ public class VectorSyncServiceImpl {
         }
 
         String semanticText = buildSemanticText(spu);
-        float[] vector = aiProperties.isEmbeddingEnabled() ? aiClient.embed(semanticText) : null;
+        float[] vector = aiProperties.isEmbeddingEnabled() ? embeddingClient.embed(semanticText) : null;
         Map<String, Object> doc = buildDoc(spu, semanticText, vector);
 
         try {

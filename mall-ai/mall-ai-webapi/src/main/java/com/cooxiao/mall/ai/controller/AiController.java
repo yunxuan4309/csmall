@@ -17,9 +17,11 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/ai")
@@ -67,6 +69,13 @@ public class AiController {
         ChatResultVO result = chatService.send(getCurrentUserId(),
                 dto.getSessionId(), dto.getMessage());
         return JsonResult.ok(result);
+    }
+
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @ApiOperation("流式发送消息给 AI 导购（逐字输出 + 商品卡片）")
+    public SseEmitter streamMessage(@Valid @RequestBody ChatSendDTO dto) {
+        return chatService.sendStream(getCurrentUserId(),
+                dto.getSessionId(), dto.getMessage());
     }
 
     @GetMapping("/chat/history")

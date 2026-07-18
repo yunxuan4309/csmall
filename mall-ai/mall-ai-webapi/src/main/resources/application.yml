@@ -18,15 +18,17 @@ cooxiao:
     temperature: 0.7
     max-tokens: 2000
     timeout: 15000
-    # Embedding 向量检索（当前关闭，预留扩展）
+    # Embedding 向量检索（硅基流动 BGE-M3，免费）
     embedding-enabled: false
-    embedding-model: deepseek-v4-flash
-    embedding-dimensions: 512
-    # 每日预算 10 元
-    daily-budget: 10.0
+    embedding-api-key: ${EMBEDDING_API_KEY:sk-placeholder}
+    embedding-base-url: https://api.siliconflow.cn
+    embedding-model: BAAI/bge-m3
+    embedding-dimensions: 1024
+    embedding-price-per-million: 0.0
+    # 每日预算 2 元
+    daily-budget: 2.0
     chat-input-price-per-million: 1.0
     chat-output-price-per-million: 2.0
-    embedding-price-per-million: 1.0
 
 knife4j:
   enable: true

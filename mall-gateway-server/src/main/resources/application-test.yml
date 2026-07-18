@@ -1,7 +1,7 @@
 my:
   server:
     addr: localhost
-    #addr: 106.75.107.22
+
 spring:
   threads:
     virtual:
@@ -18,17 +18,51 @@ spring:
         server-addr: ${my.server.addr}:8848
     gateway:
       discovery:
-        #动态路由,发现的服务都会自动添加到路由中
         locator:
-          enabled: true
+          enabled: false
       routes:
-        # 订单服务路由 - 将 /oms/** 路径转发到 mall-order 服务
+        # 前台商品展示
+        - id: mall-front
+          uri: lb://mall-front
+          predicates:
+            - Path=/front/**
+        # 订单服务
         - id: mall-order
           uri: lb://mall-order
           predicates:
             - Path=/oms/**
-        # 用户注册路由（前端注册接口需要通过 Gateway 访问）
+        # 搜索服务
+        - id: mall-search
+          uri: lb://mall-search
+          predicates:
+            - Path=/search/**
+        # SSO 登录认证
+        - id: mall-sso
+          uri: lb://mall-sso
+          predicates:
+            - Path=/sso/**,/admin/sso/**,/user/sso/**,/user/info/**
+        # 文件资源
+        - id: mall-resource
+          uri: http://127.0.0.1:9060
+          predicates:
+            - Path=/resource/**,/upload/**
+        # 秒杀服务
+        - id: mall-seckill
+          uri: lb://mall-seckill
+          predicates:
+            - Path=/seckill/**
+        # AI 智能导购
+        - id: mall-ai
+          uri: lb://mall-ai
+          predicates:
+            - Path=/ai/**
+        # 用户注册（仅开放注册和校验接口）
         - id: mall-ums-register
           uri: lb://mall-ums
           predicates:
             - Path=/ums/user/register,/ums/user/checkValue
+        # 后台管理
+        - id: mall-ams
+          uri: lb://mall-ams
+          predicates:
+            - Path=/admin/**

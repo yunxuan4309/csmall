@@ -34,6 +34,11 @@ custom:
 
 cooxiao:
   ai:
+    # 本地开发用 API Key（生产环境通过环境变量注入）
+    api-key: sk-0ac9a54acda34adcab76a79c4a8f2179
+    # 向量检索（硅基流动 BGE-M3，免费）
+    embedding-enabled: true
+    embedding-api-key: sk-pffsuuahmchjczrsmyltgaflkqyaeymcgwtsyrxoswvrnllw
     # 开发阶段放行 sync 接口（Swagger 可直调）
     sync-whitelisted: true
 
