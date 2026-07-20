@@ -15,7 +15,7 @@
     <!-- 当前项目的参数 -->
     <groupId>com.cooxiao.mall</groupId>
     <artifactId>mall-product-webapi</artifactId>
-    <version>1.0.0</version>
+    <version>0.0.1-SNAPSHOT</version>
     <name>mall-product-webapi</name>
     <description>商品管理的Web服务模块</description>
 
@@ -40,7 +40,7 @@
         <dependency>
             <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-ai-service</artifactId>
-            <version>1.0.0</version>
+            <version>${project.version}</version>
         </dependency>
         <!-- Lombok -->
         <dependency>

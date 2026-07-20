@@ -13,7 +13,7 @@
     <!-- 当前项目的参数 -->
     <groupId>com.cooxiao</groupId>
     <artifactId>mall-resource</artifactId>
-    <version>1.0.0</version>
+    <version>0.0.1-SNAPSHOT</version>
     <name>mall-resource</name>
     <description>Mall项目的资源服务（上传文件及文件浏览或下载）</description>
 

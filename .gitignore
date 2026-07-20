@@ -35,3 +35,5 @@ build/
 # 敏感凭据文件（含数据库密码、API Key 等）
 deploy/systemd/csmall.env
 deploy/csmall.env
+deploy/
+deploy/

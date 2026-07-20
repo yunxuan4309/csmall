@@ -15,7 +15,7 @@
     <!-- 当前项目的参数 -->
     <groupId>com.cooxiao.mall</groupId>
     <artifactId>mall-product-service</artifactId>
-    <version>1.0.0</version>
+    <version>0.0.1-SNAPSHOT</version>
     <name>mall-product-service</name>
     <description>商品管理的业务逻辑层，用于定义各业务接口（并不实现）</description>
 

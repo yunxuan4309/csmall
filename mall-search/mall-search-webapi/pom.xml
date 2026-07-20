@@ -14,12 +14,12 @@
         <dependency>
             <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-search-service</artifactId>
-            <version>1.0.0</version>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>com.cooxiao.mall</groupId>
             <artifactId>mall-product-service</artifactId>
-            <version>1.0.0</version>
+            <version>${project.version}</version>
         </dependency>
         <!-- Spring Boot Web：WEB应用 -->
         <dependency>
