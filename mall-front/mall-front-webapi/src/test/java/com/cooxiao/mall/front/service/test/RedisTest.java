@@ -2,6 +2,7 @@ package com.cooxiao.mall.front.service.test;
 
 import com.cooxiao.mall.front.MallFrontWebApiApplication;
 import com.cooxiao.mall.pojo.front.vo.FrontCategoryTreeVO;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,10 +11,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.context.junit4.SpringRunner;
 
 
-/*
-* @RunWith(SpringRunner.class):指定springRunner作为加载Spring应用程序上下文,集成spring测试支持,
-* @SpringBootTest(classes = MallFrontWebApiApplication.class)加载springboot应用程序上下文
-* */
+@Slf4j
 @RunWith(SpringRunner.class)
 @SpringBootTest(classes = MallFrontWebApiApplication.class)
 public class RedisTest {
@@ -26,17 +24,17 @@ public class RedisTest {
         String key="key1";
         FrontCategoryTreeVO frontCategoryTreeVO=new FrontCategoryTreeVO();
         redisTemplate.boundValueOps(key).set(frontCategoryTreeVO);
-        System.out.println(redisTemplate.boundValueOps(key).get());
+        log.info("redis get result: {}", redisTemplate.boundValueOps(key).get());
     }
 
     @Test
     public void saveAndGet(){
         redisTemplate.opsForValue().set("cqjtu:name","lihua");
-        System.out.println(redisTemplate.opsForValue().get("cqjtu:name"));
+        log.info("redis get result: {}", redisTemplate.opsForValue().get("cqjtu:name"));
     }
 
     @Test
     public void testMethods(){
-        System.out.println("testMethod!");
+        log.info("testMethod!");
     }
 }

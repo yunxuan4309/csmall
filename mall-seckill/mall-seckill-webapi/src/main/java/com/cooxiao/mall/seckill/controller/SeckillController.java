@@ -1,6 +1,7 @@
 package com.cooxiao.mall.seckill.controller;
 
 import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.cooxiao.mall.common.annotation.Idempotent;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonResult;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -40,6 +41,7 @@ public class SeckillController {
     @ApiOperation("验证随机码并提交秒杀订单")
     @ApiImplicitParam(value = "随机码",name="randCode",required = true)
     @PreAuthorize("hasRole('user')")
+    @Idempotent(key = "seckill", expire = 3, message = "秒杀订单正在提交中，请勿重复提交")
     @SentinelResource(value = "秒杀订单提交",
             blockHandlerClass = SeckillBlockHandler.class,blockHandler = "seckillBlock",
             fallbackClass = SeckillFallback.class,fallback = "seckillFallback")

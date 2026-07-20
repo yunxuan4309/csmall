@@ -7,6 +7,11 @@ spring:
     nacos:
       discovery:
         server-addr: http://${my.server.addr}:8848
+    sentinel:
+      transport:
+        port: 8876
+        dashboard: 127.0.0.1:8090
+      eager: true
   elasticsearch:
     uris: http://${my.server.addr}:9200
   data:

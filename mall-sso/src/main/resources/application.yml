@@ -40,4 +40,8 @@ knife4j:
     # 用户名，如果开启Basic认证却未配置用户名与密码，默认是：admin/123321
     username: root
     # 密码
-    password: root
+
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId}] %-5level %logger{36} - %msg%n"

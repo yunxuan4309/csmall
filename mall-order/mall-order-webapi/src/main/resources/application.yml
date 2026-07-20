@@ -44,3 +44,8 @@ knife4j:
     username: root
     # 密码
     password: root
+
+# 日志格式：[traceId] 用于全链路追踪
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId}] %-5level %logger{36} - %msg%n"

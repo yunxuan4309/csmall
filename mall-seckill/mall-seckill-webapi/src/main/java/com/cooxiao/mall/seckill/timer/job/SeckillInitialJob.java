@@ -62,7 +62,7 @@ public class SeckillInitialJob implements Job {
         // 用上面5分钟后的时间,去查询秒杀商品
         List<SeckillSpu> seckillSpus=
                 seckillSpuMapper.findSeckillSpusByTime(time);
-        System.out.println(seckillSpus);
+        log.debug("秒杀商品预热列表: {}", seckillSpus);
         // 遍历当前批次所有秒杀商品的spu列表
         for(SeckillSpu spu : seckillSpus){
             // 库存数据是保存在sku中的,所以要根据spu的spuId查询sku列表

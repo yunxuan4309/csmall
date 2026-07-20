@@ -48,6 +48,11 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- Sentinel：流量控制 + 熔断降级 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+        </dependency>
         <!-- Spring Boot：基础框架 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

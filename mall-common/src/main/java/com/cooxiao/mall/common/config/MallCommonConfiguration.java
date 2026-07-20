@@ -11,6 +11,8 @@ import org.springframework.context.annotation.Configuration;
 @ComponentScan({
         "com.cooxiao.mall.common.exception.handler",
         "com.cooxiao.mall.common.utils",
-        "com.cooxiao.mall.common.config"})
+        "com.cooxiao.mall.common.config",
+        "com.cooxiao.mall.common.annotation",
+        "com.cooxiao.mall.common.filter"})
 public class MallCommonConfiguration {
 }

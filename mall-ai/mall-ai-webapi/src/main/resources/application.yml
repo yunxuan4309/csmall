@@ -46,3 +46,8 @@ jwt:
   # JWT的超期限时间(60*60*24)
   expiration: 604800
   tokenHead: Bearer
+
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId}] %-5level %logger{36} - %msg%n"

@@ -61,7 +61,8 @@ public class ResourceWebSecurityConfiguration {
                         "/swagger-resources/**",
                         "/v2/api-docs/**",
                         "/v3/api-docs/**",
-                        "/doc.html").permitAll()
+                        "/doc.html",
+                        "/payment/callback/**").permitAll()
                 .anyRequest().authenticated()
         );
         http.exceptionHandling(exception -> exception

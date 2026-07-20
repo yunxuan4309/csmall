@@ -298,3 +298,194 @@ CREATE TABLE seckill_message_retry (
 
 - [ ] 方案一已选中，面试结束后实施
 - [ ] 面试前不做任何代码修改，避免引入不稳定因素
+
+---
+
+## 9. 【支付模块】支付宝沙箱集成 + 模拟支付
+
+> 创建日期：2026-07-18 | 最后更新：2026-07-19
+> 已实现：支付策略模式 + 支付宝沙箱集成 + 模拟支付开关 + 支付流水记录
+> 沙箱 APPID: 9021000165675647
+> 当前状态：**模拟支付模式已跑通**，真实沙箱支付页面有服务端 bug 无法走完
+
+### 9.1 已实现功能
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 支付策略模式 | ✅ | `PaymentStrategy` 接口 + `PaymentStrategyFactory` 自动路由 |
+| 支付宝沙箱策略 | ✅ | `AlipaySandboxStrategy`：签名、验签、查单全链路已实现 |
+| 模拟支付开关 | ✅ | `alipay.simulated=true` → 跳过支付宝 API，直接支付成功 |
+| 支付流水记录 | ✅ | `oms_payment_record` 表 + MyBatis Mapper |
+| 前端查单接口 | ✅ | `POST /oms/order/pay/query` |
+| 异步回调接口 | ✅ | `POST /payment/callback/alipay/notify`（需公网可达） |
+| PEM 密钥加载 | ✅ | classpath 文件加载，自动剥离 PEM 头尾 |
+| 支付流水表 | ✅ | `database/cs_mall_oms/oms_payment_record.sql` 已执行 |
+
+### 9.2 新增/修改文件清单
+
+**新增（12 个）：**
+| 文件 | 说明 |
+|------|------|
+| `mall-order-webapi/.../payment/PaymentStrategy.java` | 支付策略接口 |
+| `mall-order-webapi/.../payment/PaymentResult.java` | 发起支付返回值 |
+| `mall-order-webapi/.../payment/PaymentCallbackResult.java` | 回调标准化结果 |
+| `mall-order-webapi/.../payment/PaymentStrategyFactory.java` | 策略工厂（自动注册） |
+| `mall-order-webapi/.../payment/AlipayConfig.java` | 支付宝配置（@ConfigurationProperties） |
+| `mall-order-webapi/.../payment/AlipaySandboxStrategy.java` | 支付宝沙箱实现 |
+| `mall-order-webapi/.../mapper/OmsPaymentRecordMapper.java` | 支付流水 Mapper |
+| `mall-order-webapi/.../controller/PaymentCallbackController.java` | 回调接收 | 
+| `mall-pojo/.../model/PaymentRecord.java` | 流水实体 |
+| `mall-pojo/.../enums/PaymentTypeEnum.java` | 支付方式枚举 |
+| `mall-pojo/.../enums/PaymentStatusEnum.java` | 支付状态枚举 |
+| `mall-order-webapi/src/main/resources/alipay_private_key.pem` | 私钥文件 |
+
+**修改（7 个）：**
+| 文件 | 变更 |
+|------|------|
+| `PayOrderVO.java` | 新增 `paymentForm`、`paymentUrl` 字段 |
+| `OmsOrderServiceImpl.java` | 接入策略模式 + 流水记录 + 模拟模式直接完成支付 |
+| `OmsOrderMapper.java/xml` | 新增 `selectOrderBySn()` |
+| `ResourceWebSecurityConfiguration.java` | `/payment/callback/**` 加入白名单 |
+| 根 `pom.xml` | 新增 `alipay-sdk-java` v4.38.200.ALL |
+| `mall-order-webapi/pom.xml` | 引入支付宝 SDK |
+| `application-test.yml` | 支付宝沙箱 + 模拟模式配置 |
+
+**前端修改：**
+| 文件 | 变更 |
+|------|------|
+| `src/api/order.js` | 新增 `queryPayment()` |
+| `src/views/front/order/OrderPay.vue` | 处理 `paymentForm` / `paymentUrl` / 查单按钮 |
+| `src/views/front/order/PayResult.vue` | 新建，支付结果落地页 |
+| `src/router/index.js` | 新增 `/pay-result` 路由 |
+
+### 9.3 支付宝新沙箱踩坑记录（重要！）
+
+**沙箱环境**：`openapi-sandbox.dl.alipaydev.com`（新沙箱，与旧 `openapi.alipaydev.com` 不同）
+
+**后端 API 层面**：调用全部成功，签名验签正确。遇到的坑：
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| YAML 多行字符串 PEM 密钥解码失败 | Java `InvalidKeyException: Unable to decode key` — YAML `\|` 可能引入不可见字符 | 私钥改为 classpath 文件加载 (`alipay_private_key.pem`)，代码剥离 PEM 头后传裸 base64 给 SDK |
+| 支付宝公钥验签失败 | 同上 — SDK 的 `getPublicKeyFromX509` 不处理 PEM 头 | `cleanPemKey()` 统一剥离公钥/私钥 PEM 头尾 |
+| 旧沙箱网关 SSL 证书过期 | `openapi.alipaydev.com` 被弃用 | 只能使用新沙箱 |
+| `precreate`（当面付扫码）504 | 沙箱不支持当面付产品 | 放弃，用 `page.pay` |
+| `wap.pay`（手机网站）500 | 沙箱支付页面挂了 | 放弃，用 `page.pay` |
+
+**支付宝沙箱支付页面前端 bug**（支付宝服务端问题，非我们代码问题）：
+
+| 问题 | 具体表现 | 影响 |
+|------|---------|------|
+| `document.domain` 不匹配 | `Failed to set the 'domain' property: 'alipay.com' is not a suffix of 'cashier-sandbox.dl.alipaydev.com'` | 支付页面 JS 逻辑断裂，无法正常交互 |
+| 内网域名泄露 | 页面引用 `stable.alipay.net`、`seccliprod.stable.alipay.net`、`umidprod.stable.alipay.net` 等内网资源 | 公网 DNS 不解析 → 风控/安全校验 JS 加载失败 → 支付被拦截 |
+| 混合内容 | HTTPS 页面加载 HTTP 脚本/图片 | 被 Chrome/Edge 拦截 → 关键 JS 缺失 |
+| 支付提交 502 | `POST expressFastPayFrom.json` 返回 502 | 支付核心服务不可用 |
+
+**结论**：API 集成正确（5 次不同方式调用，后端均返回成功），问题出在支付宝沙箱**前端支付页面**有 JS 兼容性 bug + 内网资源泄露。这不是我们能修复的。
+
+### 9.4 妥协方案：模拟支付模式
+
+在 `application-test.yml` 中配置：
+
+```yaml
+alipay:
+  simulated: true   # true=模拟支付（开发测试），false=真实支付宝（生产）
+```
+
+**模拟模式行为**：
+- `AlipaySandboxStrategy.initiatePayment()` → 跳过 API，返回模拟交易号
+- `OmsOrderServiceImpl.payOrder()` → 检测无 `paymentForm`/`paymentUrl` → 直接更新订单状态为"已支付"
+- 支付流水记录中 `paymentStatus=SUCCESS`、`tradeNo=SIMxxxxxx`
+
+**当前配置**：`simulated: true`（test profile）
+
+### 9.5 开启真实支付的计划
+
+当以下任一条件满足时，将 `simulated` 改为 `false` 即可启用真实支付宝：
+
+**方案 A：支付宝修复沙箱（无需改代码）**
+1. 等待支付宝修复新沙箱支付页面的 JS/网络问题
+2. `simulated: false` + 重启 → 真实支付即可工作
+
+**方案 B：切换到生产环境（需 APPID + 商户签约）**
+1. 申请正式支付宝商户账号，完成签约
+2. 获取正式 APPID 和密钥
+3. 修改 `application-prod.yml` 中的 `alipay.*` 配置
+4. `gateway` 改为 `https://openapi.alipay.com/gateway.do`
+5. `simulated: false`
+6. 验证生产支付 → 上线
+
+**方案 C：使用旧沙箱（如果支付宝重新启用）**
+1. 如果旧沙箱恢复：`gateway` 改回 `https://openapi.alipaydev.com/gateway.do`
+2. `simulated: false` + 重启
+
+### 9.6 待办
+
+**高优先级：**
+- [ ] 微信支付模拟策略（`WechatPaySimulationStrategy implements PaymentStrategy`，遵循微信 API 契约）
+- [ ] 当沙箱修复/商户签约后，`simulated: false` 开启真实支付
+
+**中优先级：**
+- [ ] 前端：支付结果页面完善（扫码支付后的查单体验优化）
+- [ ] 接入 ngrok 回调，实现实时异步通知
+- [ ] 支付流水表加 `refund_*` 退款支持
+
+**低优先级：**
+- [ ] 将支付宝密钥移到 `csmall.env` 环境变量（生产部署时）
+- [x] ~~执行建表 SQL~~（已完成 2026-07-19）
+- [x] ~~PEM 密钥加载问题~~（已解决：classpath 文件 + cleanPemKey）
+- [x] ~~SDK 签名验签问题~~（已解决：PEM 头剥离）
+
+---
+
+## 10. 【可观测性】SkyWalking 链路追踪接入记录
+
+> 接入日期：2026-07-20
+> 当前已接入：mall-gateway、mall-order、mall-product
+
+### 10.1 已接入模块
+
+| 模块 | Agent 名称 | 状态 |
+|------|-----------|------|
+| mall-gateway-server | mall-gateway | ✅ 已接入 |
+| mall-order | mall-order | ✅ 已接入 |
+| mall-product | mall-product | ✅ 已接入 |
+
+### 10.2 其余模块接入方法
+
+每个模块只需要在 IDEA Run Configuration 的 VM options 中加一行：
+
+```
+-javaagent:D:/java/csmall/deploy/skywalking/skywalking-agent/skywalking-agent.jar
+-DSW_AGENT_NAME=模块名
+-DSW_AGENT_COLLECTOR_BACKEND_SERVICES=localhost:11800
+```
+
+**其余模块接入清单**：
+
+| 模块 | SW_AGENT_NAME | 优先级 | 建议 |
+|------|--------------|--------|------|
+| mall-front | mall-front | 中 | 前台展示，加不加都行 |
+| mall-search | mall-search | 中 | ES 搜索，加不加都行 |
+| mall-seckill | mall-seckill | 高 | 秒杀核心链路，建议加 |
+| mall-ai | mall-ai | 低 | AI 对话，链比较简单 |
+| mall-ums | mall-ums | 低 | 用户管理，无外部调用 |
+| mall-ams | mall-ams | 低 | 后台管理，无外部调用 |
+| mall-sso | mall-sso | 中 | 登录入口，可加 |
+| mall-resource | mall-resource | 低 | 文件服务，链简单 |
+
+**操作**：打开 IDEA → Run → Edit Configurations → 选对应模块 → Modify options → Add VM options → 粘贴上面三行（改 SW_AGENT_NAME 为对应名称）→ 重启。
+
+### 10.3 启动顺序（重要！）
+
+必须先启动 SkyWalking OAP + UI，再启动微服务。否则 Agent 连接 OAP 超时会拖慢启动。
+
+```
+1. start-skywalking.bat（或 IDEA Shell Script 启动）
+2. 等待 OAP（11800）和 UI（8088）端口就绪
+3. 启动各微服务
+```
+
+### 10.4 Docker 部署方案
+
+见 `部署注意文档.md` 第三章，已包含 SkyWalking OAP + UI 的 Docker compose 配置和微服务 Agent 挂载方式。

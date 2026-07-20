@@ -24,6 +24,16 @@ spring:
     nacos:
       discovery:
         server-addr: ${my.server.addr}:8848
+    sentinel:
+      transport:
+        port: 8872
+        dashboard: 127.0.0.1:8090
+      eager: true
+  rabbitmq:
+    host: ${my.server.addr}
+    port: 5672
+    username: guest
+    password: guest
   data:
     redis:
       port: 6379
@@ -53,3 +63,32 @@ seata:
   client:
     undo:
       log-serialization: jackson
+
+# ==================== 支付宝沙箱配置 ====================
+# 使用前请先到 https://open.alipay.com → 控制台 → 研发服务 → 沙箱环境 获取参数
+# 1. APP_ID：沙箱应用自动分配的 APPID
+# 2. merchant-private-key：使用 openssl 生成 RSA2 密钥对的 PKCS#8 格式私钥
+# 3. alipay-public-key：将公钥上传到沙箱平台后，平台生成的支付宝公钥
+# 4. notify-url：支付宝异步通知地址，必须公网可访问（本地开发用 ngrok/natapp 穿透）
+#    - ngrok: ngrok http 10005 → 得到 https://xxx.ngrok.io
+#    - 配置为: https://xxx.ngrok.io/payment/callback/alipay/notify
+alipay:
+  app-id: 9021000165675647
+  gateway: https://openapi-sandbox.dl.alipaydev.com/gateway.do
+  merchant-private-key-path: alipay_private_key.pem
+  alipay-public-key: |
+    -----BEGIN PUBLIC KEY-----
+    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAj4gha7CbT1fJTIyPBjuz
+    Rt1/UVoiZ4qmbbzTNJ6Nb0GwK/tw0nIYijqlG1iR/jA63kkR4QPw7/4pshM2hGyW
+    As9nkeNV4ADofch4AyesGAUiBbfIq7pwIx+zPFTPcmOo02wogmdh+BjUGsm0fzRA
+    normO2DhvcRNFNhLM+JmbDImwfPBs0nUMbArkcba6mZvOc4pxJudcJlSgDhxVCEq
+    SDfSEYn8AhQ5N3deT7W5z9T/tJNwm7GcTq0NB+AYvqTbscqIDcTzlTZN2tq2MCet
+    5fZyr2/tkQWUKiNFfqx28/c5I6vIyjttHUMgGfHjgAWaowMLahkAqY/bNjAFWPLD
+    nwIDAQAB
+    -----END PUBLIC KEY-----
+  notify-url: http://localhost:10005/payment/callback/alipay/notify
+  return-url: http://localhost:5173/pay-result
+  sign-type: RSA2
+  charset: UTF-8
+  format: json
+  simulated: true

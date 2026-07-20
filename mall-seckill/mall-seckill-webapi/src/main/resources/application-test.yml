@@ -24,7 +24,7 @@ spring:
     sentinel:
       transport:
         port: 8870
-        dashboard: 127.0.0.1:8080
+        dashboard: 127.0.0.1:8090
   data:
     redis:
       # ${my.server.addr}；192.168.137.150

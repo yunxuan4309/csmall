@@ -1,4 +1,6 @@
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId}] %-5level %logger{36} - %msg%n"
   level:
     com.cooxiao.mall: trace
 server:
@@ -48,3 +50,4 @@ knife4j:
     username: root
     # 密码
     password: root
+

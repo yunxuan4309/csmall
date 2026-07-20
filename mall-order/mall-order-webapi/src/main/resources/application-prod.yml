@@ -67,3 +67,15 @@ knife4j:
 logging:
   level:
     com.cooxiao.mall: info
+
+# ==================== 支付宝配置（生产环境） ====================
+alipay:
+  app-id: ${ALIPAY_APP_ID:}
+  gateway: https://openapi.alipay.com/gateway.do
+  merchant-private-key: ${ALIPAY_PRIVATE_KEY:}
+  alipay-public-key: ${ALIPAY_PUBLIC_KEY:}
+  notify-url: ${ALIPAY_NOTIFY_URL:}
+  return-url: ${ALIPAY_RETURN_URL:}
+  sign-type: RSA2
+  charset: UTF-8
+  format: json

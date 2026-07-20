@@ -38,6 +38,11 @@ spring:
     nacos:
       discovery:
         server-addr: ${my.server.addr}:8848
+    sentinel:
+      transport:
+        port: 8873
+        dashboard: 127.0.0.1:8090
+      eager: true
   application:
     name: mall-product
 dubbo:

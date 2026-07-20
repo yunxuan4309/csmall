@@ -12,6 +12,7 @@ public enum ResponseCode {
     NOT_FOUND(404),
     NOT_ACCEPTABLE(406),
     CONFLICT(409),
+    TOO_MANY_REQUESTS(429),
     INTERNAL_SERVER_ERROR(500);
 
     private Integer value;

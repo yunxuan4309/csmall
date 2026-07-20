@@ -8,6 +8,12 @@ import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
 import com.cooxiao.mall.order.mapper.OmsOrderItemMapper;
 import com.cooxiao.mall.order.mapper.OmsOrderMapper;
+import com.cooxiao.mall.order.mapper.OmsPaymentRecordMapper;
+import com.cooxiao.mall.order.mq.OrderItemMessage;
+import com.cooxiao.mall.order.mq.OrderQueueConfig;
+import com.cooxiao.mall.order.payment.PaymentCallbackResult;
+import com.cooxiao.mall.order.payment.PaymentResult;
+import com.cooxiao.mall.order.payment.PaymentStrategyFactory;
 import com.cooxiao.mall.order.service.IOmsCartService;
 import com.cooxiao.mall.order.service.IOmsOrderService;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
@@ -16,19 +22,21 @@ import com.cooxiao.mall.pojo.order.dto.OrderItemAddDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderListTimeDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderStateUpdateDTO;
 import com.cooxiao.mall.pojo.order.dto.PayOrderDTO;
+import com.cooxiao.mall.pojo.order.enums.PaymentStatusEnum;
+import com.cooxiao.mall.pojo.order.enums.PaymentTypeEnum;
 import com.cooxiao.mall.pojo.order.model.OmsCart;
 import com.cooxiao.mall.pojo.order.model.OmsOrder;
 import com.cooxiao.mall.pojo.order.model.OmsOrderItem;
+import com.cooxiao.mall.pojo.order.model.PaymentRecord;
 import com.cooxiao.mall.pojo.order.vo.OrderAddVO;
 import com.cooxiao.mall.pojo.order.vo.OrderDetailVO;
 import com.cooxiao.mall.pojo.order.vo.OrderItemListVO;
 import com.cooxiao.mall.pojo.order.vo.OrderListVO;
 import com.cooxiao.mall.pojo.order.vo.PayOrderVO;
-import com.cooxiao.mall.product.service.order.IForOrderSkuService;
-import org.apache.seata.spring.annotation.GlobalTransactional;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.apache.dubbo.config.annotation.DubboService;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -52,20 +60,21 @@ import java.util.UUID;
 @Slf4j
 public class OmsOrderServiceImpl implements IOmsOrderService {
 
-    // Dubbo调用product模块减少库存的方法
-    @DubboReference
-    private IForOrderSkuService dubboSkuService;
     @Autowired
     private IOmsCartService omsCartService;
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
     @Autowired
     private OmsOrderMapper omsOrderMapper;
     @Autowired
     private OmsOrderItemMapper omsOrderItemMapper;
+    @Autowired
+    private OmsPaymentRecordMapper paymentRecordMapper;
+    @Autowired
+    private PaymentStrategyFactory paymentStrategyFactory;
 
-    // 新增订单的方法
-    // 这个方法因为会dubbo调用product模块减少库存的功能
-    // 所以操作的数据库,有分布式事务的需求,需要用seata保证数据完整性
-    @GlobalTransactional
+    // 新增订单的方法。
+    // 库存扣减改为 MQ 异步处理，不再需要 @GlobalTransactional。
     @Override
     public OrderAddVO addOrder(OrderAddDTO orderAddDTO) {
         // 第一部分:信息的收集
@@ -85,49 +94,39 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
                     ResponseCode.BAD_REQUEST,"订单中至少包含一件商品");
         }
         // 最终实现新增订单项集合到数据库的集合类型是List<OmsOrderItem>
-        // 我们要做的是将上面集合中所有元素转换为OmsOrderItem类型,然后新增到下面集合中
-        // 所以实例化OmsOrderItem这个类型的集合
         List<OmsOrderItem> omsOrderItems=new ArrayList<>();
-        // 遍历前端传入的集合,也就是DTO泛型的集合
+        // MQ 消息体：异步扣减库存时使用
+        List<OrderItemMessage> orderItemMessages=new ArrayList<>();
+        // 遍历前端传入的集合
         for(OrderItemAddDTO addDTO : orderItems){
-            // 先实例化OmsOrderItem对象
             OmsOrderItem omsOrderItem=new OmsOrderItem();
-            // 将正在遍历的addDTO的同名属性赋值到omsOrderItem中
             BeanUtils.copyProperties(addDTO,omsOrderItem);
-            // 将addDTO中没有的属性(id和orderId)赋值
-            // id由MyBatis-Plus IdWorker生成
             Long itemId= IdWorker.getId();
             omsOrderItem.setId(itemId);
-            // orderId属性直接中order对象中获取
             omsOrderItem.setOrderId(order.getId());
-            // 将补全所有属性的omsOrderItem对象添加到循环前声明的集合中
             omsOrderItems.add(omsOrderItem);
-            // 第二部分:数据库操作
-            // 1.库存减少
-            // 将正在遍历的对象关联的skuId库存,减少用户要购买的数量
-            // 先获取skuId
-            Long skuId=omsOrderItem.getSkuId();
-            // dubbo调用product模块写好的减少库存的方法
-            int rows=dubboSkuService
-                    .reduceStockNum(skuId,omsOrderItem.getQuantity());
-            if(rows==0){
-                // 上面库存的修改没有影响数据库的话,就是库存不足的情况了
-                log.error("商品库存不足,skuId:{}",skuId);
-                // 抛出异常,终止流程,同时触发seata分布式事务回滚
-                throw new CoolSharkServiceException(
-                        ResponseCode.BAD_REQUEST,"库存不足");
-            }
-            // 2.删除用户在购物车中购物车中勾选的商品
+
+            // 收集 MQ 消息（库存扣减改为异步）
+            OrderItemMessage msg = new OrderItemMessage();
+            msg.setSkuId(omsOrderItem.getSkuId());
+            msg.setQuantity(omsOrderItem.getQuantity());
+            msg.setOrderItemId(itemId);
+            orderItemMessages.add(msg);
+
+            // 删除用户在购物车中勾选的商品
             OmsCart omsCart=new OmsCart();
             omsCart.setUserId(order.getUserId());
-            omsCart.setSkuId(skuId);
-            // 执行删除
+            omsCart.setSkuId(omsOrderItem.getSkuId());
             omsCartService.removeUserCarts(omsCart);
         }
         // 3.执行新增订单
         omsOrderMapper.insertOrder(order);
         // 4.执行新增订单项
         omsOrderItemMapper.insertOrderItemList(omsOrderItems);
+        // 5.发送 MQ 消息，异步扣减库存（削峰填谷）
+        rabbitTemplate.convertAndSend(
+                OrderQueueConfig.ORDER_EX, OrderQueueConfig.ORDER_RK, orderItemMessages);
+        log.info("订单 {} 已发送库存扣减消息，共 {} 件商品", order.getSn(), orderItemMessages.size());
         // 第三部分:收集需要的返回值
         // 实例化返回值类型对象,为其赋值,最后返回
         OrderAddVO addVO=new OrderAddVO();
@@ -255,44 +254,124 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
             throw new CoolSharkServiceException(ResponseCode.FORBIDDEN, "无权操作此订单");
         }
 
-        // ========== 支付渠道处理 ==========
-        // 根据paymentType走不同的支付流程
-        // 当前版本：所有渠道均模拟支付成功
-        // 后续版本：根据paymentType调用对应的支付SDK
-        //   paymentType=1 → 微信支付
-        //   paymentType=2 → 支付宝支付
-        //   paymentType=0 → 银联支付
+        // 4.确定支付方式
         Integer paymentType = payOrderDTO.getPaymentType();
         if (paymentType == null) {
-            // 如果未指定支付方式，使用订单创建时选择的方式
             paymentType = order.getPaymentType();
             if (paymentType == null) {
                 paymentType = 0;
             }
         }
-        // TODO 后续接入真实支付：根据paymentType调用微信/支付宝/银联支付接口
-        // if (paymentType == 1) { 微信支付逻辑 }
-        // if (paymentType == 2) { 支付宝支付逻辑 }
-        // 当前直接模拟支付成功
 
-        // 4.更新订单状态为已支付(3)，设置支付时间和支付方式
+        // 5.通过策略工厂获取对应支付渠道，发起支付
+        PaymentResult result = paymentStrategyFactory.getStrategy(paymentType)
+                .initiatePayment(order);
+
+        if (!result.getSuccess()) {
+            throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR,
+                    "支付发起失败: " + result.getErrorMsg());
+        }
+
+        boolean simulated = result.getPaymentForm() == null && result.getPaymentUrl() == null;
+
+        // 6.记录支付流水
+        PaymentRecord record = new PaymentRecord();
+        record.setId(IdWorker.getId());
+        record.setOrderId(order.getId());
+        record.setOrderSn(order.getSn());
+        record.setUserId(order.getUserId());
+        record.setPaymentType(paymentType);
+        record.setPayAmount(order.getAmountOfActualPay());
+        record.setTradeNo(result.getTradeNo());
+        record.setOutTradeNo(result.getOutTradeNo());
+        record.setPaymentStatus(simulated ? PaymentStatusEnum.SUCCESS.getCode() : PaymentStatusEnum.PENDING.getCode());
+        record.setGmtRequest(LocalDateTime.now());
+        if (simulated) {
+            record.setGmtPayment(LocalDateTime.now());
+        }
+        record.setGmtCreate(LocalDateTime.now());
+        paymentRecordMapper.insertRecord(record);
+
+        // 7.更新订单
         OmsOrder updateOrder = new OmsOrder();
         updateOrder.setId(order.getId());
-        updateOrder.setState(3); // 已支付
-        updateOrder.setGmtPay(LocalDateTime.now()); // 支付时间
-        updateOrder.setPaymentType(paymentType); // 支付方式
+        updateOrder.setPaymentType(paymentType);
+        if (simulated) {
+            updateOrder.setState(3);
+            updateOrder.setGmtPay(LocalDateTime.now());
+        }
         omsOrderMapper.updateOrderById(updateOrder);
 
-        // 5.查询更新后的订单信息并返回
-        OmsOrder updatedOrder = omsOrderMapper.selectOrderById(order.getId());
+        // 8.组装返回结果
         PayOrderVO payOrderVO = new PayOrderVO();
-        payOrderVO.setId(updatedOrder.getId());
-        payOrderVO.setSn(updatedOrder.getSn());
-        payOrderVO.setPaymentType(updatedOrder.getPaymentType());
-        payOrderVO.setPayAmount(updatedOrder.getAmountOfActualPay());
-        payOrderVO.setGmtPay(updatedOrder.getGmtPay());
-        payOrderVO.setState(updatedOrder.getState());
+        payOrderVO.setId(order.getId());
+        payOrderVO.setSn(order.getSn());
+        payOrderVO.setPaymentType(paymentType);
+        payOrderVO.setPayAmount(order.getAmountOfActualPay());
+        payOrderVO.setState(simulated ? 3 : order.getState());
+        payOrderVO.setPaymentForm(result.getPaymentForm());
+        payOrderVO.setPaymentUrl(result.getPaymentUrl());
         return payOrderVO;
+    }
+
+    /**
+     * 处理支付回调，更新订单状态和支付流水。
+     * 由 PaymentCallbackController 调用，不对外暴露。
+     */
+    public void handlePaymentCallback(PaymentCallbackResult callbackResult) {
+        if (!callbackResult.getVerified()) {
+            log.warn("支付回调验签失败，忽略处理");
+            return;
+        }
+        if (callbackResult.getTradeNo() == null && callbackResult.getOutTradeNo() == null) {
+            return;
+        }
+
+        // 1.根据商户订单号查找订单
+        OmsOrder order = null;
+        PaymentRecord record = null;
+        if (callbackResult.getOutTradeNo() != null) {
+            order = omsOrderMapper.selectOrderBySn(callbackResult.getOutTradeNo());
+        }
+        if (order == null && callbackResult.getTradeNo() != null) {
+            record = paymentRecordMapper.selectByTradeNo(callbackResult.getTradeNo());
+            if (record != null) {
+                order = omsOrderMapper.selectOrderById(record.getOrderId());
+            }
+        }
+        if (order == null) {
+            log.error("支付回调找不到对应订单，outTradeNo: {}, tradeNo: {}",
+                    callbackResult.getOutTradeNo(), callbackResult.getTradeNo());
+            return;
+        }
+
+        // 2.幂等检查：已支付的订单不再处理
+        if (order.getState() == 3) {
+            log.info("订单已支付，忽略重复回调，订单号: {}", order.getSn());
+            return;
+        }
+
+        // 3.更新订单状态
+        OmsOrder updateOrder = new OmsOrder();
+        updateOrder.setId(order.getId());
+        updateOrder.setState(3);
+        updateOrder.setGmtPay(callbackResult.getGmtPayment() != null
+                ? callbackResult.getGmtPayment() : LocalDateTime.now());
+        omsOrderMapper.updateOrderById(updateOrder);
+
+        // 4.更新支付流水
+        if (record == null) {
+            record = paymentRecordMapper.selectByOrderId(order.getId());
+        }
+        if (record != null) {
+            record.setPaymentStatus(PaymentStatusEnum.SUCCESS.getCode());
+            record.setTradeNo(callbackResult.getTradeNo());
+            record.setGmtPayment(callbackResult.getGmtPayment() != null
+                    ? callbackResult.getGmtPayment() : LocalDateTime.now());
+            record.setBuyerInfo(callbackResult.getBuyerInfo());
+            record.setCallbackLog(callbackResult.getRawData());
+            paymentRecordMapper.updateRecordById(record);
+        }
     }
 
     @Override

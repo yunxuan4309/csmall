@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cooxiao.mall.order.mapper.OmsPaymentRecordMapper">
+
+    <resultMap id="BaseResultMap" type="com.cooxiao.mall.pojo.order.model.PaymentRecord">
+        <id column="id" property="id" />
+        <result column="order_id" property="orderId" />
+        <result column="order_sn" property="orderSn" />
+        <result column="user_id" property="userId" />
+        <result column="payment_type" property="paymentType" />
+        <result column="pay_amount" property="payAmount" />
+        <result column="trade_no" property="tradeNo" />
+        <result column="out_trade_no" property="outTradeNo" />
+        <result column="payment_status" property="paymentStatus" />
+        <result column="buyer_info" property="buyerInfo" />
+        <result column="callback_log" property="callbackLog" />
+        <result column="refund_amount" property="refundAmount" />
+        <result column="refund_trade_no" property="refundTradeNo" />
+        <result column="extra_data" property="extraData" />
+        <result column="gmt_request" property="gmtRequest" />
+        <result column="gmt_payment" property="gmtPayment" />
+        <result column="gmt_create" property="gmtCreate" />
+        <result column="gmt_modified" property="gmtModified" />
+    </resultMap>
+
+    <insert id="insertRecord">
+        INSERT INTO oms_payment_record(
+            id, order_id, order_sn, user_id, payment_type, pay_amount,
+            trade_no, out_trade_no, payment_status, buyer_info, extra_data,
+            gmt_request, gmt_create
+        ) VALUES (
+            #{id}, #{orderId}, #{orderSn}, #{userId}, #{paymentType}, #{payAmount},
+            #{tradeNo}, #{outTradeNo}, #{paymentStatus}, #{buyerInfo}, #{extraData},
+            #{gmtRequest}, #{gmtCreate}
+        )
+    </insert>
+
+    <select id="selectByOrderId" resultMap="BaseResultMap">
+        SELECT * FROM oms_payment_record WHERE order_id = #{orderId}
+    </select>
+
+    <select id="selectByTradeNo" resultMap="BaseResultMap">
+        SELECT * FROM oms_payment_record WHERE trade_no = #{tradeNo}
+    </select>
+
+    <update id="updateRecordById">
+        UPDATE oms_payment_record
+        <set>
+            <if test="tradeNo != null">trade_no = #{tradeNo},</if>
+            <if test="outTradeNo != null">out_trade_no = #{outTradeNo},</if>
+            <if test="paymentStatus != null">payment_status = #{paymentStatus},</if>
+            <if test="buyerInfo != null">buyer_info = #{buyerInfo},</if>
+            <if test="callbackLog != null">callback_log = #{callbackLog},</if>
+            <if test="refundAmount != null">refund_amount = #{refundAmount},</if>
+            <if test="refundTradeNo != null">refund_trade_no = #{refundTradeNo},</if>
+            <if test="extraData != null">extra_data = #{extraData},</if>
+            <if test="gmtPayment != null">gmt_payment = #{gmtPayment},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+</mapper>

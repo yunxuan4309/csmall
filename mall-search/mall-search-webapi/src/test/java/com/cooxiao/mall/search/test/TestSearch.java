@@ -3,11 +3,13 @@ package com.cooxiao.mall.search.test;
 import com.cooxiao.mall.pojo.search.entity.SpuForElastic;
 import com.cooxiao.mall.search.repository.SpuForElasticRepository;
 import com.cooxiao.mall.search.service.ISearchService;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 
+@Slf4j
 @SpringBootTest
 public class TestSearch {
 
@@ -19,7 +21,7 @@ public class TestSearch {
     @Test
     void loadData(){
         searchService.loadSpuByPage();
-        System.out.println("ok");
+        log.info("数据加载完成");
     }
 
     @Autowired
@@ -27,7 +29,7 @@ public class TestSearch {
     @Test
     void showData(){
         Iterable<SpuForElastic> spus=spuRepository.findAll();
-        spus.forEach(spu -> System.out.println(spu));
+        spus.forEach(spu -> log.info("spu: {}", spu));
     }
 
     // 自定义查询
@@ -35,13 +37,13 @@ public class TestSearch {
     void queryTitle(){
         Iterable<SpuForElastic> spus=
                 spuRepository.querySpuForElasticsByTitleMatches("手机");
-        spus.forEach(spu -> System.out.println(spu));
+        spus.forEach(spu -> log.info("queryTitle result: {}", spu));
     }
 
     @Test
     void querySearch(){
         Iterable<SpuForElastic> spus=spuRepository.querySearch("手机");
-        spus.forEach(spu -> System.out.println(spu));
+        spus.forEach(spu -> log.info("querySearch result: {}", spu));
     }
 
 }

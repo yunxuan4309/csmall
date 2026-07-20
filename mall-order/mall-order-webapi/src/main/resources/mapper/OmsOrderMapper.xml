@@ -225,4 +225,9 @@
         SELECT * FROM oms_order WHERE id=#{id}
     </select>
 
+    <!-- 根据订单编号查询订单详情 -->
+    <select id="selectOrderBySn" resultMap="BaseResultMap">
+        SELECT * FROM oms_order WHERE sn=#{sn}
+    </select>
+
 </mapper>

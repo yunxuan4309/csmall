@@ -72,6 +72,24 @@
             <version>3.3.2</version>
             <scope>provided</scope>
         </dependency>
+        <!-- Spring AOP：幂等性 @Idempotent 注解需要（optional） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- Spring Security：幂等性切面获取当前用户需要（optional） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- Spring Data Redis：幂等性注解需要（optional，仅Redis可用时生效） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+            <optional>true</optional>
+        </dependency>
         <!-- Apache Seata：用于Seata XID传播Filter (provided，由各webapi模块传递) -->
         <dependency>
             <groupId>org.apache.seata</groupId>

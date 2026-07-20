@@ -136,7 +136,7 @@ public class PictureUploadUtils {
 
     public static String generatorPath(String prefix) {
         String baseStr = UUID.randomUUID().toString();//一般生成36个字符的字符串
-        System.out.println(baseStr);
+        log.debug("generated UUID: {}", baseStr);
         StringBuffer pathBuilder = new StringBuffer();
         pathBuilder.append("/");
         pathBuilder.append(prefix);
