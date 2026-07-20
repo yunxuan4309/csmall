@@ -20,5 +20,5 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Compile
-        run: mvn compile -B -T 4
+      - name: Build
+        run: mvn install -B -T 4 -DskipTests
