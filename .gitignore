@@ -32,8 +32,23 @@ build/
 ### VS Code ###
 .vscode/
 
-# 敏感凭据文件（含数据库密码、API Key 等）
-deploy/systemd/csmall.env
-deploy/csmall.env
+### 日志文件 ###
+*.log
+logs/
+
+### 密钥文件（决不能提交！） ###
+*.pem
+
+### 部署包（大文件，本地使用） ###
 deploy/
-deploy/
+
+### 操作系统 ###
+.DS_Store
+Thumbs.db
+desktop.ini
+
+### 临时文件 ###
+*.tmp
+*.bak
+*.swp
+*~

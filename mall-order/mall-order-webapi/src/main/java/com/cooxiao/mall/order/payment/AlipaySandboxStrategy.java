@@ -35,6 +35,10 @@ public class AlipaySandboxStrategy implements PaymentStrategy {
 
     @PostConstruct
     public void init() {
+        if (Boolean.TRUE.equals(alipayConfig.getSimulated())) {
+            log.info("支付宝模拟模式，跳过 AlipayClient 初始化");
+            return;
+        }
         String privateKey = resolvePrivateKey();
         String publicKey = cleanPemKey(alipayConfig.getAlipayPublicKey());
         this.alipayClient = new DefaultAlipayClient(
