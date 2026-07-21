@@ -41,9 +41,9 @@
         <java.version>21</java.version>
         <mall-pojo.version>0.0.1-SNAPSHOT</mall-pojo.version>
         <mall-common.version>0.0.1-SNAPSHOT</mall-common.version>
-        <mall-mapper.version>1.0.0</mall-mapper.version>
-        <mall-service.version>1.0.0</mall-service.version>
-        <mall-product-service.version>1.0.0</mall-product-service.version>
+        <mall-mapper.version>0.0.1-SNAPSHOT</mall-mapper.version>
+        <mall-service.version>0.0.1-SNAPSHOT</mall-service.version>
+        <mall-product-service.version>0.0.1-SNAPSHOT</mall-product-service.version>
         <spring-cloud.version>2023.0.3</spring-cloud.version> <!-- 修改：使用阿里云镜像中可用的兼容Spring Boot 3.2.5的Spring Cloud版本 -->
         <spring-cloud-alibaba.version>2023.0.1.2</spring-cloud-alibaba.version> <!-- 修改：使用已知可用的兼容Spring Boot 3.2.5的版本 -->
         <spring-boot.version>3.2.5</spring-boot.version> <!-- 修改：统一为3.2.5，保持版本一致性 -->
