@@ -56,6 +56,16 @@
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
         </dependency>
+
+        <!-- Flyway：数据库版本管理 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
         <!-- HikariCP：Spring Boot 自带连接池，高性能，无需额外引入 -->
         <!-- MyBatis-Plus Spring Boot3 启动器 -->
         <dependency>

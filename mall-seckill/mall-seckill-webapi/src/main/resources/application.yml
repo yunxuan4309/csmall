@@ -1,6 +1,10 @@
 server:
   port: 10007
 spring:
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
   profiles:
     active: test
 

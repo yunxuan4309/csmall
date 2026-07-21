@@ -1,6 +1,10 @@
 server:
   port: 10006
 spring:
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
   servlet:
     multipart:
       max-file-size: 10MB

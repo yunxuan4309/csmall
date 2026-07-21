@@ -7,6 +7,10 @@ server:
       charset: UTF-8
 # Spring相关配置
 spring:
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
   # 控制器配置
   servlet:
     multipart:

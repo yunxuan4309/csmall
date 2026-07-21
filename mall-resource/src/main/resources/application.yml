@@ -8,6 +8,10 @@ server:
 
 # Spring相关配置
 spring:
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
   # WEB配置
   web:
     # 资源配置
