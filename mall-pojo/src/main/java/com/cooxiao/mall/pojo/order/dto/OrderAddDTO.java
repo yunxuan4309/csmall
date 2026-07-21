@@ -1,6 +1,8 @@
 package com.cooxiao.mall.pojo.order.dto;
 
+import com.cooxiao.mall.common.serializer.PhoneDesensitizeSerializer;
 import com.cooxiao.mall.pojo.valid.order.OrderRegExpression;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
@@ -30,6 +32,7 @@ public class OrderAddDTO implements OrderRegExpression,Serializable {
     @ApiModelProperty(value="联系电话",notes="冗余，历史",example = "13800138001",required = true)
     @NotNull(message = VALIDATE_MESSAGE_PREFIX+"请填写电话号码")
     @Pattern(regexp = REGEXP_MOBILE_PHONE,message = MESSAGE_MOBILE_PHONE)
+    @JsonSerialize(using = PhoneDesensitizeSerializer.class)
     private String mobilePhone;
 
     /**

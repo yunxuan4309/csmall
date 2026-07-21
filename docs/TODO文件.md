@@ -489,3 +489,36 @@ alipay:
 ### 10.4 Docker 部署方案
 
 见 `部署注意文档.md` 第三章，已包含 SkyWalking OAP + UI 的 Docker compose 配置和微服务 Agent 挂载方式。
+
+---
+
+## 11. 【演示压测】JMeter + Sentinel + SkyWalking 联合演示
+
+> 创建日期：2026-07-20
+> 状态：待实施
+
+### 目的
+
+面试演示场景：用 JMeter 压秒杀接口 → Sentinel 限流触发 → SkyWalking 实时展示流量尖峰和调用链。
+
+### 步骤
+
+1. **安装 JMeter**
+   - 下载: https://jmeter.apache.org/download_jmeter.cgi (~50MB)
+   - 解压到本地任意目录
+
+2. **编写压测脚本**
+   - 创建 Thread Group（1000 线程，循环 10 次）
+   - HTTP Request 指向 `POST /seckill/commit/{randCode}`
+   - 携带 JWT Token 和 SeckillOrderAddDTO 参数
+
+3. **启动 Sentinel Dashboard** → 观察限流规则触发
+
+4. **启动 SkyWalking** → 观察秒杀链路和 QPS 变化
+
+5. **录制演示视频**（30 秒）
+   - 启动 JMeter → Sentinel Dashboard 显示限流 → SkyWalking 显示流量分析
+
+### 面试话术
+
+> "这是用 JMeter 压秒杀接口的演示。1000 并发进来，Sentinel 限流只放 500 QPS，超出的返回'系统繁忙'。SkyWalking 实时看到 mall-seckill 的 QPS 从 0 飙升到 500，响应时间从 50ms 降到 30ms——因为限流保护了后端，反而更快了。"

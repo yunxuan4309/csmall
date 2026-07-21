@@ -1,5 +1,7 @@
 package com.cooxiao.mall.pojo.admin.dto;
 
+import com.cooxiao.mall.common.serializer.PhoneDesensitizeSerializer;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
@@ -41,6 +43,7 @@ public class AdminUpdateDTO implements Serializable {
      * 手机号码
      */
     @ApiModelProperty(value="管理员手机号")
+    @JsonSerialize(using = PhoneDesensitizeSerializer.class)
     private String phone;
 
     /**

@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Configuration;
         "com.cooxiao.mall.common.utils",
         "com.cooxiao.mall.common.config",
         "com.cooxiao.mall.common.annotation",
-        "com.cooxiao.mall.common.filter"})
+        "com.cooxiao.mall.common.filter",
+        "com.cooxiao.mall.common.serializer"})
 public class MallCommonConfiguration {
 }

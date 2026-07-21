@@ -1,6 +1,14 @@
 # 🦈 CoolShark（酷鲨）微服务电商平台
 
+[![CI](https://github.com/yunxuan4309/csmall/actions/workflows/ci.yml/badge.svg)](https://github.com/yunxuan4309/csmall/actions)
+![Java](https://img.shields.io/badge/Java-21-orange)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.5-brightgreen)
+![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-2023.0.3-blue)
+![Dubbo](https://img.shields.io/badge/Dubbo-3.3.2-orange)
+![License](https://img.shields.io/badge/License-Apache%202.0-green)
+
 > 基于 Spring Cloud Alibaba 的全功能微服务电商平台，支持商品浏览、搜索、购物车、订单支付、秒杀及 AI 智能导购。
+> 已按企业级标准完成 **P0-P3 四阶段升级**：幂等防重、全局限流熔断、MQ 削峰、SkyWalking 链路追踪、CI/CD、SQL 注入清零、单元测试、Flyway 数据库版本化。
 
 ---
 
@@ -185,6 +193,24 @@ java -jar mall-gateway-server/target/mall-gateway-server-*.jar
 - **生产环境**：Nginx 直接通过文件系统提供静态图片，不经过 Java 服务栈
 
 ---
+
+## 🏭 企业级特性
+
+| 类别 | 特性 | 说明 |
+|------|------|------|
+| **P0 代码规范** | 幂等防重 | `@Idempotent` 注解 + AOP + Redis SETNX，支付/下单/秒杀接口防重复提交 |
+| | Docker 准备 | Docker Compose 模板 + Dockerfile 模板已就绪 |
+| **P1 服务治理** | Sentinel 全局限流 | 6 个核心模块接入 Sentinel，自定义 BlockException 统一返回 429 JSON |
+| | MQ 异步削峰 | 普通订单改为 RabbitMQ 异步扣库存，下单响应从 500ms 降至 100ms |
+| | 日志全链路 | Gateway 生成 traceId → TraceIdFilter 全链路传播 → 日志格式统一 `[traceId]` |
+| **P2 可观测性** | SkyWalking 链路追踪 | 3 个核心模块 Agent 接入，跨服务调用链可视化 |
+| | CI/CD | GitHub Actions 自动编译（JDK 21 + Maven），push 即触发 |
+| **P3 质量保障** | SQL 注入清零 | 全量审计 31 个 Mapper XML：458 处 `#{}` 预编译安全，0 处 `${}` 风险 |
+| | 数据脱敏 | 手机号 Jackson `@JsonSerialize` 自动脱敏（`138****5678`） |
+| | 单元测试 | 10 个测试覆盖支付状态机（Mockito），CI 每次 push 自动跑 |
+| | Flyway 版本化 | 32 个 SQL 迁移覆盖 6 个数据库，启动自动执行 |
+
+> 详见 [`docs/企业级升级计划.md`](docs/企业级升级计划.md)
 
 ## 📦 部署
 
