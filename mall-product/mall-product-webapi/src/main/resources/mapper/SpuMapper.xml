@@ -335,10 +335,13 @@
                 AND is_deleted=0
             </if>
         </where>
+        <!-- 排序白名单：防止 ORDER BY SQL 注入 -->
         <choose>
-            <when test="orderBy != null">
-                ORDER BY ${orderBy}
-            </when>
+            <when test="orderBy == 'sales_desc'">ORDER BY sales DESC</when>
+            <when test="orderBy == 'price_asc'">ORDER BY list_price ASC</when>
+            <when test="orderBy == 'price_desc'">ORDER BY list_price DESC</when>
+            <when test="orderBy == 'time_desc'">ORDER BY gmt_create DESC</when>
+            <when test="orderBy == 'time_asc'">ORDER BY gmt_create ASC</when>
             <otherwise>
                 ORDER BY
                 is_deleted,

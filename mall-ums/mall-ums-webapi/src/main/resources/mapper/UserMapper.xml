@@ -96,13 +96,19 @@
         #{nickname},
         1)
     </insert>
+    <!-- 列名白名单：防止动态列名 SQL 注入 -->
     <select id="selectExistByUsernameOrPhoneOrEmail" resultType="int">
         select
             count(*)
         from
             ums_user
-        where
-            ${type}=#{value}
+        <where>
+            <choose>
+                <when test="type == 'username'">username = #{value}</when>
+                <when test="type == 'phone'">phone = #{value}</when>
+                <when test="type == 'email'">email = #{value}</when>
+            </choose>
+        </where>
     </select>
     <select id="selectUserById" resultMap="BaseResultMap">
         select
