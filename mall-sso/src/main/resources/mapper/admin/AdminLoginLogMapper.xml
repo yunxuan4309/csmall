@@ -10,7 +10,9 @@
         ip_address,
         user_agent,
         login_time,
-        gmt_create
+        gmt_create,
+        status,
+        message
         ) values (
         #{id},
         #{adminId},
@@ -18,7 +20,9 @@
         #{ip},
         #{userAgent},
         #{gmtLogin},
-        #{gmtCreate}
+        #{gmtCreate},
+        #{status},
+        #{message}
         )
     </insert>
 

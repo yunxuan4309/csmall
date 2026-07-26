@@ -42,35 +42,46 @@ public class AdminSSOServiceImpl implements IAdminSSOService {
     private StringRedisTemplate stringRedisTemplate;
     @Override
     public String doLogin(AdminLoginDTO adminLoginDTO){
-        //生成返回的token
-        String token;
-        AdminUserDetails userDetails = (AdminUserDetails) userDetailsService.loadUserByUsername(adminLoginDTO.getUsername());
-        log.info("加载到的用户详情: {}", userDetails);
-        if (userDetails == null) {
-            throw new CoolSharkServiceException(ResponseCode.BAD_REQUEST, "登录失败！用户名密码错误");
+        AdminUserDetails userDetails = null;
+        try {
+            userDetails = (AdminUserDetails) userDetailsService.loadUserByUsername(adminLoginDTO.getUsername());
+            if (userDetails == null) {
+                recordLoginLog(null, adminLoginDTO, 0, "用户名不存在");
+                throw new CoolSharkServiceException(ResponseCode.BAD_REQUEST, "登录失败！用户名密码错误");
+            }
+            boolean matches = passwordEncoder.matches(adminLoginDTO.getPassword(), userDetails.getPassword());
+            if (!matches) {
+                recordLoginLog(userDetails.getId(), adminLoginDTO, 0, "密码错误");
+                throw new CoolSharkServiceException(ResponseCode.BAD_REQUEST, "登录失败！用户名密码错误");
+            }
+            CsmallAuthenticationInfo csmallAuthenticationInfo = generateFromAdmin(userDetails);
+            String token = jwtTokenUtils.generateToken(csmallAuthenticationInfo);
+            recordLoginLog(userDetails.getId(), adminLoginDTO, 1, "登录成功");
+            return token;
+        } catch (CoolSharkServiceException e) {
+            throw e;
+        } catch (Exception e) {
+            Long adminId = userDetails != null ? userDetails.getId() : null;
+            recordLoginLog(adminId, adminLoginDTO, 0, "系统异常: " + e.getMessage());
+            throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "登录异常");
         }
-        log.info("输入的密码: {}", adminLoginDTO.getPassword());
-        log.info("数据库中的密码哈希: {}", userDetails.getPassword());
-        boolean matches = passwordEncoder.matches(adminLoginDTO.getPassword(), userDetails.getPassword());
-        log.info("密码验证结果: {}", matches);
-        if (!matches) {
-            throw new CoolSharkServiceException(ResponseCode.BAD_REQUEST, "登录失败！用户名密码错误");
-        }
-        CsmallAuthenticationInfo csmallAuthenticationInfo = generateFromAdmin(userDetails);
-        token = jwtTokenUtils.generateToken(csmallAuthenticationInfo);
-        //记录登录日志
-        AdminLoginLog adminLoginLog=new AdminLoginLog();
-        adminLoginLog.setId(IdWorker.getId());
-        adminLoginLog.setAdminId(userDetails.getId());
-        LocalDateTime now=LocalDateTime.now();
-        adminLoginLog.setGmtCreate(now);
-        adminLoginLog.setGmtLogin(now);
-        adminLoginLog.setIp(adminLoginDTO.getIp());
-        adminLoginLog.setUserAgent(adminLoginDTO.getUserAgent());
-        adminLoginLog.setUsername(userDetails.getUsername());
-        adminLoginLogMapper.insertAdminLoginLog(adminLoginLog);
-        return token;
     }
+
+    private void recordLoginLog(Long adminId, AdminLoginDTO dto, int status, String message) {
+        AdminLoginLog loginLog = new AdminLoginLog();
+        loginLog.setId(IdWorker.getId());
+        loginLog.setAdminId(adminId);
+        loginLog.setUsername(dto.getUsername());
+        loginLog.setIp(dto.getIp());
+        loginLog.setUserAgent(dto.getUserAgent());
+        LocalDateTime now = LocalDateTime.now();
+        loginLog.setGmtLogin(now);
+        loginLog.setGmtCreate(now);
+        loginLog.setStatus(status);
+        loginLog.setMessage(message);
+        adminLoginLogMapper.insertAdminLoginLog(loginLog);
+    }
+
     public CsmallAuthenticationInfo generateFromAdmin(AdminUserDetails userDetails){
         List<GrantedAuthority> authorities = (List<GrantedAuthority>) userDetails.getAuthorities();
         List<String> authorityValues=new ArrayList<>();

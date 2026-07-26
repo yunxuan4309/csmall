@@ -70,9 +70,18 @@ public class AdminLoginLog implements Serializable {
     private LocalDateTime gmtCreate;
 
     /**
+     * 登录状态：1=成功，0=失败
+     */
+    private Integer status;
+
+    /**
+     * 登录结果描述
+     */
+    private String message;
+
+    /**
      * 数据最后修改时间
      */
     private LocalDateTime gmtModified;
-
 
 }

@@ -125,6 +125,11 @@
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
+        <!-- Sentinel：登录接口限流防暴力破解 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+        </dependency>
         <!-- 添加 Jakarta Servlet API -->
         <dependency>
             <groupId>jakarta.servlet</groupId>

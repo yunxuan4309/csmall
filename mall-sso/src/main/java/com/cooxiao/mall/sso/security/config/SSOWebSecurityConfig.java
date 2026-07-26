@@ -56,9 +56,6 @@ public class SSOWebSecurityConfig {
                 // SSO 登录登出接口 - 使用精确路径
                 "/admin/sso/login",
                 "/admin/sso/logout",
-                "/admin/sso/home",
-                "/admin/sso/debug",
-                "/admin/sso/hash",
                 "/user/sso/login",
                 "/user/sso/logout"
         };
