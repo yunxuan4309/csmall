@@ -51,8 +51,12 @@ public class DataSource2Configuration {
     }
 
     @Bean(name = "db2SqlSessionTemplate")
-    @Primary
     public SqlSessionTemplate testSqlSessionTemplate(@Qualifier("db2SqlSessionFactory") SqlSessionFactory sqlSessionFactory) throws Exception {
         return new SqlSessionTemplate(sqlSessionFactory);
+    }
+
+    @Bean(name = "db2JdbcTemplate")
+    public org.springframework.jdbc.core.JdbcTemplate db2JdbcTemplate(@Qualifier("db2DataSource") DataSource dataSource) {
+        return new org.springframework.jdbc.core.JdbcTemplate(dataSource);
     }
 }

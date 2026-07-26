@@ -55,4 +55,10 @@ public class DataSource1Configuration {
     public SqlSessionTemplate testSqlSessionTemplate(@Qualifier("db1SqlSessionFactory") SqlSessionFactory sqlSessionFactory) throws Exception {
         return new SqlSessionTemplate(sqlSessionFactory);
     }
+
+    @Bean(name = "db1JdbcTemplate")
+    @Primary
+    public org.springframework.jdbc.core.JdbcTemplate db1JdbcTemplate(@Qualifier("db1DataSource") DataSource dataSource) {
+        return new org.springframework.jdbc.core.JdbcTemplate(dataSource);
+    }
 }

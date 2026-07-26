@@ -45,7 +45,7 @@ spring:
         - id: mall-sso
           uri: lb://mall-sso
           predicates:
-            - Path=/sso/**,/admin/sso/**,/user/sso/**,/user/info/**
+            - Path=/sso/**,/admin/sso/**,/admin/dashboard/**,/user/sso/**,/user/info/**
         # 文件资源
         - id: mall-resource
           uri: http://127.0.0.1:9060

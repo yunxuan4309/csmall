@@ -49,7 +49,7 @@ spring:
         - id: mall-sso
           uri: http://localhost:10009
           predicates:
-            - Path=/sso/**,/admin/sso/**,/user/sso/**,/user/info/**
+            - Path=/sso/**,/admin/sso/**,/admin/dashboard/**,/user/sso/**,/user/info/**
         # 文件资源
         - id: mall-resource
           uri: http://localhost:9060
