@@ -71,6 +71,7 @@ public class AiController {
         return JsonResult.ok(result);
     }
 
+    @CrossOrigin(origins = "http://localhost:5173")
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @ApiOperation("流式发送消息给 AI 导购（逐字输出 + 商品卡片）")
     public SseEmitter streamMessage(@Valid @RequestBody ChatSendDTO dto) {
