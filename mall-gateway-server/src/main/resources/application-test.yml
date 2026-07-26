@@ -61,11 +61,13 @@ spring:
           uri: lb://mall-seckill
           predicates:
             - Path=/seckill/**
-        # AI 智能导购
+        # AI 智能导购（SSE 流式输出需要禁用响应缓冲）
         - id: mall-ai
           uri: lb://mall-ai
           predicates:
             - Path=/ai/**
+          filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin
         # 用户注册（仅开放注册和校验接口）
         - id: mall-ums-register
           uri: lb://mall-ums
