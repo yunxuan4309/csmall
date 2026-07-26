@@ -11,6 +11,11 @@ spring:
     nacos:
       discovery:
         server-addr: ${my.server.addr}:8848
+    sentinel:
+      transport:
+        port: 8880
+        dashboard: 127.0.0.1:8090
+      eager: true
   jackson:
     default-property-inclusion: always
   datasource:
