@@ -70,7 +70,7 @@ public class AdminSSOServiceImpl implements IAdminSSOService {
     private void recordLoginLog(Long adminId, AdminLoginDTO dto, int status, String message) {
         AdminLoginLog loginLog = new AdminLoginLog();
         loginLog.setId(IdWorker.getId());
-        loginLog.setAdminId(adminId);
+        loginLog.setAdminId(adminId != null ? adminId : 0L);
         loginLog.setUsername(dto.getUsername());
         loginLog.setIp(dto.getIp());
         loginLog.setUserAgent(dto.getUserAgent());
