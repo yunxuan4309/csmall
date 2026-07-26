@@ -24,6 +24,12 @@ import java.util.List;
 @EnableMethodSecurity(prePostEnabled = true)
 public class ResourceWebSecurityConfiguration {
 
+    static {
+        // 异步线程继承 SecurityContext，SSE async dispatch 时不会丢失认证信息
+        org.springframework.security.core.context.SecurityContextHolder
+                .setStrategyName(org.springframework.security.core.context.SecurityContextHolder.MODE_INHERITABLETHREADLOCAL);
+    }
+
     @Autowired
     private SSOFilter ssoFilter;
     @Autowired
@@ -72,7 +78,10 @@ public class ResourceWebSecurityConfiguration {
                 "/webjars/**",
                 "/swagger-resources/**",
                 "/v2/api-docs/**",
-                "/v3/api-docs/**"));
+                "/v3/api-docs/**",
+                // SSE 流式接口：依靠 SSOFilter + Authorization Header 鉴权
+                // permitAll 是为了避免异步 dispatch 时 Spring Security 二次检查丢失上下文
+                "/ai/chat/stream"));
         if (syncWhitelisted) {
             matchers.add("/ai/sync");
             matchers.add("/ai/sync/**");
