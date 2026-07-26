@@ -78,9 +78,8 @@ public class AiController {
     public ResponseEntity<StreamingResponseBody> streamMessage(@Valid @RequestBody ChatSendDTO dto) {
         Long userId = getCurrentUserId();
         StreamingResponseBody body = outputStream -> {
-            try (var writer = new java.io.PrintWriter(outputStream, true)) {
-                chatService.sendStream(userId, dto.getSessionId(), dto.getMessage(), writer);
-            }
+            // 直接写 OutputStream（绕过 PrintWriter 和 Tomcat buffer）
+            chatService.sendStream(userId, dto.getSessionId(), dto.getMessage(), outputStream);
         };
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_EVENT_STREAM)

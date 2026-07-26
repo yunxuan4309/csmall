@@ -121,37 +121,38 @@ public class ChatServiceImpl {
     // ================================================================
 
     /** 流式发送消息 */
-    /** 使用 PrintWriter 直接写 SSE，精确控制 flush */
-    public void sendStream(Long userId, String sessionId, String message, PrintWriter writer) {
+    /** 直接写 OutputStream，flush 到 TCP 层 */
+    public void sendStream(Long userId, String sessionId, String message,
+                           java.io.OutputStream outputStream) {
         ChatSession session = loadOrCreate(userId, sessionId);
         try {
             if (budgetExceeded(sessionId)) {
-                writeSSE(writer, "error", "服务繁忙，请稍后再试。");
+                writeSSE(outputStream, "error", "服务繁忙，请稍后再试。");
                 return;
             }
 
-            writeSSE(writer, "thinking", "🤖 AI 正在理解您的需求...");
+            writeSSE(outputStream, "thinking", "🤖 AI 正在理解您的需求...");
 
             SearchIntent intent = extractSearchIntent(message, session);
             log.info("AI 提取搜索意图: {}", JSON.toJSONString(intent));
 
             SearchPipeline.PipelineResult pipelineResult = searchPipeline.run(
                     intent, message, SEARCH_TOP_K,
-                    thinking -> writeSSE(writer, "thinking", thinking));
+                    thinking -> writeSSE(outputStream, "thinking", thinking));
 
             if (intent.getBudgetMin() != null) {
                 session.getPreferences().put("budget", intent.getBudgetMin().intValue());
             }
 
-            writeSSE(writer, "products", JSON.toJSONString(pipelineResult.getProducts()));
+            writeSSE(outputStream, "products", JSON.toJSONString(pipelineResult.getProducts()));
 
             if (pipelineResult.getProductCount() == 0 && !pipelineResult.getAvailableCategories().isEmpty()) {
-                writeSSE(writer, "categories",
+                writeSSE(outputStream, "categories",
                         JSON.toJSONString(pipelineResult.getAvailableCategories()));
             }
 
-            writeSSE(writer, "sessionId", session.getSessionId());
-            writeSSE(writer, "thinking", "💬 AI 正在生成回答...");
+            writeSSE(outputStream, "sessionId", session.getSessionId());
+            writeSSE(outputStream, "thinking", "💬 AI 正在生成回答...");
 
             String preferenceContext = buildPreferenceContext(session.getPreferences());
             List<Map<String, String>> allMessages = buildMessages(session, message,
@@ -160,22 +161,22 @@ public class ChatServiceImpl {
             StringBuilder fullResponse = new StringBuilder();
             streamDeepSeek(allMessages, chunk -> {
                 fullResponse.append(chunk);
-                writeSSE(writer, "chunk", chunk);
+                writeSSE(outputStream, "chunk", chunk);
             });
 
             saveSession(session, message, fullResponse.toString());
-            writeSSE(writer, "done", "");
+            writeSSE(outputStream, "done", "");
         } catch (Exception e) {
             log.error("SSE 流式对话失败", e);
         }
     }
 
-    /** 写一行 SSE 事件并立即 flush */
-    private void writeSSE(PrintWriter writer, String eventName, String data) {
+    /** 直接写 OutputStream 字节 + flush，穿越所有缓冲层 */
+    private void writeSSE(java.io.OutputStream out, String eventName, String data) {
         try {
-            writer.write("event: " + eventName + "\n");
-            writer.write("data: " + data.replace("\n", "\\n") + "\n\n");
-            writer.flush();
+            String sse = "event: " + eventName + "\ndata: " + data.replace("\n", "\\n") + "\n\n";
+            out.write(sse.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            out.flush();
         } catch (Exception e) {
             log.error("SSE 写入失败", e);
         }
