@@ -41,6 +41,11 @@ spring:
           uri: lb://mall-search
           predicates:
             - Path=/search/**
+        # 商品管理（后台，有 @PreAuthorize 权限保护）
+        - id: mall-product
+          uri: lb://mall-product
+          predicates:
+            - Path=/pms/**
         # SSO 登录认证
         - id: mall-sso
           uri: lb://mall-sso
