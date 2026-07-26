@@ -3,6 +3,9 @@ server:
 spring:
   profiles:
     active: test
+  mvc:
+    async:
+      request-timeout: 180000   # SSE 长连接超时 3 分钟
   application:
     name: mall-ai
 
