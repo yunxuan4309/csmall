@@ -22,6 +22,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -120,6 +121,68 @@ public class ChatServiceImpl {
     // ================================================================
 
     /** 流式发送消息 */
+    /** 使用 HttpServletResponse 直接写 SSE，精确控制 flush */
+    public void sendStream(Long userId, String sessionId, String message,
+                           jakarta.servlet.http.HttpServletResponse response) {
+        ChatSession session = loadOrCreate(userId, sessionId);
+
+        try (PrintWriter writer = response.getWriter()) {
+            if (budgetExceeded(sessionId)) {
+                writeSSE(writer, "error", "服务繁忙，请稍后再试。");
+                return;
+            }
+
+            writeSSE(writer, "thinking", "🤖 AI 正在理解您的需求...");
+
+            SearchIntent intent = extractSearchIntent(message, session);
+            log.info("AI 提取搜索意图: {}", JSON.toJSONString(intent));
+
+            SearchPipeline.PipelineResult pipelineResult = searchPipeline.run(
+                    intent, message, SEARCH_TOP_K,
+                    thinking -> writeSSE(writer, "thinking", thinking));
+
+            if (intent.getBudgetMin() != null) {
+                session.getPreferences().put("budget", intent.getBudgetMin().intValue());
+            }
+
+            writeSSE(writer, "products", JSON.toJSONString(pipelineResult.getProducts()));
+
+            if (pipelineResult.getProductCount() == 0 && !pipelineResult.getAvailableCategories().isEmpty()) {
+                writeSSE(writer, "categories",
+                        JSON.toJSONString(pipelineResult.getAvailableCategories()));
+            }
+
+            writeSSE(writer, "sessionId", session.getSessionId());
+            writeSSE(writer, "thinking", "💬 AI 正在生成回答...");
+
+            String preferenceContext = buildPreferenceContext(session.getPreferences());
+            List<Map<String, String>> allMessages = buildMessages(session, message,
+                    preferenceContext, pipelineResult.getSearchContext());
+
+            StringBuilder fullResponse = new StringBuilder();
+            streamDeepSeek(allMessages, chunk -> {
+                fullResponse.append(chunk);
+                writeSSE(writer, "chunk", chunk);
+            });
+
+            saveSession(session, message, fullResponse.toString());
+            writeSSE(writer, "done", "");
+        } catch (Exception e) {
+            log.error("SSE 流式对话失败", e);
+        }
+    }
+
+    /** 写一行 SSE 事件并立即 flush */
+    private void writeSSE(PrintWriter writer, String eventName, String data) {
+        try {
+            writer.write("event: " + eventName + "\n");
+            writer.write("data: " + data.replace("\n", "\\n") + "\n\n");
+            writer.flush();
+        } catch (Exception e) {
+            log.error("SSE 写入失败", e);
+        }
+    }
+
     public SseEmitter sendStream(Long userId, String sessionId, String message) {
         SseEmitter emitter = new SseEmitter(120_000L); // 2分钟超时
         ChatSession session = loadOrCreate(userId, sessionId);

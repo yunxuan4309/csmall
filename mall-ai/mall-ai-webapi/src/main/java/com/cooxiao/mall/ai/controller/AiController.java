@@ -21,7 +21,9 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.PrintWriter;
 
 @RestController
 @RequestMapping("/ai")
@@ -74,9 +76,13 @@ public class AiController {
     @CrossOrigin(origins = "http://localhost:5173")
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @ApiOperation("流式发送消息给 AI 导购（逐字输出 + 商品卡片）")
-    public SseEmitter streamMessage(@Valid @RequestBody ChatSendDTO dto) {
-        return chatService.sendStream(getCurrentUserId(),
-                dto.getSessionId(), dto.getMessage());
+    public void streamMessage(@Valid @RequestBody ChatSendDTO dto, HttpServletResponse response) {
+        // 直接控制 response，绕过 SseEmitter，精确 flush 每个字
+        response.setContentType("text/event-stream");
+        response.setCharacterEncoding("UTF-8");
+        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("X-Accel-Buffering", "no"); // 禁止 Nginx 缓冲
+        chatService.sendStream(getCurrentUserId(), dto.getSessionId(), dto.getMessage(), response);
     }
 
     @GetMapping("/chat/history")
