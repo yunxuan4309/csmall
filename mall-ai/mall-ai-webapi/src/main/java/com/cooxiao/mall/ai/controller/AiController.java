@@ -18,12 +18,11 @@ import io.swagger.annotations.ApiOperation;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-
-import jakarta.servlet.http.HttpServletResponse;
-import java.io.PrintWriter;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequestMapping("/ai")
@@ -74,15 +73,30 @@ public class AiController {
     }
 
     @CrossOrigin(origins = "http://localhost:5173")
-    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PostMapping("/chat/stream")
     @ApiOperation("流式发送消息给 AI 导购（逐字输出 + 商品卡片）")
-    public void streamMessage(@Valid @RequestBody ChatSendDTO dto, HttpServletResponse response) {
-        // 直接控制 response，绕过 SseEmitter，精确 flush 每个字
-        response.setContentType("text/event-stream");
-        response.setCharacterEncoding("UTF-8");
-        response.setHeader("Cache-Control", "no-cache");
-        response.setHeader("X-Accel-Buffering", "no"); // 禁止 Nginx 缓冲
-        chatService.sendStream(getCurrentUserId(), dto.getSessionId(), dto.getMessage(), response);
+    public ResponseEntity<StreamingResponseBody> streamMessage(@Valid @RequestBody ChatSendDTO dto) {
+        Long userId = getCurrentUserId();
+        StreamingResponseBody body = outputStream -> {
+            try (var writer = new java.io.PrintWriter(outputStream, true)) {
+                chatService.sendStream(userId, dto.getSessionId(), dto.getMessage(), writer);
+            }
+        };
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_EVENT_STREAM)
+                .header("Cache-Control", "no-cache")
+                .header("X-Accel-Buffering", "no")
+                .body(body);
+    }
+
+    // 保留旧接口兼容
+    @CrossOrigin(origins = "http://localhost:5173")
+    @PostMapping(value = "/chat/stream-sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @ApiOperation("流式发送消息给 AI 导购（SseEmitter 兼容）")
+    public org.springframework.web.servlet.mvc.method.annotation.SseEmitter streamMessageLegacy(
+            @Valid @RequestBody ChatSendDTO dto) {
+        return chatService.sendStreamLegacy(getCurrentUserId(),
+                dto.getSessionId(), dto.getMessage());
     }
 
     @GetMapping("/chat/history")

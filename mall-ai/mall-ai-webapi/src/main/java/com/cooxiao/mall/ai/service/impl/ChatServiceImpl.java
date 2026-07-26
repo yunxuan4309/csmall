@@ -121,12 +121,10 @@ public class ChatServiceImpl {
     // ================================================================
 
     /** 流式发送消息 */
-    /** 使用 HttpServletResponse 直接写 SSE，精确控制 flush */
-    public void sendStream(Long userId, String sessionId, String message,
-                           jakarta.servlet.http.HttpServletResponse response) {
+    /** 使用 PrintWriter 直接写 SSE，精确控制 flush */
+    public void sendStream(Long userId, String sessionId, String message, PrintWriter writer) {
         ChatSession session = loadOrCreate(userId, sessionId);
-
-        try (PrintWriter writer = response.getWriter()) {
+        try {
             if (budgetExceeded(sessionId)) {
                 writeSSE(writer, "error", "服务繁忙，请稍后再试。");
                 return;
@@ -183,7 +181,7 @@ public class ChatServiceImpl {
         }
     }
 
-    public SseEmitter sendStream(Long userId, String sessionId, String message) {
+    public SseEmitter sendStreamLegacy(Long userId, String sessionId, String message) {
         SseEmitter emitter = new SseEmitter(120_000L); // 2分钟超时
         ChatSession session = loadOrCreate(userId, sessionId);
 
