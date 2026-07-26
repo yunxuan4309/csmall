@@ -1,7 +1,7 @@
 -- Database: cs_mall_ums
 -- Table: ums_user
 
-CREATE TABLE `ums_user` (
+CREATE TABLE IF NOT EXISTS `ums_user` (
   `id` bigint NOT NULL COMMENT '用户 id',
   `username` varchar(64) NOT NULL COMMENT '用户名',
   `password` varchar(255) NOT NULL COMMENT '密码（冗余，密文）',

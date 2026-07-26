@@ -1,7 +1,7 @@
 -- Database: cs_mall_pms
 -- Table: pms_picture
 
-CREATE TABLE `pms_picture` (
+CREATE TABLE IF NOT EXISTS `pms_picture` (
   `id` bigint NOT NULL COMMENT '图片 id',
   `album_id` bigint NOT NULL COMMENT '相册 id',
   `url` varchar(500) NOT NULL COMMENT '图片 URL',

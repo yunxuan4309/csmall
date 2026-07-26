@@ -1,7 +1,7 @@
 -- Database: cs_mall_seckill
 -- Table: seckill_sku
 
-CREATE TABLE `seckill_sku` (
+CREATE TABLE IF NOT EXISTS `seckill_sku` (
   `id` bigint NOT NULL COMMENT '秒杀 SKU id',
   `sku_id` bigint NOT NULL COMMENT '商品 SKU id',
   `spu_id` bigint NOT NULL COMMENT '秒杀 SPU id',

@@ -2,7 +2,7 @@
 -- Table: oms_payment_record
 -- 支付流水记录表：记录每笔支付交易的全生命周期
 
-CREATE TABLE `oms_payment_record` (
+CREATE TABLE IF NOT EXISTS `oms_payment_record` (
   `id`              bigint        NOT NULL COMMENT '流水ID',
   `order_id`        bigint        NOT NULL COMMENT '关联订单ID',
   `order_sn`        varchar(64)   NOT NULL COMMENT '订单编号（冗余，方便查询）',

@@ -1,7 +1,7 @@
 -- Database: cs_mall_ams
 -- Table: ams_permission
 
-CREATE TABLE `ams_permission` (
+CREATE TABLE IF NOT EXISTS `ams_permission` (
   `id` bigint NOT NULL COMMENT '权限 id',
   `name` varchar(64) NOT NULL COMMENT '权限名称',
   `code` varchar(128) NOT NULL COMMENT '权限编码',

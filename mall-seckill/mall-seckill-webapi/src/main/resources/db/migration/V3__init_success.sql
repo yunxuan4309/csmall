@@ -1,7 +1,7 @@
 -- Database: cs_mall_seckill
 -- Table: success
 
-CREATE TABLE `success` (
+CREATE TABLE IF NOT EXISTS `success` (
   `id` bigint NOT NULL COMMENT '记录 id',
   `seckill_id` bigint DEFAULT NULL COMMENT '关联秒杀id',
   `user_id` bigint NOT NULL COMMENT '用户 id',

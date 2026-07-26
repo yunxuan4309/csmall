@@ -1,7 +1,7 @@
 -- Database: cs_mall_pms
 -- Table: pms_attribute_template_value
 
-CREATE TABLE `pms_attribute_template_value` (
+CREATE TABLE IF NOT EXISTS `pms_attribute_template_value` (
   `id` bigint NOT NULL COMMENT '记录 id',
   `attribute_template_id` bigint NOT NULL COMMENT '属性模板 id',
   `value` varchar(64) NOT NULL COMMENT '属性值',

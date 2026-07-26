@@ -1,7 +1,7 @@
 -- Database: cs_mall_oms
 -- Table: oms_order
 
-CREATE TABLE `oms_order` (
+CREATE TABLE IF NOT EXISTS `oms_order` (
   `id` bigint NOT NULL COMMENT '订单 id',
   `sn` varchar(64) NOT NULL COMMENT '订单编号',
   `user_id` bigint NOT NULL COMMENT '用户 id',

@@ -1,7 +1,7 @@
 -- Database: cs_mall_pms
 -- Table: pms_brand
 
-CREATE TABLE `pms_brand` (
+CREATE TABLE IF NOT EXISTS `pms_brand` (
   `id` bigint NOT NULL COMMENT '品牌 id',
   `name` varchar(64) NOT NULL COMMENT '品牌名称',
   `logo_url` varchar(500) DEFAULT NULL COMMENT '品牌 Logo URL',

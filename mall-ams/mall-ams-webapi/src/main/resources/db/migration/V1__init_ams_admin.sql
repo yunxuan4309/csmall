@@ -1,7 +1,7 @@
 -- Database: cs_mall_ams
 -- Table: ams_admin
 
-CREATE TABLE `ams_admin` (
+CREATE TABLE IF NOT EXISTS `ams_admin` (
   `id` bigint NOT NULL COMMENT '管理员 id',
   `username` varchar(64) NOT NULL COMMENT '用户名',
   `password` varchar(255) NOT NULL COMMENT '密码（密文）',

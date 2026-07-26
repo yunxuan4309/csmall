@@ -1,7 +1,7 @@
 -- Database: cs_mall_ums
 -- Table: ums_login_log
 
-CREATE TABLE `ums_login_log` (
+CREATE TABLE IF NOT EXISTS `ums_login_log` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '登录日志id',
   `user_id` bigint NOT NULL COMMENT '用户id',
   `username` varchar(64) NOT NULL COMMENT '用户名',

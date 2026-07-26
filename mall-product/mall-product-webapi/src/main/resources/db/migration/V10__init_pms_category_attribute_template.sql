@@ -1,7 +1,7 @@
 -- Database: cs_mall_pms
 -- Table: pms_category_attribute_template
 
-CREATE TABLE `pms_category_attribute_template` (
+CREATE TABLE IF NOT EXISTS `pms_category_attribute_template` (
   `id` bigint NOT NULL COMMENT '记录 id',
   `category_id` bigint NOT NULL COMMENT '分类 id',
   `attribute_template_id` bigint NOT NULL COMMENT '属性模板 id',

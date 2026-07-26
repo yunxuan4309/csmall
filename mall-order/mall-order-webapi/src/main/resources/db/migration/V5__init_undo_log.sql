@@ -1,7 +1,7 @@
 -- Database: cs_mall_oms
 -- Table: undo_log
 
-CREATE TABLE `undo_log` (
+CREATE TABLE IF NOT EXISTS `undo_log` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `branch_id` bigint NOT NULL,
   `xid` varchar(100) NOT NULL,

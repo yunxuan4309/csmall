@@ -1,7 +1,7 @@
 -- Database: cs_mall_pms
 -- Table: pms_spu
 
-CREATE TABLE `pms_spu` (
+CREATE TABLE IF NOT EXISTS `pms_spu` (
   `id` bigint NOT NULL COMMENT 'SPU id',
   `name` varchar(128) NOT NULL COMMENT 'SPU 名称',
   `type_number` varchar(64) NOT NULL COMMENT 'SPU 编号',

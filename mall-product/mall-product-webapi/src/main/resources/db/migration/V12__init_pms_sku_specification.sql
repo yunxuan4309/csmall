@@ -1,7 +1,7 @@
 -- Database: cs_mall_pms
 -- Table: pms_sku_specification
 
-CREATE TABLE `pms_sku_specification` (
+CREATE TABLE IF NOT EXISTS `pms_sku_specification` (
   `id` bigint NOT NULL COMMENT '记录 id',
   `sku_id` bigint NOT NULL COMMENT 'SKU id',
   `attribute_id` bigint NOT NULL COMMENT '属性 id',

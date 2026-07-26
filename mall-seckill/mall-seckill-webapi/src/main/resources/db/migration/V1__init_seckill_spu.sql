@@ -1,7 +1,7 @@
 -- Database: cs_mall_seckill
 -- Table: seckill_spu
 
-CREATE TABLE `seckill_spu` (
+CREATE TABLE IF NOT EXISTS `seckill_spu` (
   `id` bigint NOT NULL COMMENT '秒杀 SPU id',
   `spu_id` bigint NOT NULL COMMENT '商品 SPU id',
   `list_price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '秒杀价格',

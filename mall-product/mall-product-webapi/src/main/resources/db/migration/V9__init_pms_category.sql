@@ -1,7 +1,7 @@
 -- Database: cs_mall_pms
 -- Table: pms_category
 
-CREATE TABLE `pms_category` (
+CREATE TABLE IF NOT EXISTS `pms_category` (
   `id` bigint NOT NULL COMMENT '分类 id',
   `name` varchar(64) NOT NULL COMMENT '分类名称',
   `parent_id` bigint DEFAULT '0' COMMENT '父分类 id',

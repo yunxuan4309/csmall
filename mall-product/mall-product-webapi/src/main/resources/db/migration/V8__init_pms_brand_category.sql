@@ -1,7 +1,7 @@
 -- Database: cs_mall_pms
 -- Table: pms_brand_category
 
-CREATE TABLE `pms_brand_category` (
+CREATE TABLE IF NOT EXISTS `pms_brand_category` (
   `id` bigint NOT NULL COMMENT '记录 id',
   `brand_id` bigint NOT NULL COMMENT '品牌 id',
   `category_id` bigint NOT NULL COMMENT '分类 id',

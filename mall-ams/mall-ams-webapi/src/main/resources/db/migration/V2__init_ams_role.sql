@@ -1,7 +1,7 @@
 -- Database: cs_mall_ams
 -- Table: ams_role
 
-CREATE TABLE `ams_role` (
+CREATE TABLE IF NOT EXISTS `ams_role` (
   `id` bigint NOT NULL COMMENT '角色 id',
   `name` varchar(64) NOT NULL COMMENT '角色名称',
   `code` varchar(64) NOT NULL COMMENT '角色编码',

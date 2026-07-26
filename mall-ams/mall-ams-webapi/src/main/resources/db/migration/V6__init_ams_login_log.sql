@@ -1,7 +1,7 @@
 -- Database: cs_mall_ams
 -- Table: ams_login_log
 
-CREATE TABLE `ams_login_log` (
+CREATE TABLE IF NOT EXISTS `ams_login_log` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `admin_id` bigint NOT NULL COMMENT '管理员 id',
   `username` varchar(64) NOT NULL COMMENT '用户名',

@@ -1,7 +1,7 @@
 -- Database: cs_mall_resource
 -- Table: res_upload_record
 
-CREATE TABLE `res_upload_record` (
+CREATE TABLE IF NOT EXISTS `res_upload_record` (
   `id` bigint NOT NULL COMMENT '记录 id',
   `user_id` bigint NOT NULL COMMENT '上传用户 id',
   `username` varchar(64) DEFAULT NULL COMMENT '上传用户名（冗余，便于展示）',
