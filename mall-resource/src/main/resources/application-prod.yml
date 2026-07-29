@@ -18,6 +18,10 @@ server:
 
 # Spring相关配置
 spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${my.server.addr}:8848
   lifecycle:
     timeout-per-shutdown-phase: 30s
   # 数据源（使用 Spring Boot 自带的 HikariCP 连接池）

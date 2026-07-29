@@ -121,6 +121,208 @@ services:
     networks:
       - csmall-net
 
+  # ==================== 微服务（11 个，从 /data/csmall/jars/ 构建） ====================
+
+  mall-gateway:
+    build:
+      context: ./jars
+      dockerfile: ../dockerfiles/mall-gateway.Dockerfile
+    container_name: csmall-gateway
+    ports: ["10087:10087"]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ALIYUN_SERVER_IP: nacos
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on: { nacos: { condition: service_healthy } }
+    networks: [csmall-net]
+
+  mall-sso:
+    build:
+      context: ./jars
+      dockerfile: ../dockerfiles/mall-sso.Dockerfile
+    container_name: csmall-sso
+    ports: ["10009:10009"]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ALIYUN_SERVER_IP: nacos
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      mysql: { condition: service_healthy }
+      nacos: { condition: service_healthy }
+    networks: [csmall-net]
+
+  mall-product:
+    build:
+      context: ./jars
+      dockerfile: ../dockerfiles/mall-product.Dockerfile
+    container_name: csmall-product
+    ports: ["9010:9010"]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ALIYUN_SERVER_IP: nacos
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      RESOURCE_HOST: ${RESOURCE_HOST:-http://8.156.77.197/}
+    depends_on:
+      mysql: { condition: service_healthy }
+      nacos: { condition: service_healthy }
+    networks: [csmall-net]
+
+  mall-front:
+    build:
+      context: ./jars
+      dockerfile: ../dockerfiles/mall-front.Dockerfile
+    container_name: csmall-front
+    ports: ["10004:10004"]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ALIYUN_SERVER_IP: nacos
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on: { nacos: { condition: service_healthy } }
+    networks: [csmall-net]
+
+  mall-order:
+    build:
+      context: ./jars
+      dockerfile: ../dockerfiles/mall-order.Dockerfile
+    container_name: csmall-order
+    ports: ["10005:10005"]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ALIYUN_SERVER_IP: nacos
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    depends_on:
+      mysql: { condition: service_healthy }
+      nacos: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [csmall-net]
+
+  mall-search:
+    build:
+      context: ./jars
+      dockerfile: ../dockerfiles/mall-search.Dockerfile
+    container_name: csmall-search
+    ports: ["10008:10008"]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ALIYUN_SERVER_IP: nacos
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      nacos: { condition: service_healthy }
+      elasticsearch: { condition: service_healthy }
+    networks: [csmall-net]
+
+  mall-seckill:
+    build:
+      context: ./jars
+      dockerfile: ../dockerfiles/mall-seckill.Dockerfile
+    container_name: csmall-seckill
+    ports: ["10007:10007"]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ALIYUN_SERVER_IP: nacos
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    depends_on:
+      mysql: { condition: service_healthy }
+      nacos: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    networks: [csmall-net]
+
+  mall-ums:
+    build:
+      context: ./jars
+      dockerfile: ../dockerfiles/mall-ums.Dockerfile
+    container_name: csmall-ums
+    ports: ["10006:10006"]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ALIYUN_SERVER_IP: nacos
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      mysql: { condition: service_healthy }
+      nacos: { condition: service_healthy }
+    networks: [csmall-net]
+
+  mall-ams:
+    build:
+      context: ./jars
+      dockerfile: ../dockerfiles/mall-ams.Dockerfile
+    container_name: csmall-ams
+    ports: ["10003:10003"]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ALIYUN_SERVER_IP: nacos
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      mysql: { condition: service_healthy }
+      nacos: { condition: service_healthy }
+    networks: [csmall-net]
+
+  mall-resource:
+    build:
+      context: ./jars
+      dockerfile: ../dockerfiles/mall-resource.Dockerfile
+    container_name: csmall-resource
+    ports: ["9060:9060"]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ALIYUN_SERVER_IP: nacos
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      RESOURCE_HOST: ${RESOURCE_HOST:-http://8.156.77.197/}
+    volumes:
+      - /data/csmall-upload:/data/csmall-upload
+    depends_on:
+      mysql: { condition: service_healthy }
+      nacos: { condition: service_healthy }
+    networks: [csmall-net]
+
+  mall-ai:
+    build:
+      context: ./jars
+      dockerfile: ../dockerfiles/mall-ai.Dockerfile
+    container_name: csmall-ai
+    ports: ["10010:10010"]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ALIYUN_SERVER_IP: nacos
+      JWT_SECRET: ${JWT_SECRET}
+      AI_API_KEY: ${AI_API_KEY}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
+      RESOURCE_HOST: ${RESOURCE_HOST:-http://8.156.77.197/}
+    depends_on:
+      nacos: { condition: service_healthy }
+      elasticsearch: { condition: service_healthy }
+    networks: [csmall-net]
+
+  # ==================== 前端 Nginx ====================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../Dockerfile.frontend
+    container_name: csmall-frontend
+    ports: ["80:80"]
+    volumes:
+      - /data/csmall-upload:/data/csmall-upload
+    depends_on: [mall-gateway]
+    networks: [csmall-net]
+
 networks:
   csmall-net:
     driver: bridge

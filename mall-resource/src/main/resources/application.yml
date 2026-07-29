@@ -8,6 +8,8 @@ server:
 
 # Spring相关配置
 spring:
+  application:
+    name: mall-resource
   flyway:
     enabled: true
     baseline-on-migrate: true
