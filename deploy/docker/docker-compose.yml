@@ -95,7 +95,7 @@ services:
 
   # ==================== 分布式事务 ====================
   seata:
-    image: seataio/seata-server:2.1.0
+    image: apache/seata-server:2.1.0
     container_name: csmall-seata
     ports:
       - "8091:8091"
@@ -135,6 +135,8 @@ services:
     ports: ["10087:10087"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATA_REDIS_HOST: redis
+      SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       JWT_SECRET: ${JWT_SECRET}
     depends_on: { nacos: { condition: service_healthy } }
@@ -148,6 +150,8 @@ services:
     ports: ["10009:10009"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATA_REDIS_HOST: redis
+      SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -166,6 +170,8 @@ services:
     ports: ["9010:9010"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATA_REDIS_HOST: redis
+      SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -187,6 +193,8 @@ services:
     ports: ["10004:10004"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATA_REDIS_HOST: redis
+      SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       JWT_SECRET: ${JWT_SECRET}
     restart: on-failure
@@ -201,12 +209,16 @@ services:
     ports: ["10005:10005"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATA_REDIS_HOST: redis
+      SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_mall_oms?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      SPRING_RABBITMQ_HOST: rabbitmq
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8080
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
     depends_on:
       mysql: { condition: service_healthy }
@@ -224,6 +236,9 @@ services:
     ports: ["10008:10008"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
+      SPRING_DATA_REDIS_HOST: redis
+      SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       JWT_SECRET: ${JWT_SECRET}
     depends_on:
@@ -241,12 +256,16 @@ services:
     ports: ["10007:10007"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATA_REDIS_HOST: redis
+      SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_mall_seckill?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      SPRING_RABBITMQ_HOST: rabbitmq
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8080
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
     depends_on:
       mysql: { condition: service_healthy }
@@ -264,6 +283,8 @@ services:
     ports: ["10006:10006"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATA_REDIS_HOST: redis
+      SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -282,6 +303,8 @@ services:
     ports: ["10003:10003"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATA_REDIS_HOST: redis
+      SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -300,6 +323,8 @@ services:
     ports: ["9060:9060"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATA_REDIS_HOST: redis
+      SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -321,6 +346,9 @@ services:
     ports: ["10010:10010"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
+      SPRING_DATA_REDIS_HOST: redis
+      SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       JWT_SECRET: ${JWT_SECRET}
       AI_API_KEY: ${AI_API_KEY}

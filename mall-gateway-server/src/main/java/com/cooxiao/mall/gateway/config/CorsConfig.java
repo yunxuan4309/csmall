@@ -23,9 +23,7 @@ public class CorsConfig {
           config.addAllowedOrigin("http://localhost:5173");
           config.addAllowedOrigin("http://127.0.0.1:5173");
           // 生产环境
-          config.addAllowedOrigin("http://8.156.85.160");
-          config.addAllowedOrigin("http://coolshark-shop.cn");
-          config.addAllowedOrigin("https://coolshark-shop.cn");
+          config.addAllowedOrigin("http://8.156.77.197");
         
         // 允许的请求方法
         config.addAllowedMethod("*");
