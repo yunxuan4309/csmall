@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+
+  # ==================== 数据库 ====================
+  mysql:
+    image: mysql:8.0
+    container_name: csmall-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - csmall-net
+
+  # ==================== 缓存 ====================
+  redis:
+    image: redis:7-alpine
+    container_name: csmall-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - csmall-net
+
+  # ==================== 注册/配置中心 ====================
+  nacos:
+    image: nacos/nacos-server:v2.5.2
+    container_name: csmall-nacos
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    environment:
+      MODE: standalone
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks:
+      - csmall-net
+
+  # ==================== 消息队列 ====================
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: csmall-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - csmall-net
+
+  # ==================== 搜索引擎 ====================
+  elasticsearch:
+    image: elasticsearch:8.6.0
+    container_name: csmall-es
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      xpack.security.enabled: "false"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - csmall-net
+
+  # ==================== 分布式事务 ====================
+  seata:
+    image: seataio/seata-server:2.1.0
+    container_name: csmall-seata
+    ports:
+      - "8091:8091"
+      - "7091:7091"
+    environment:
+      SEATA_PORT: 8091
+    depends_on:
+      nacos:
+        condition: service_healthy
+    networks:
+      - csmall-net
+
+  # ==================== 流量控制 ====================
+  sentinel:
+    image: bladex/sentinel-dashboard:1.8.6
+    container_name: csmall-sentinel
+    ports:
+      - "8090:8080"
+    environment:
+      JAVA_OPTS: "-Dserver.port=8080"
+    networks:
+      - csmall-net
+
+networks:
+  csmall-net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
+  rabbitmq_data:
+  es_data:
