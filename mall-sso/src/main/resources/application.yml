@@ -16,7 +16,7 @@ server:
 
 jwt:
   tokenHeader: Authorization #JWT存储的请求头
-  secret: CooxiaoMall2026JwtSecretKeyForHs512AlgorithmMustBeAtLeast64BytesLong #JWT加解密使用的密钥(HS512要求>=64字节)
+  secret: ${JWT_SECRET:CooxiaoMall2026JwtSecretKeyForHs512AlgorithmMustBeAtLeast64BytesLong} #JWT加解密使用的密钥(HS512要求>=64字节)
   expiration: 604800 #JWT的超期限时间(60*60*24)
   tokenHead: Bearer
 
@@ -45,3 +45,13 @@ knife4j:
 logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId}] %-5level %logger{36} - %msg%n"
+
+# Actuator 健康检查（Docker 容器存活探针）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
