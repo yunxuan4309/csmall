@@ -157,6 +157,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_mall_ams?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USER_JDBC_URL: jdbc:mysql://mysql:3306/cs_mall_ums?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }
@@ -177,7 +178,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_mall_pms?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
-      RESOURCE_HOST: ${RESOURCE_HOST:-http://8.156.77.197/}
+      CUSTOM_FILE_UPLOAD_RESOURCE_HOST: http://8.156.77.197/
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }
@@ -330,7 +331,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_mall_resource?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
-      RESOURCE_HOST: ${RESOURCE_HOST:-http://8.156.77.197/}
+      CUSTOM_FILE_UPLOAD_RESOURCE_HOST: http://8.156.77.197/
     volumes:
       - /data/csmall-upload:/data/csmall-upload
     depends_on:
@@ -353,7 +354,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       AI_API_KEY: ${AI_API_KEY}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
-      RESOURCE_HOST: ${RESOURCE_HOST:-http://8.156.77.197/}
+      CUSTOM_FILE_UPLOAD_RESOURCE_HOST: http://8.156.77.197/
     depends_on:
       nacos: { condition: service_healthy }
       elasticsearch: { condition: service_healthy }

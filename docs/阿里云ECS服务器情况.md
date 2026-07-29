@@ -46,53 +46,102 @@
 
 ---
 
-## 三、服务器目录结构
-
-部署后（Docker Compose）目录规划：
+## 三、服务器目录结构（实际状态）
 
 ```
 /data/
-├── csmall/                      # 项目根目录
-│   ├── docker-compose.yml       # Docker 编排文件
-│   ├── .env                     # 环境变量（从 .env.example 复制并填写真实值）
-│   ├── mysql-init.sql           # 数据库初始化 SQL
-│   ├── dockerfiles/             # Dockerfile（各模块构建用）
+├── csmall/                          # 项目根目录
+│   ├── docker-compose.yml           # Docker 编排文件（20个服务）
+│   ├── .env                         # 环境变量
+│   ├── .env.example                 # 环境变量模板
+│   ├── mysql-init.sql               # MySQL 初始化（创建6个数据库）
+│   ├── setup-server.sh              # 服务器初始化脚本
+│   ├── Dockerfile.frontend          # 前端 Nginx Dockerfile
+│   ├── dockerfiles/                 # 11 个模块专用 Dockerfile
 │   │   ├── mall-gateway.Dockerfile
 │   │   ├── mall-sso.Dockerfile
-│   │   └── ...
-│   ├── jars/                    # 11 个微服务 JAR 包
-│   │   ├── mall-gateway-server.jar
-│   │   ├── mall-sso.jar
-│   │   └── ...
-│   ├── frontend/                # 前端部署
-│   │   ├── Dockerfile
-│   │   ├── nginx.conf
-│   │   └── dist/                # Vue 构建产物
-│   ├── database/                # SQL 建表脚本
-│   └── volumes/                 # Docker 数据卷挂载点
-│       ├── mysql/               # MySQL 数据
-│       ├── redis/               # Redis 数据
-│       ├── es/                  # Elasticsearch 数据
-│       └── rabbitmq/            # RabbitMQ 数据
-└── csmall-upload/               # 用户上传文件存储
-    ├── picture/
-    ├── brand-logo/
-    └── category-icon/
+│   │   ├── mall-product.Dockerfile
+│   │   ├── mall-front.Dockerfile
+│   │   ├── mall-order.Dockerfile
+│   │   ├── mall-search.Dockerfile
+│   │   ├── mall-seckill.Dockerfile
+│   │   ├── mall-ums.Dockerfile
+│   │   ├── mall-ams.Dockerfile
+│   │   ├── mall-resource.Dockerfile
+│   │   └── mall-ai.Dockerfile
+│   ├── jars/                        # 11 个微服务 JAR 包
+│   │   ├── mall-gateway.jar (~72MB)
+│   │   ├── mall-sso.jar (~91MB)
+│   │   ├── mall-product.jar (~133MB)
+│   │   ├── mall-front.jar (~126MB)
+│   │   ├── mall-order.jar (~171MB)
+│   │   ├── mall-search.jar (~128MB)
+│   │   ├── mall-seckill.jar (~144MB)
+│   │   ├── mall-ums.jar (~101MB)
+│   │   ├── mall-ams.jar (~101MB)
+│   │   ├── mall-resource.jar (~57MB)
+│   │   └── mall-ai.jar (~127MB)
+│   └── frontend/                    # 前端部署
+│       ├── nginx.conf               # Nginx 配置
+│       └── dist/                    # Vue 构建产物
+│           ├── index.html
+│           └── assets/
+├── csmall-upload/                   # 用户上传文件存储（Nginx 直接服务）
+│   ├── *.jpg                        # 商品图片（SPU 组图）
+│   └── *.png                        # 品牌 Logo / 分类图标
+└── tmp/
+    ├── init-test-data.sql           # 测试数据 SQL（备用）
+    └── 07-seckill-test-data.sql     # 秒杀测试数据 SQL（备用）
 ```
+
+**Docker 数据卷**（由 Docker 管理，位于 `/var/lib/docker/volumes/`）：
+
+| 卷名 | 用途 |
+|------|------|
+| csmall_mysql_data | MySQL 8.0 数据文件 |
+| csmall_redis_data | Redis 7 持久化 |
+| csmall_rabbitmq_data | RabbitMQ 消息持久化 |
+| csmall_es_data | Elasticsearch 索引数据 |
 
 ---
 
-## 四、中间件配置（Docker 容器）
+## 四、Docker 容器清单（实际运行状态）
 
-| 服务 | 容器名 | 内部端口 | 外部访问 | 账号 | 密码 |
-|------|--------|---------|---------|------|------|
-| MySQL 8.0 | csmall-mysql | 3306 | 仅容器内 | root | `.env` 中 `MYSQL_ROOT_PASSWORD` |
-| Redis 7 | csmall-redis | 6379 | 仅容器内 | — | `.env` 中 `REDIS_PASSWORD`（可选） |
-| Nacos 2.5.2 | csmall-nacos | 8848 / 9848 | 仅容器内 | nacos | nacos |
-| RabbitMQ 4 | csmall-rabbitmq | 5672 / 15672 | 仅容器内 | `.env` 中配置 | `.env` 中配置 |
-| Elasticsearch 8.6 | csmall-es | 9200 / 9300 | 仅容器内 | — | 无密码 |
-| Seata 2.1.0 | csmall-seata | 8091 / 7091 | 仅容器内 | seata | seata |
-| Sentinel 1.8.6 | csmall-sentinel | 8090 | 仅容器内 | sentinel | sentinel |
+### 4.1 中间件（8 个）
+
+| 服务 | 容器名 | 镜像 | 端口映射 | 账号/密码 | 健康检查 |
+|------|--------|------|---------|-----------|---------|
+| MySQL 8.0 | csmall-mysql | mysql:8.0 | 3306→3306 | root / `.env` 中配置 | ✅ mysqladmin ping |
+| Redis 7 | csmall-redis | redis:7-alpine | 6379→6379 | 无密码 | ✅ redis-cli ping |
+| Nacos 2.5.2 | csmall-nacos | nacos/nacos-server:v2.5.2 | 8848,9848 | nacos/nacos | ✅ curl health |
+| RabbitMQ 4 | csmall-rabbitmq | rabbitmq:4-management-alpine | 5672,15672 | guest/guest | ✅ rabbitmqctl status |
+| Elasticsearch 8.6 | csmall-es | elasticsearch:8.6.0 | 9200,9300 | 无密码 | ✅ cluster health |
+| Seata 2.1.0 | csmall-seata | apache/seata-server:2.1.0 | 8091,7091 | seata/seata | ✅ wget console |
+| Sentinel 1.8.6 | csmall-sentinel | bladex/sentinel-dashboard:1.8.6 | 8090→8080 | sentinel/sentinel | ❌ 无 |
+
+> **注意**：Seata 使用 `apache/seata-server`（非 `seataio/seata-server`），后者在国内镜像源不可用。
+
+### 4.2 微服务（11 个）
+
+| 服务 | 容器名 | 端口 | 数据库 | 依赖中间件 |
+|------|--------|------|--------|-----------|
+| mall-gateway | csmall-gateway | 10087 | 无 | Nacos |
+| mall-sso | csmall-sso | 10009 | cs_mall_ams + cs_mall_ums | MySQL、Nacos |
+| mall-product | csmall-product | 9010 | cs_mall_pms | MySQL、Nacos、Seata |
+| mall-front | csmall-front | 10004 | 无（Dubbo 消费） | Nacos、Seata |
+| mall-order | csmall-order | 10005 | cs_mall_oms | MySQL、Nacos、RabbitMQ、Seata |
+| mall-search | csmall-search | 10008 | ES | Nacos、ES、Seata |
+| mall-seckill | csmall-seckill | 10007 | cs_mall_seckill | MySQL、Nacos、RabbitMQ、Seata |
+| mall-ums | csmall-ums | 10006 | cs_mall_ums | MySQL、Nacos |
+| mall-ams | csmall-ams | 10003 | cs_mall_ams | MySQL、Nacos |
+| mall-resource | csmall-resource | 9060 | cs_mall_resource | MySQL、Nacos |
+| mall-ai | csmall-ai | 10010 | ES | Nacos、ES |
+
+### 4.3 前端（1 个）
+
+| 服务 | 容器名 | 端口 | 说明 |
+|------|--------|------|------|
+| Nginx | csmall-frontend | 80 | SPA 静态文件 + API 反向代理 |
 
 ### 外部访问说明
 
