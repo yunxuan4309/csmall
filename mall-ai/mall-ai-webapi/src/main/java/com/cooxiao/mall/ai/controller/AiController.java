@@ -3,16 +3,21 @@ package com.cooxiao.mall.ai.controller;
 import com.cooxiao.mall.ai.service.impl.ChatServiceImpl;
 import com.cooxiao.mall.ai.service.impl.ProductCompareServiceImpl;
 import com.cooxiao.mall.ai.service.impl.RagServiceImpl;
+import com.cooxiao.mall.ai.service.impl.SearchServiceImpl;
 import com.cooxiao.mall.ai.service.impl.VectorSyncServiceImpl;
 import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.restful.JsonResult;
 import com.cooxiao.mall.pojo.ai.dto.AskDTO;
 import com.cooxiao.mall.pojo.ai.dto.ChatSendDTO;
 import com.cooxiao.mall.pojo.ai.dto.ProductCompareDTO;
+import com.cooxiao.mall.pojo.ai.dto.SearchDTO;
 import com.cooxiao.mall.pojo.ai.vo.AskResultVO;
 import com.cooxiao.mall.pojo.ai.vo.ChatHistoryVO;
 import com.cooxiao.mall.pojo.ai.vo.ChatResultVO;
 import com.cooxiao.mall.pojo.ai.vo.CompareResultVO;
+import com.cooxiao.mall.pojo.ai.vo.RelatedProductVO;
+import com.cooxiao.mall.pojo.ai.vo.SearchResultVO;
+import com.cooxiao.mall.pojo.ai.vo.SuggestVO;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import jakarta.validation.Valid;
@@ -23,6 +28,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/ai")
@@ -40,6 +47,35 @@ public class AiController {
 
     @Autowired
     private ChatServiceImpl chatService;
+
+    @Autowired
+    private SearchServiceImpl searchService;
+
+    // ========== Phase 4: AI 搜索增强 ==========
+
+    @PostMapping("/search")
+    @ApiOperation("AI 语义搜索 — ES 召回 Top-15 → AI 按意图重排序 → 返回 Top-5 + 解释")
+    public JsonResult<SearchResultVO> search(@Valid @RequestBody SearchDTO dto) {
+        SearchResultVO result = searchService.search(
+                dto.getKeyword(), dto.getPage(), dto.getPageSize());
+        return JsonResult.ok(result);
+    }
+
+    @GetMapping("/search/suggest")
+    @ApiOperation("搜索自动补全 — 输入部分文字实时返回补全建议")
+    public JsonResult<SuggestVO> suggest(@RequestParam String keyword) {
+        SuggestVO result = searchService.suggest(keyword);
+        return JsonResult.ok(result);
+    }
+
+    @GetMapping("/product/{spuId}/related")
+    @ApiOperation("相关商品推荐 — 基于 ES more_like_this，返回与当前商品相似的商品")
+    public JsonResult<List<RelatedProductVO>> getRelated(@PathVariable Long spuId) {
+        List<RelatedProductVO> result = searchService.getRelated(spuId);
+        return JsonResult.ok(result);
+    }
+
+    // ========== Phase 1-2: 商品对比 + RAG 问答 ==========
 
     @PostMapping("/compare")
     @ApiOperation("AI 商品对比 — 选择多个商品后，AI 自动生成结构化对比结果")

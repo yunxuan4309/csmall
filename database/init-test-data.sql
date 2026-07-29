@@ -363,10 +363,17 @@ USE cs_mall_ums;
 -- ----------------------------
 -- 20. 测试用户数据
 -- ----------------------------
-INSERT INTO `ums_user` (`id`, `username`, `password`, `nickname`, `phone`, `email`, `enable`) VALUES 
+INSERT INTO `ums_user` (`id`, `username`, `password`, `nickname`, `phone`, `email`, `enable`) VALUES
 (1, 'testuser1', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '测试用户 1', '13800138001', 'test1@example.com', 1),
 (2, 'testuser2', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '测试用户 2', '13800138002', 'test2@example.com', 1),
-(3, 'zhangsan', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '张三', '13800138003', 'zhangsan@example.com', 1);
+(3, 'testuser3', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '测试用户 3', '13800138003', 'test3@example.com', 1),
+(4, 'testuser4', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '测试用户 4', '13800138004', 'test4@example.com', 1),
+(5, 'testuser5', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '测试用户 5', '13800138005', 'test5@example.com', 1),
+(6, 'testuser6', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '测试用户 6', '13800138006', 'test6@example.com', 1),
+(7, 'testuser7', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '测试用户 7', '13800138007', 'test7@example.com', 1),
+(8, 'testuser8', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '测试用户 8', '13800138008', 'test8@example.com', 1),
+(9, 'testuser9', '$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '测试用户 9', '13800138009', 'test9@example.com', 1),
+(10,'testuser10','$2a$10$LKBk.ZoWkmKyyExV39Yz7.EGAzMdX/aXbA0lvPpIAHgx9RsW3xZOm', '测试用户 10','13800138010','test10@example.com',1);
 
 
 -- =====================================================

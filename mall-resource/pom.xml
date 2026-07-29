@@ -79,6 +79,12 @@
             <version>${mybatis-plus-jsqlparser.version}</version>
         </dependency>
 
+        <!-- Nacos 服务发现（Docker部署 Gateway lb:// 路由需要） -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+
         <!-- Spring Boot Test：测试 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

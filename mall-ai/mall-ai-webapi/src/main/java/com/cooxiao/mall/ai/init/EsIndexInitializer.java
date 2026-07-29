@@ -71,6 +71,13 @@ public class EsIndexInitializer {
                         "dims": %d,
                         "index": true,
                         "similarity": "cosine"
+                      },
+                      "suggestField": {
+                        "type": "completion",
+                        "analyzer": "ik_max_word",
+                        "preserve_separators": true,
+                        "preserve_position_increments": true,
+                        "max_input_length": 50
                       }
                     }
                   }

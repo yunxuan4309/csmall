@@ -184,4 +184,7 @@ public class SeckillSpuVO implements Serializable {
      */
     @ApiModelProperty(value="隐藏的秒杀url地址,如果没有到开始秒杀的时间,这个地址值是空的")
     private String url;
+
+    @ApiModelProperty(value="当前用户是否已购买过该SPU下的任一SKU")
+    private Boolean purchased;
 }

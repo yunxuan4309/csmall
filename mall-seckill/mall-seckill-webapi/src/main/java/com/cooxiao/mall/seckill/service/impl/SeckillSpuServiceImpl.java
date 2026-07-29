@@ -3,15 +3,18 @@ package com.cooxiao.mall.seckill.service.impl;
 import java.util.concurrent.ThreadLocalRandom;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.ResponseCode;
 import com.cooxiao.mall.pojo.product.vo.SpuDetailStandardVO;
 import com.cooxiao.mall.pojo.product.vo.SpuStandardVO;
+import com.cooxiao.mall.pojo.seckill.model.SeckillSku;
 import com.cooxiao.mall.pojo.seckill.model.SeckillSpu;
 import com.cooxiao.mall.pojo.seckill.vo.SeckillSpuDetailSimpleVO;
 import com.cooxiao.mall.pojo.seckill.vo.SeckillSpuVO;
 import com.cooxiao.mall.product.service.seckill.IForSeckillSpuService;
+import com.cooxiao.mall.seckill.mapper.SeckillSkuMapper;
 import com.cooxiao.mall.seckill.mapper.SeckillSpuMapper;
 import com.cooxiao.mall.seckill.service.ISeckillSpuService;
 import com.cooxiao.mall.seckill.utils.SeckillCacheUtils;
@@ -20,6 +23,8 @@ import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -69,6 +74,8 @@ public class SeckillSpuServiceImpl implements ISeckillSpuService {
             seckillSpuVO.setStartTime(seckillSpu.getStartTime());
             seckillSpuVO.setEndTime(seckillSpu.getEndTime());
             // 到此为止, seckillSpuVO 就赋值了常规信息和秒杀信息
+            // 检查当前用户是否已购买过该SPU下的任一SKU
+            seckillSpuVO.setPurchased(isPurchased(seckillSpu.getSpuId()));
             seckillSpuVOs.add(seckillSpuVO);
         }
         // 构建分页结果
@@ -80,6 +87,9 @@ public class SeckillSpuServiceImpl implements ISeckillSpuService {
     // 装配操作Redis的对象
     @Autowired
     private RedisTemplate redisTemplate;
+
+    @Autowired
+    private SeckillSkuMapper seckillSkuMapper;
     // SeckillSpuVO既包含秒杀信息又包含常规信息
     @Override
     public SeckillSpuVO getSeckillSpu(Long spuId) {
@@ -106,9 +116,9 @@ public class SeckillSpuServiceImpl implements ISeckillSpuService {
                 throw new CoolSharkServiceException(
                         ResponseCode.NOT_FOUND,"您要访问的商品不存在");
             }
-            // 查询 spu常规信息
+            // 查询 spu常规信息（使用 seckillSpu.spuId 即 pms_spu 的主键，而非 seckill_spu 表主键）
             SpuStandardVO standardVO =
-                    dubboSeckillSpuService.getSpuById(spuId);
+                    dubboSeckillSpuService.getSpuById(seckillSpu.getSpuId());
             // 将常规信息和秒杀信息都赋值到seckillSpuVO对象中
             seckillSpuVO=new SeckillSpuVO();
             BeanUtils.copyProperties(standardVO,seckillSpuVO);
@@ -146,6 +156,8 @@ public class SeckillSpuServiceImpl implements ISeckillSpuService {
             seckillSpuVO.setUrl("/seckill/"+randCode);
             log.info("商品详情对象构建完成,url属性为:{}",seckillSpuVO.getUrl());
         }
+        // 检查当前用户是否已购买过
+        seckillSpuVO.setPurchased(isPurchased(spuId));
         // 最后别忘了把seckillSpuVO返回!!!!!!
         return seckillSpuVO;
     }
@@ -181,5 +193,35 @@ public class SeckillSpuServiceImpl implements ISeckillSpuService {
         }
         // 最后别忘了返回 !!!!
         return simpleVO;
+    }
+
+    /** 检查当前登录用户是否已购买过该SPU下的任一SKU（spuId = PMS 商品主键） */
+    private Boolean isPurchased(Long pmsSpuId) {
+        Long userId = getCurrentUserId();
+        if (userId == null) return false;
+        // 先通过 PMS spu_id 找到 seckill_spu 记录，获取其内部 id
+        SeckillSpu seckillSpu = seckillSpuMapper.findSeckillSpuById(pmsSpuId);
+        if (seckillSpu == null) return false;
+        // seckill_sku.spu_id 引用的是 seckill_spu.id（而非 pms_spu.id）
+        List<SeckillSku> skus = seckillSkuMapper.findSeckillSkusBySpuId(seckillSpu.getId());
+        for (SeckillSku sku : skus) {
+            String key = SeckillCacheUtils.getReseckillCheckKey(sku.getSkuId(), userId);
+            if (Boolean.TRUE.equals(redisTemplate.hasKey(key))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 从 SecurityContext 安全获取当前用户ID，未登录返回 null */
+    private Long getCurrentUserId() {
+        try {
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth instanceof UsernamePasswordAuthenticationToken token
+                    && token.getCredentials() instanceof CsmallAuthenticationInfo info) {
+                return info.getId();
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 }

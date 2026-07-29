@@ -5,9 +5,11 @@ import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.ResponseCode;
 import com.cooxiao.mall.pojo.product.vo.SkuStandardVO;
 import com.cooxiao.mall.pojo.seckill.model.SeckillSku;
+import com.cooxiao.mall.pojo.seckill.model.SeckillSpu;
 import com.cooxiao.mall.pojo.seckill.vo.SeckillSkuVO;
 import com.cooxiao.mall.product.service.seckill.IForSeckillSkuService;
 import com.cooxiao.mall.seckill.mapper.SeckillSkuMapper;
+import com.cooxiao.mall.seckill.mapper.SeckillSpuMapper;
 import com.cooxiao.mall.seckill.service.ISeckillSkuService;
 import com.cooxiao.mall.seckill.utils.SeckillCacheUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -40,32 +42,33 @@ public class SeckillSkuServiceImpl implements ISeckillSkuService {
     @Autowired
     private RedisTemplate redisTemplate;
 
+    @Autowired
+    private SeckillSpuMapper seckillSpuMapper;
+
 
     @Override
-    public List<SeckillSkuVO> listSeckillSkus(Long spuId) {
+    public List<SeckillSkuVO> listSeckillSkus(Long pmsSpuId) {
+        // spuId 参数为 PMS 商品主键，需先映射到 seckill_spu 内部 id
+        SeckillSpu seckillSpu = seckillSpuMapper.findSeckillSpuById(pmsSpuId);
+        if (seckillSpu == null) {
+            throw new CoolSharkServiceException(
+                    ResponseCode.NOT_FOUND, "您访问的商品不存在");
+        }
+        Long seckillSpuId = seckillSpu.getId();
+
         // 从Redis中获取缓存Set(防缓存穿透)
-        // 使用Redis Set替代布隆过滤器,SISMEMBER判断spuId是否存在
-        String bloomDayKey=SeckillCacheUtils
-                .getBloomFilterKey(LocalDate.now());
-        // 判断这个key是否存在
-        if( ! redisTemplate.hasKey(bloomDayKey)){
+        String bloomDayKey = SeckillCacheUtils.getBloomFilterKey(LocalDate.now());
+        if (!redisTemplate.hasKey(bloomDayKey)) {
             throw new CoolSharkServiceException(
-                    ResponseCode.INTERNAL_SERVER_ERROR,"秒杀商品缓存未创建");
+                    ResponseCode.INTERNAL_SERVER_ERROR, "秒杀商品缓存未创建");
         }
-        // 使用Set判断参数spuId是否在数据库中存在,如果不存在直接抛出异常
-        if( ! redisTemplate.boundSetOps(bloomDayKey).isMember(spuId+"")){
-            // 进if表示当前spuId不在缓存中,防缓存穿透生效
+        if (!redisTemplate.boundSetOps(bloomDayKey).isMember(pmsSpuId + "")) {
             throw new CoolSharkServiceException(
-                    ResponseCode.NOT_FOUND,"您访问的商品不存在");
+                    ResponseCode.NOT_FOUND, "您访问的商品不存在");
         }
-        //以上为防缓存穿透判断;
 
-        // TODO 部署到Linux服务器安装RedisBloom模块后,替换为布隆过滤器实现:
-        // if(!redisBloomUtils.bfexists(bloomDayKey,spuId+"")){...}
-
-        // 根据spuId查询sku列表
-        List<SeckillSku> seckillSkus=seckillSkuMapper
-                .findSeckillSkusBySpuId(spuId);
+        // 根据 seckill_spu 内部 id 查询 sku 列表
+        List<SeckillSku> seckillSkus = seckillSkuMapper.findSeckillSkusBySpuId(seckillSpuId);
         // 声明一个集合,作为返回值,SeckillSkuVO是既包含常规信息又包含秒杀信息的对象
         List<SeckillSkuVO> seckillSkuVOs=new ArrayList<>();
         // 遍历从数据库查询出的秒杀sku列表

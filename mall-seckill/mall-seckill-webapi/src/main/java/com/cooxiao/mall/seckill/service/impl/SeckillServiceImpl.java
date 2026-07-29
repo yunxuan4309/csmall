@@ -8,11 +8,16 @@ import com.cooxiao.mall.pojo.order.dto.OrderAddDTO;
 import com.cooxiao.mall.pojo.order.dto.OrderItemAddDTO;
 import com.cooxiao.mall.pojo.order.vo.OrderAddVO;
 import com.cooxiao.mall.pojo.seckill.dto.SeckillOrderAddDTO;
+import com.cooxiao.mall.pojo.seckill.model.SeckillMessageRetry;
 import com.cooxiao.mall.pojo.seckill.model.Success;
 import com.cooxiao.mall.pojo.seckill.vo.SeckillCommitVO;
 import com.cooxiao.mall.seckill.config.RabbitMqComponentConfiguration;
+import com.cooxiao.mall.seckill.mapper.SeckillMessageRetryMapper;
 import com.cooxiao.mall.seckill.service.ISeckillService;
 import com.cooxiao.mall.seckill.utils.SeckillCacheUtils;
+import com.alibaba.fastjson.JSON;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.seata.spring.annotation.GlobalTransactional;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -30,6 +35,7 @@ import java.util.List;
  * @author=java.cooxiao.com QQ:25380243
  * @since=2024/10/7
  */
+@Slf4j
 @Service
 public class SeckillServiceImpl implements ISeckillService {
     // 秒杀业务中,使用redis判断是否有库存,和用户是否重复购买
@@ -42,6 +48,9 @@ public class SeckillServiceImpl implements ISeckillService {
     // 业务中需要使用RabbitMQ发送消息来实现记录秒杀成功信息
     @Autowired
     private RabbitTemplate rabbitTemplate;
+    // MQ降级：本地消息表，MQ不可用时兜底
+    @Autowired
+    private SeckillMessageRetryMapper retryMapper;
 
     /*
     1.判断用户是否为重复购买和Redis中该Sku是否有库存
@@ -96,7 +105,7 @@ public class SeckillServiceImpl implements ISeckillService {
         if(leftStock<0){
             // 库存不足,要抛出异常终止程序,
             // 但是上面代码中已经记录了当前用户购买当前商品的次数,要恢复为0,才不影响用户下次购买
-            stringRedisTemplate.boundValueOps(reSeckillCheckKey).decrement();
+            stringRedisTemplate.delete(reSeckillCheckKey);
             throw new CoolSharkServiceException(
                     ResponseCode.BAD_REQUEST,"对不起,您要购买的商品已经售罄");
         }
@@ -106,31 +115,54 @@ public class SeckillServiceImpl implements ISeckillService {
                 convertSeckillOrderToOrder(seckillOrderAddDTO);
         // 经过转换得到了普通订单对象orderAddDTO,但是还没有给userId赋值
         orderAddDTO.setUserId(userId);
-        // dubbo调用生成订单的方法
-        OrderAddVO orderAddVO = dubboOrderService.addOrder(orderAddDTO);
-        // 第三步: 使用消息队列(RabbitMQ)将秒杀成功记录信息保存到success表中
-        // 秒杀成功的信息,需求是记录在数据库中,包含的信息主要是订单项相关的
-        // 但是这个记录并不是迫切运行的,在服务器忙的高并发环境下,可以延迟运行
-        // 使用消息队列,实现这个效果,典型的削峰填谷
-        // 实例化Success对象,然后收集相关信息
-        Success success=new Success();
-        // 手动生成雪花算法ID(saveSuccess是自定义XML,不会触发MyBatis-Plus的ASSIGN_ID)
-        success.setId(com.baomidou.mybatisplus.core.toolkit.IdWorker.getId());
-        // 将订单项中的同名属性赋值到success中,大部分属性就被赋值了
-        BeanUtils.copyProperties(
-                seckillOrderAddDTO.getSeckillOrderItemAddDTO(),
-                success);
-        // 经过观察,将差异的属性补全
-        success.setUserId(userId);
-        success.setSeckillPrice(
-                seckillOrderAddDTO.getSeckillOrderItemAddDTO().getPrice());
-        success.setOrderSn(orderAddVO.getSn());
-        // success对象赋值完成,发送到RabbitMQ
-        rabbitTemplate.convertAndSend(
-                RabbitMqComponentConfiguration.SECKILL_EX,
-                RabbitMqComponentConfiguration.SECKILL_RK,
-                success);
-        // 消息已发出,本方法无需考虑消息接收的问题
+        // dubbo调用生成订单的方法 + MQ发送（统一try-catch保护，MQ不可用时补偿Redis）
+        OrderAddVO orderAddVO;
+        try {
+            orderAddVO = dubboOrderService.addOrder(orderAddDTO);
+        } catch (Exception e) {
+            log.error("Dubbo创建订单失败, skuId={}, userId={}, 补偿Redis库存", skuId, userId, e);
+            stringRedisTemplate.boundValueOps(skuStockKey).increment();
+            stringRedisTemplate.delete(reSeckillCheckKey);
+            throw new CoolSharkServiceException(
+                    ResponseCode.INTERNAL_SERVER_ERROR, "抢购人数过多，请稍后再试");
+        }
+
+        // 第三步: 消息表 + MQ（统一try-catch，失败时补偿Redis库存）
+        try {
+            Success success = new Success();
+            success.setId(IdWorker.getId());
+            BeanUtils.copyProperties(
+                    seckillOrderAddDTO.getSeckillOrderItemAddDTO(), success);
+            success.setUserId(userId);
+            success.setSeckillPrice(
+                    seckillOrderAddDTO.getSeckillOrderItemAddDTO().getPrice());
+            success.setOrderSn(orderAddVO.getSn());
+
+            SeckillMessageRetry retry = new SeckillMessageRetry();
+            retry.setId(IdWorker.getId());
+            retry.setUserId(userId);
+            retry.setSkuId(skuId);
+            retry.setOrderSn(orderAddVO.getSn());
+            retry.setMessageBody(JSON.toJSONString(success));
+            retry.setStatus(0);
+            retry.setRetryCount(0);
+            retry.setGmtCreate(java.time.LocalDateTime.now());
+            retryMapper.insert(retry);
+
+            rabbitTemplate.convertAndSend(
+                    RabbitMqComponentConfiguration.SECKILL_EX,
+                    RabbitMqComponentConfiguration.SECKILL_RK,
+                    success);
+            retryMapper.updateStatusSent(retry.getId());
+        } catch (Exception e) {
+            log.error("秒杀后处理失败, skuId={}, userId={}, exceptionType={}, exceptionMsg={}, 补偿Redis库存",
+                    skuId, userId, e.getClass().getName(), e.getMessage(), e);
+            stringRedisTemplate.boundValueOps(skuStockKey).increment();
+            stringRedisTemplate.delete(reSeckillCheckKey);
+            throw new CoolSharkServiceException(
+                    ResponseCode.INTERNAL_SERVER_ERROR, "抢购人数过多，请稍后再试");
+        }
+        // 消息已发出/已补偿,本方法无需考虑消息接收的问题
         // 第四步: 秒杀订单信息返回
         // 当前方法要求返回值类型为SeckillCommitVO
         // 经观察,属性和OrderAddVO完全一致,直接同名属性赋值

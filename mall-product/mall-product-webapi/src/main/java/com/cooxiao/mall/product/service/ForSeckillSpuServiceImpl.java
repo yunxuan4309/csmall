@@ -25,4 +25,9 @@ public class ForSeckillSpuServiceImpl implements IForSeckillSpuService {
     public SpuDetailStandardVO getSpuDetailById(Long spuId) {
         return spuDetailMapper.getBySpuId(spuId);
     }
+
+    @Override
+    public void incrementSales(Long spuId) {
+        spuMapper.incrementSales(spuId);
+    }
 }

@@ -81,7 +81,11 @@ public class ResourceWebSecurityConfiguration {
                 "/v3/api-docs/**",
                 // SSE 流式接口：依靠 SSOFilter + Authorization Header 鉴权
                 // permitAll 是为了避免异步 dispatch 时 Spring Security 二次检查丢失上下文
-                "/ai/chat/stream"));
+                "/ai/chat/stream",
+                // AI 搜索增强接口公开访问（无需登录即可搜索商品）
+                "/ai/search",
+                "/ai/search/suggest",
+                "/ai/product/*/related"));
         if (syncWhitelisted) {
             matchers.add("/ai/sync");
             matchers.add("/ai/sync/**");

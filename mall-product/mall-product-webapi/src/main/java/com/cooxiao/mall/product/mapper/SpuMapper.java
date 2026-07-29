@@ -128,5 +128,7 @@ public interface SpuMapper extends BaseMapper<Spu> {
     @Select("select * from pms_spu")
     List<Spu> findAllList();
 
+    /** 增加SPU销量 +1 */
+    int incrementSales(@Param("spuId") Long spuId);
 
 }

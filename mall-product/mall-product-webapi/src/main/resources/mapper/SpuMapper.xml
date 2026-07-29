@@ -355,4 +355,8 @@
         </choose>
     </select>
 
+    <update id="incrementSales">
+        UPDATE pms_spu SET sales = sales + 1 WHERE id = #{spuId}
+    </update>
+
 </mapper>

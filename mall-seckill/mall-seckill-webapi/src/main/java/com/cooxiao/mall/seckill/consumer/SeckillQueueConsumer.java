@@ -1,11 +1,14 @@
 package com.cooxiao.mall.seckill.consumer;
 
+import com.cooxiao.mall.pojo.seckill.model.SeckillSku;
 import com.cooxiao.mall.pojo.seckill.model.Success;
+import com.cooxiao.mall.product.service.seckill.IForSeckillSpuService;
 import com.cooxiao.mall.seckill.config.RabbitMqComponentConfiguration;
 import com.cooxiao.mall.seckill.mapper.SeckillSkuMapper;
 import com.cooxiao.mall.seckill.mapper.SuccessMapper;
 import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.amqp.rabbit.annotation.RabbitHandler;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
@@ -26,6 +29,8 @@ public class SeckillQueueConsumer {
     private SeckillSkuMapper seckillSkuMapper;
     @Autowired
     private SuccessMapper successMapper;
+    @DubboReference
+    private IForSeckillSpuService dubboSeckillSpuService;
 
     @RabbitHandler
     @Transactional
@@ -49,6 +54,15 @@ public class SeckillQueueConsumer {
             successMapper.saveSuccess(success);
             // 手动确认消息处理成功
             channel.basicAck(deliveryTag, false);
+            // 更新SPU销量
+            try {
+                SeckillSku sku = seckillSkuMapper.findBySkuId(success.getSkuId());
+                if (sku != null) {
+                    dubboSeckillSpuService.incrementSales(sku.getSpuId());
+                }
+            } catch (Exception e) {
+                log.warn("更新SPU销量失败, skuId={}: {}", success.getSkuId(), e.getMessage());
+            }
             log.info("秒杀成功记录处理完成,订单号:{}", success.getOrderSn());
         } catch (Exception e) {
             log.error("秒杀成功记录处理异常,订单号:{},异常信息:{}",

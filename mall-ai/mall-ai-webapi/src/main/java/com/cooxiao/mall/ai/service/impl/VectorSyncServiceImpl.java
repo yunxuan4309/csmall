@@ -151,6 +151,7 @@ public class VectorSyncServiceImpl {
         doc.put("tags", nullSafe(spu.getTags()));
         doc.put("sales", spu.getSales());
         doc.put("semanticText", nullSafe(semanticText));
+        doc.put("suggestField", buildSuggestInputs(spu));
         if (vector != null) {
             doc.put("semanticVector", vector);
         }
@@ -170,10 +171,36 @@ public class VectorSyncServiceImpl {
         doc.put("tags", nullSafe(spu.getTags()));
         doc.put("sales", spu.getSales());
         doc.put("semanticText", nullSafe(semanticText));
+        doc.put("suggestField", buildSuggestInputs(spu));
         if (vector != null) {
             doc.put("semanticVector", vector);
         }
         return doc;
+    }
+
+    private List<String> buildSuggestInputs(Spu spu) {
+        return buildSuggestInputs(spu.getName(), spu.getBrandName(), spu.getCategoryName(), spu.getTitle());
+    }
+
+    private List<String> buildSuggestInputs(SpuStandardVO spu) {
+        return buildSuggestInputs(spu.getName(), spu.getBrandName(), spu.getCategoryName(), spu.getTitle());
+    }
+
+    private List<String> buildSuggestInputs(String name, String brandName, String categoryName, String title) {
+        List<String> inputs = new ArrayList<>();
+        if (name != null && !name.isBlank()) {
+            inputs.add(name);
+            if (brandName != null && !brandName.isBlank()) {
+                inputs.add(brandName + " " + name);
+            }
+            if (categoryName != null && !categoryName.isBlank()) {
+                inputs.add(categoryName + " " + name);
+            }
+        }
+        if (title != null && !title.isBlank() && title.length() <= 50) {
+            inputs.add(title);
+        }
+        return inputs;
     }
 
     private List<Spu> getAllSpus() {

@@ -7,4 +7,7 @@ public interface IForSeckillSpuService {
     SpuStandardVO getSpuById(Long spuId);
 
     SpuDetailStandardVO getSpuDetailById(Long spuId);
+
+    /** 增加SPU销量 */
+    void incrementSales(Long spuId);
 }

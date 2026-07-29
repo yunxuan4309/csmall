@@ -18,4 +18,7 @@ public interface SeckillSkuMapper extends BaseMapper<SeckillSku> {
     // 根据skuId减少秒杀库存数
     int updateReduceStockBySkuId(@Param("skuId") Long skuId,
                                  @Param("quantity") Integer quantity);
+
+    /** 根据 skuId 查询 SeckillSku（用于获取 spuId） */
+    SeckillSku findBySkuId(@Param("skuId") Long skuId);
 }

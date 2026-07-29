@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cooxiao.mall.seckill.mapper.SeckillMessageRetryMapper">
+
+    <insert id="insert">
+        INSERT INTO seckill_message_retry
+            (id, user_id, sku_id, order_sn, message_body, status, retry_count, gmt_create)
+        values(
+            #{id}, #{userId}, #{skuId}, #{orderSn}, #{messageBody}, #{status}, #{retryCount}, #{gmtCreate}
+        )
+    </insert>
+
+    <update id="updateStatusSent">
+        UPDATE seckill_message_retry
+        SET status = 1, retry_count = retry_count + 1, error_msg = NULL, gmt_modified = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="incrementRetry">
+        UPDATE seckill_message_retry
+        SET retry_count = retry_count + 1,
+            error_msg = #{errorMsg},
+            gmt_modified = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateStatusFailed">
+        UPDATE seckill_message_retry
+        SET status = 2, gmt_modified = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectPending" resultType="com.cooxiao.mall.pojo.seckill.model.SeckillMessageRetry">
+        SELECT id, user_id AS userId, sku_id AS skuId, order_sn AS orderSn,
+               message_body AS messageBody, status, retry_count AS retryCount,
+               error_msg AS errorMsg, gmt_create AS gmtCreate, gmt_modified AS gmtModified
+        FROM seckill_message_retry
+        WHERE status = 0 AND retry_count &lt; #{maxRetries}
+        ORDER BY gmt_create ASC
+        LIMIT 50
+    </select>
+
+</mapper>

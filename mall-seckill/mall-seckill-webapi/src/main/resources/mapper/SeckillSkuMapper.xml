@@ -48,4 +48,11 @@
             and seckill_stock >= #{quantity}
     </update>
 
+    <select id="findBySkuId" resultMap="BaseResultMap">
+        select
+        <include refid="SimpleFields" />
+        from seckill_sku
+        where sku_id = #{skuId}
+    </select>
+
 </mapper>
