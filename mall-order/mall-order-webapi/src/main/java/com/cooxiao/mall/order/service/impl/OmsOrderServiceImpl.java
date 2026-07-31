@@ -314,6 +314,18 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         return payOrderVO;
     }
 
+    @Override
+    public void deleteOrder(Long orderId) {
+        OmsOrder order = omsOrderMapper.selectOrderById(orderId);
+        if (order == null) {
+            throw new CoolSharkServiceException(ResponseCode.NOT_FOUND, "订单不存在");
+        }
+        if (!order.getUserId().equals(getUserId())) {
+            throw new CoolSharkServiceException(ResponseCode.FORBIDDEN, "无权操作此订单");
+        }
+        omsOrderMapper.deleteById(orderId);
+    }
+
     /**
      * 处理支付回调，更新订单状态和支付流水。
      * 由 PaymentCallbackController 调用，不对外暴露。

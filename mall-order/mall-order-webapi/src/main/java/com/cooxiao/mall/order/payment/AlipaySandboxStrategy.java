@@ -35,11 +35,19 @@ public class AlipaySandboxStrategy implements PaymentStrategy {
 
     @PostConstruct
     public void init() {
-        if (Boolean.TRUE.equals(alipayConfig.getSimulated())) {
-            log.info("支付宝模拟模式，跳过 AlipayClient 初始化");
+        // 自动检测：未配置 appId 或私钥时，自动进入模拟模式
+        if (Boolean.TRUE.equals(alipayConfig.getSimulated())
+                || alipayConfig.getAppId() == null || alipayConfig.getAppId().isBlank()) {
+            alipayConfig.setSimulated(true);
+            log.info("支付宝模拟模式（未配置 AppId/私钥），跳过 AlipayClient 初始化");
             return;
         }
         String privateKey = resolvePrivateKey();
+        if (privateKey == null || privateKey.isBlank()) {
+            alipayConfig.setSimulated(true);
+            log.info("支付宝模拟模式（私钥为空），跳过 AlipayClient 初始化");
+            return;
+        }
         String publicKey = cleanPemKey(alipayConfig.getAlipayPublicKey());
         this.alipayClient = new DefaultAlipayClient(
                 alipayConfig.getGateway(),

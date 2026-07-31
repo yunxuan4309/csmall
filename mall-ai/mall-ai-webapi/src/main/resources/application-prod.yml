@@ -22,7 +22,7 @@ spring:
 
 dubbo:
   application:
-    name: mall-ai
+    name: mall-ai-dubbo
   protocol:
     port: -1
     name: dubbo
@@ -32,6 +32,7 @@ dubbo:
     use-as-metadata-center: false
   consumer:
     check: false
+    timeout: 10000
 
 custom:
   file-upload:

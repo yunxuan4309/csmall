@@ -37,10 +37,23 @@ public class FrontSpuController {
             @ApiImplicitParam(value = "页码", name = "page", example = "1"),
             @ApiImplicitParam(value = "每页条数", name = "pageSize", example = "2")
     })
-    public JsonResult<JsonPage<SpuListItemVO>> listSpuByPage(
+    public JsonResult<JsonPage<SpuListItemVO>> listSpuByCategoryId(
             @PathVariable Long categoryId, Integer page, Integer pageSize){
         JsonPage<SpuListItemVO> jsonPage= frontProductService
                 .listSpuByCategoryId(categoryId, page, pageSize);
+        return JsonResult.ok(jsonPage);
+    }
+
+    @GetMapping("/list/all")
+    @ApiOperation("分页查询全部已上架spu列表（不限分类）")
+    @ApiImplicitParams({
+            @ApiImplicitParam(value = "页码", name = "page", example = "1"),
+            @ApiImplicitParam(value = "每页条数", name = "pageSize", example = "10")
+    })
+    public JsonResult<JsonPage<SpuListItemVO>> listSpuAll(
+            Integer page, Integer pageSize){
+        JsonPage<SpuListItemVO> jsonPage= frontProductService
+                .listSpuByPage(page, pageSize);
         return JsonResult.ok(jsonPage);
     }
 

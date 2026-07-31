@@ -128,6 +128,8 @@ public class ChatServiceImpl {
         try {
             if (budgetExceeded(sessionId)) {
                 writeSSE(outputStream, "error", "服务繁忙，请稍后再试。");
+                writeSSE(outputStream, "done", "");
+                outputStream.close();
                 return;
             }
 
@@ -164,10 +166,19 @@ public class ChatServiceImpl {
                 writeSSE(outputStream, "chunk", chunk);
             });
 
-            saveSession(session, message, fullResponse.toString());
+            // 先关闭 SSE 流，避免 saveSession 阻塞导致连接不释放
             writeSSE(outputStream, "done", "");
+            outputStream.close();
+
+            // 后台保存会话（不阻塞 SSE 响应）
+            saveSession(session, message, fullResponse.toString());
         } catch (Exception e) {
             log.error("SSE 流式对话失败", e);
+            try {
+                writeSSE(outputStream, "error", "AI 服务暂时不可用，请稍后重试。");
+                writeSSE(outputStream, "done", "");
+                outputStream.close();
+            } catch (Exception ignored) {}
         }
     }
 
@@ -371,7 +382,7 @@ public class ChatServiceImpl {
     // ================================================================
 
     public ChatHistoryVO getHistory(String sessionId) {
-        ChatSession session = sessionManager.loadSession(sessionId);
+        ChatSession session = sessionManager.loadSession(sessionId, null);
         ChatHistoryVO vo = new ChatHistoryVO();
         if (session == null) {
             vo.setMessages(List.of());
@@ -385,7 +396,7 @@ public class ChatServiceImpl {
     }
 
     private ChatSession loadOrCreate(Long userId, String sessionId) {
-        ChatSession session = sessionManager.loadSession(sessionId);
+        ChatSession session = sessionManager.loadSession(sessionId, userId);
         if (session == null) {
             session = sessionManager.createSession(userId);
         }
@@ -428,21 +439,26 @@ public class ChatServiceImpl {
     private void saveSession(ChatSession session, String userMessage, String aiResponse) {
         session.addMessage(new ChatMessage("user", userMessage, LocalDateTime.now()));
         session.addMessage(new ChatMessage("assistant", aiResponse, LocalDateTime.now()));
-
-        // 提取偏好（最近 3 轮）
-        Map<String, String> recentHistory = new LinkedHashMap<>();
-        int start = Math.max(0, session.getMessages().size() - 6);
-        for (int i = start; i < session.getMessages().size(); i++) {
-            ChatMessage msg = session.getMessages().get(i);
-            recentHistory.put(msg.getRole(), msg.getContent());
-        }
-        List<Map<String, String>> historyList = new ArrayList<>();
-        for (Map.Entry<String, String> e : recentHistory.entrySet()) {
-            historyList.add(Map.of("role", e.getKey(), "content", e.getValue()));
-        }
-        Map<String, Object> newPrefs = preferenceExtractor.extract(historyList);
-        session.mergePreferences(newPrefs);
+        // 先保存消息到 Redis，确保对话上下文不丢
         sessionManager.save(session);
+        // 偏好提取作为尽力而为操作，失败不影响会话持久化
+        try {
+            Map<String, String> recentHistory = new LinkedHashMap<>();
+            int start = Math.max(0, session.getMessages().size() - 6);
+            for (int i = start; i < session.getMessages().size(); i++) {
+                ChatMessage msg = session.getMessages().get(i);
+                recentHistory.put(msg.getRole(), msg.getContent());
+            }
+            List<Map<String, String>> historyList = new ArrayList<>();
+            for (Map.Entry<String, String> e : recentHistory.entrySet()) {
+                historyList.add(Map.of("role", e.getKey(), "content", e.getValue()));
+            }
+            Map<String, Object> newPrefs = preferenceExtractor.extract(historyList);
+            session.mergePreferences(newPrefs);
+            sessionManager.save(session);
+        } catch (Exception e) {
+            log.warn("偏好提取失败（不影响对话）：{}", e.getMessage());
+        }
     }
 
     private String buildSystemPrompt(String preferenceContext, String searchContext) {

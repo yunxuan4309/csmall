@@ -89,6 +89,14 @@ public class OmsOrderController {
         return JsonResult.ok(detail);
     }
 
+    @DeleteMapping("/delete/{id}")
+    @ApiOperation("删除订单（软删除）")
+    @PreAuthorize("hasRole('user')")
+    public JsonResult deleteOrder(@PathVariable Long id) {
+        omsOrderService.deleteOrder(id);
+        return JsonResult.ok("删除成功");
+    }
+
     @PostMapping("/pay/query")
     @ApiOperation("主动查询支付结果（前端从支付宝页面跳回后调用）")
     @PreAuthorize("hasRole('user')")

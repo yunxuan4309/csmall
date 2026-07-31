@@ -22,7 +22,7 @@ spring:
 
 dubbo:
   application:
-    name: mall-ai
+    name: mall-ai-dubbo
   protocol:
     port: -1
     name: dubbo

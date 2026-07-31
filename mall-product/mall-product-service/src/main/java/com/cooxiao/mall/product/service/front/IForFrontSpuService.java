@@ -9,12 +9,13 @@ import com.cooxiao.mall.pojo.product.vo.SpuStandardVO;
 public interface IForFrontSpuService {
     /**
      * 分页查询 分类对应spu列表
-     * @param categoryId
-     * @param page
-     * @param pageSize
-     * @return
      */
     JsonPage<SpuListItemVO> listSpuByCategoryId(Long categoryId, Integer page, Integer pageSize);
+
+    /**
+     * 分页查询 全部已上架spu列表（不限制分类）
+     */
+    JsonPage<SpuListItemVO> listSpuByPage(Integer page, Integer pageSize);
 
     /**
      * 利用id 查询spu数据

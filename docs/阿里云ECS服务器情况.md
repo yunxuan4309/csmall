@@ -51,7 +51,7 @@
 ```
 /data/
 ├── csmall/                          # 项目根目录
-│   ├── docker-compose.yml           # Docker 编排文件（20个服务）
+│   ├── docker-compose.yml           # Docker 编排文件（22个容器）
 │   ├── .env                         # 环境变量
 │   ├── .env.example                 # 环境变量模板
 │   ├── mysql-init.sql               # MySQL 初始化（创建6个数据库）
@@ -105,9 +105,9 @@
 
 ---
 
-## 四、Docker 容器清单（实际运行状态）
+## 四、Docker 容器清单（实际运行状态，共 22 个容器）
 
-### 4.1 中间件（8 个）
+### 4.1 中间件（10 个）
 
 | 服务 | 容器名 | 镜像 | 端口映射 | 账号/密码 | 健康检查 |
 |------|--------|------|---------|-----------|---------|
@@ -143,9 +143,16 @@
 |------|--------|------|------|
 | Nginx | csmall-frontend | 80 | SPA 静态文件 + API 反向代理 |
 
+### 4.4 链路追踪（新增）
+
+| 服务 | 容器名 | 端口 | 说明 |
+|------|--------|------|------|
+| SkyWalking OAP | csmall-skywalking-oap | 11800,12800 | 接收 Agent 数据，存储到 ES |
+| SkyWalking UI | csmall-skywalking-ui | 8088→8080 | 链路追踪可视化看板 |
+
 ### 外部访问说明
 
-目前仅开放 HTTP(80) 端口。如需从本地访问 Nacos/Sentinel 等管理界面，可通过 SSH 隧道：
+目前仅开放 HTTP(80) 端口。如需从本地访问 Nacos/Sentinel/SkyWalking 等管理界面，可通过 SSH 隧道：
 
 ```bash
 # Nacos 控制台
@@ -156,6 +163,9 @@ ssh -L 8090:localhost:8090 ecs-user@8.156.77.197
 
 # RabbitMQ 管理界面
 ssh -L 15672:localhost:15672 ecs-user@8.156.77.197
+
+# SkyWalking UI
+ssh -L 8088:localhost:8088 ecs-user@8.156.77.197
 ```
 
 ---
@@ -173,7 +183,10 @@ ssh -L 15672:localhost:15672 ecs-user@8.156.77.197
 | 9200 | Elasticsearch HTTP | ❌ 仅 VPC 内网 |
 | 15672 | RabbitMQ 管理界面 | ❌ 仅 VPC 内网 |
 | 8090 | Sentinel Dashboard | ❌ 仅 VPC 内网 |
+| 8088 | SkyWalking UI | ❌ 仅 VPC 内网 |
 | 8091 | Seata RPC | ❌ 仅 VPC 内网 |
+| 11800 | SkyWalking OAP gRPC | ❌ 仅 VPC 内网 |
+| 12800 | SkyWalking OAP HTTP | ❌ 仅 VPC 内网 |
 | 10087 | Gateway（内部） | ❌ 仅 VPC 内网 |
 | 10003~10010 | 各微服务 | ❌ 仅 VPC 内网 |
 
@@ -191,14 +204,25 @@ ssh root@8.156.77.197
 
 ---
 
-## 七、Docker 安装（待执行）
+## 七、Docker 安装（已完成）
 
 ```bash
-# SSH 登录后执行
+# 已执行命令（2026-07-29）
 sudo apt update
 sudo apt install -y docker.io docker-compose-v2
 sudo systemctl enable docker --now
 sudo usermod -aG docker ecs-user
+```
+
+**镜像加速配置**（`/etc/docker/daemon.json`）：
+
+```json
+{
+  "registry-mirrors": [
+    "https://dockerpull.org",
+    "https://docker.1ms.run"
+  ]
+}
 ```
 
 ---
@@ -212,3 +236,4 @@ sudo usermod -aG docker ecs-user
 | Nacos 控制台 | `ssh -L 8848:localhost:8848 ecs-user@8.156.77.197` 后访问 http://localhost:8848 |
 | Sentinel Dashboard | `ssh -L 8090:localhost:8090 ecs-user@8.156.77.197` 后访问 http://localhost:8090 |
 | RabbitMQ 管理 | `ssh -L 15672:localhost:15672 ecs-user@8.156.77.197` 后访问 http://localhost:15672 |
+| SkyWalking UI | `ssh -L 8088:localhost:8088 ecs-user@8.156.77.197` 后访问 http://localhost:8088 |

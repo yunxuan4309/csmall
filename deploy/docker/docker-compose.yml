@@ -125,6 +125,35 @@ services:
     networks:
       - csmall-net
 
+  # ==================== 链路追踪 ====================
+  skywalking-oap:
+    image: apache/skywalking-oap-server:9.7.0
+    container_name: csmall-skywalking-oap
+    ports:
+      - "11800:11800"
+      - "12800:12800"
+    environment:
+      SW_STORAGE: elasticsearch
+      SW_STORAGE_ES_CLUSTER_NODES: elasticsearch:9200
+      JAVA_OPTS: "-Xms512m -Xmx1024m"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - csmall-net
+
+  skywalking-ui:
+    image: apache/skywalking-ui:9.7.0
+    container_name: csmall-skywalking-ui
+    ports:
+      - "8088:8080"
+    environment:
+      SW_OAP_ADDRESS: http://skywalking-oap:12800
+    depends_on:
+      - skywalking-oap
+    networks:
+      - csmall-net
+
   # ==================== 微服务（11 个，从 /data/csmall/jars/ 构建） ====================
 
   mall-gateway:
@@ -140,6 +169,8 @@ services:
       ALIYUN_SERVER_IP: nacos
       JWT_SECRET: ${JWT_SECRET}
     depends_on: { nacos: { condition: service_healthy } }
+    volumes:
+      - /data/csmall/skywalking-agent:/skywalking-agent:ro
     networks: [csmall-net]
 
   mall-sso:
@@ -161,6 +192,8 @@ services:
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }
+    volumes:
+      - /data/csmall/skywalking-agent:/skywalking-agent:ro
     networks: [csmall-net]
 
   mall-product:
@@ -184,6 +217,8 @@ services:
       nacos: { condition: service_healthy }
       seata: { condition: service_healthy }
     restart: on-failure
+    volumes:
+      - /data/csmall/skywalking-agent:/skywalking-agent:ro
     networks: [csmall-net]
 
   mall-front:
@@ -200,6 +235,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
     restart: on-failure
     depends_on: { nacos: { condition: service_healthy } }
+    volumes:
+      - /data/csmall/skywalking-agent:/skywalking-agent:ro
     networks: [csmall-net]
 
   mall-order:
@@ -227,6 +264,8 @@ services:
       rabbitmq: { condition: service_healthy }
       seata: { condition: service_healthy }
     restart: on-failure
+    volumes:
+      - /data/csmall/skywalking-agent:/skywalking-agent:ro
     networks: [csmall-net]
 
   mall-search:
@@ -247,6 +286,8 @@ services:
       elasticsearch: { condition: service_healthy }
       seata: { condition: service_healthy }
     restart: on-failure
+    volumes:
+      - /data/csmall/skywalking-agent:/skywalking-agent:ro
     networks: [csmall-net]
 
   mall-seckill:
@@ -274,6 +315,8 @@ services:
       rabbitmq: { condition: service_healthy }
       seata: { condition: service_healthy }
     restart: on-failure
+    volumes:
+      - /data/csmall/skywalking-agent:/skywalking-agent:ro
     networks: [csmall-net]
 
   mall-ums:
@@ -294,6 +337,8 @@ services:
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }
+    volumes:
+      - /data/csmall/skywalking-agent:/skywalking-agent:ro
     networks: [csmall-net]
 
   mall-ams:
@@ -314,6 +359,8 @@ services:
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }
+    volumes:
+      - /data/csmall/skywalking-agent:/skywalking-agent:ro
     networks: [csmall-net]
 
   mall-resource:
@@ -334,6 +381,7 @@ services:
       CUSTOM_FILE_UPLOAD_RESOURCE_HOST: http://8.156.77.197/
     volumes:
       - /data/csmall-upload:/data/csmall-upload
+      - /data/csmall/skywalking-agent:/skywalking-agent:ro
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }
@@ -358,6 +406,8 @@ services:
     depends_on:
       nacos: { condition: service_healthy }
       elasticsearch: { condition: service_healthy }
+    volumes:
+      - /data/csmall/skywalking-agent:/skywalking-agent:ro
     networks: [csmall-net]
 
   # ==================== 前端 Nginx ====================

@@ -13,12 +13,13 @@ import java.util.List;
 public interface IFrontProductService {
     /**
      * 根据分类id查询spu列表
-     * @param categoryId
-     * @param page
-     * @param pageSize
-     * @return
      */
     JsonPage<SpuListItemVO> listSpuByCategoryId(Long categoryId, Integer page, Integer pageSize);
+
+    /**
+     * 分页查询全部已上架spu列表（不限制分类）
+     */
+    JsonPage<SpuListItemVO> listSpuByPage(Integer page, Integer pageSize);
 
     /**
      * 根据id查询spuvo对象

@@ -52,4 +52,10 @@ public interface IOmsOrderService{
      * @return 支付结果
      */
     PayOrderVO payOrder(PayOrderDTO payOrderDTO);
+
+    /**
+     * 删除订单（软删除）
+     * @param orderId 订单ID
+     */
+    void deleteOrder(Long orderId);
 }

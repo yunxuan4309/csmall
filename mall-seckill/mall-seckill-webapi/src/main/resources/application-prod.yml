@@ -34,6 +34,22 @@ spring:
       transport:
         port: 8870
         dashboard: ${my.server.addr}:8080
+      # 规则持久化到 Nacos，重启/重连 Dashboard 后自动恢复
+      datasource:
+        flow:
+          nacos:
+            server-addr: ${my.server.addr}:8848
+            data-id: mall-seckill-flow-rules
+            group-id: SENTINEL_GROUP
+            data-type: json
+            rule-type: flow
+        degrade:
+          nacos:
+            server-addr: ${my.server.addr}:8848
+            data-id: mall-seckill-degrade-rules
+            group-id: SENTINEL_GROUP
+            data-type: json
+            rule-type: degrade
   data:
     redis:
       host: ${my.server.addr}

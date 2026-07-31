@@ -27,12 +27,14 @@ public class FrontProductServiceImpl implements IFrontProductService {
     //根据分类id分页查询spu列表
     @Override
     public JsonPage<SpuListItemVO> listSpuByCategoryId(Long categoryId, Integer page, Integer pageSize) {
-        // 这里dubbo调用的方法是已经进行了分页逻辑的
-        // 所以获取的直接是jsonPage类型对象,我们只需要调用然后返回即可
         JsonPage<SpuListItemVO> jsonPage =
                 dubboSpuService.listSpuByCategoryId(categoryId, page, pageSize);
-        // 别忘了返回jsonPage!!!!!
         return jsonPage;
+    }
+
+    @Override
+    public JsonPage<SpuListItemVO> listSpuByPage(Integer page, Integer pageSize) {
+        return dubboSpuService.listSpuByPage(page, pageSize);
     }
 
     //根据spuId查询spu商品详情

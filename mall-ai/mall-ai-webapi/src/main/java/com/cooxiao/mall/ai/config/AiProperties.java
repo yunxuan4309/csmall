@@ -28,7 +28,7 @@ public class AiProperties {
     private int maxTokens = 2000;
 
     /** API 调用超时时间（毫秒） */
-    private int timeout = 15000;
+    private int timeout = 60000;
 
     /** Embedding 服务 API Key（硅基流动等第三方供应商） */
     private String embeddingApiKey;

@@ -45,6 +45,7 @@ dubbo:
   cloud:
     subscribed-services: mall-product
 
+# Seata：mall-common Dubbo ConsumerFilter 需要 Seata 类传播 XID
 seata:
   tx-service-group: csmall_group
   service:

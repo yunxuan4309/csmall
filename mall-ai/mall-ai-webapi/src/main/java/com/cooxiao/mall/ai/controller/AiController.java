@@ -108,7 +108,7 @@ public class AiController {
         return JsonResult.ok(result);
     }
 
-    @CrossOrigin(origins = "http://localhost:5173")
+    @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173", "http://8.156.77.197"})
     @PostMapping("/chat/stream")
     @ApiOperation("流式发送消息给 AI 导购（逐字输出 + 商品卡片）")
     public ResponseEntity<StreamingResponseBody> streamMessage(@Valid @RequestBody ChatSendDTO dto) {
@@ -125,7 +125,7 @@ public class AiController {
     }
 
     // 保留旧接口兼容
-    @CrossOrigin(origins = "http://localhost:5173")
+    @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173", "http://8.156.77.197"})
     @PostMapping(value = "/chat/stream-sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @ApiOperation("流式发送消息给 AI 导购（SseEmitter 兼容）")
     public org.springframework.web.servlet.mvc.method.annotation.SseEmitter streamMessageLegacy(

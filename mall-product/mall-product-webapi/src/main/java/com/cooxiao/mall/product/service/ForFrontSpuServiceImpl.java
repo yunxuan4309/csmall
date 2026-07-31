@@ -42,7 +42,21 @@ public class ForFrontSpuServiceImpl implements IForFrontSpuService {
                .eq(Spu::getDeleted, 0)
                .orderByDesc(Spu::getGmtCreate);
         IPage<Spu> result = spuMapper.selectPage(pageParam, wrapper);
-        // 转换为VO
+        return toSpuListItemPage(result);
+    }
+
+    @Override
+    public JsonPage<SpuListItemVO> listSpuByPage(Integer page, Integer pageSize) {
+        Page<Spu> pageParam = new Page<>(page, pageSize);
+        LambdaQueryWrapper<Spu> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Spu::getChecked, 1)
+               .eq(Spu::getDeleted, 0)
+               .orderByDesc(Spu::getGmtCreate);
+        IPage<Spu> result = spuMapper.selectPage(pageParam, wrapper);
+        return toSpuListItemPage(result);
+    }
+
+    private JsonPage<SpuListItemVO> toSpuListItemPage(IPage<Spu> result) {
         List<SpuListItemVO> voList = result.getRecords().stream()
                 .map(this::convertToVO)
                 .collect(Collectors.toList());
