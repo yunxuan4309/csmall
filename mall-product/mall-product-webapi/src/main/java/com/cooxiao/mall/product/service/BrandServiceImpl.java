@@ -116,10 +116,12 @@ public class BrandServiceImpl implements IBrandService {
     }
 
     @Override
-    public JsonPage<BrandStandardVO> list(Integer page, Integer pageSize) {
-        log.debug("查询品牌分页：page={}, size={}", page, pageSize);
+    public JsonPage<BrandStandardVO> list(Integer page, Integer pageSize, String name) {
         Page<Brand> pageParam = new Page<>(page, pageSize);
         LambdaQueryWrapper<Brand> wrapper = new LambdaQueryWrapper<>();
+        if (name != null && !name.isBlank()) {
+            wrapper.like(Brand::getName, name);
+        }
         wrapper.orderByDesc(Brand::getSort, Brand::getGmtCreate);
         IPage<Brand> result = brandMapper.selectPage(pageParam, wrapper);
         // 转换为VO

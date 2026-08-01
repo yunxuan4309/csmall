@@ -128,11 +128,11 @@
             brand_name, category_id, category_name, attribute_template_id, album_id,
             pictures, keywords, tags, sort, is_deleted,
             is_published, is_new_arrival, is_recommend, is_checked, gmt_check)
-        values (#{id}, #{name}, #{typeNumber}, #{title}, #{description},
-            #{listPrice}, #{stock}, #{stockThreshold}, #{unit}, #{brandId},
-            #{brandName}, #{categoryId}, #{categoryName}, #{attributeTemplateId}, #{albumId},
+        values (#{id}, #{name}, #{spuQuery.typeNumber}, #{title}, #{description},
+            #{listPrice}, #{stock}, #{stockThreshold}, #{unit}, #{spuQuery.brandId},
+            #{brandName}, #{spuQuery.categoryId}, #{categoryName}, #{attributeTemplateId}, #{albumId},
             #{pictures}, #{keywords}, #{tags}, #{sort}, #{deleted},
-            #{published}, #{newArrival}, #{recommend}, #{checked}, #{gmtCheck})
+            #{spuQuery.published}, #{newArrival}, #{recommend}, #{spuQuery.checked}, #{gmtCheck})
     </insert>
 
     <!-- int deleteById(Long id); -->
@@ -150,8 +150,8 @@
                 <if test="name != null">
                     name=#{name},
                 </if>
-                <if test="typeNumber != null">
-                    type_number=#{typeNumber},
+                <if test="spuQuery.typeNumber != null">
+                    type_number=#{spuQuery.typeNumber},
                 </if>
                 <if test="title != null">
                     title=#{title},
@@ -168,14 +168,14 @@
                 <if test="unit != null">
                     unit=#{unit},
                 </if>
-                <if test="brandId != null">
-                    brand_id=#{brandId},
+                <if test="spuQuery.brandId != null">
+                    brand_id=#{spuQuery.brandId},
                 </if>
                 <if test="brandName != null">
                     brand_name=#{brandName},
                 </if>
-                <if test="categoryId != null">
-                    category_id=#{categoryId},
+                <if test="spuQuery.categoryId != null">
+                    category_id=#{spuQuery.categoryId},
                 </if>
                 <if test="categoryName != null">
                     category_name=#{categoryName},
@@ -210,8 +210,8 @@
                 <if test="deleted != null">
                     is_deleted=#{deleted},
                 </if>
-                <if test="published != null">
-                    is_published=#{published},
+                <if test="spuQuery.published != null">
+                    is_published=#{spuQuery.published},
                 </if>
                 <if test="newArrival != null">
                     is_new_arrival=#{newArrival},
@@ -219,8 +219,8 @@
                 <if test="recommend != null">
                     is_recommend=#{recommend},
                 </if>
-                <if test="checked != null">
-                    is_checked=#{checked},
+                <if test="spuQuery.checked != null">
+                    is_checked=#{spuQuery.checked},
                 </if>
                 <if test="checkUser != null">
                     check_user=#{checkUser},
@@ -236,7 +236,7 @@
     <!-- int updateCheckedById(@Param("id") Long id, @Param("isChecked") Integer isChecked); -->
     <update id="updateCheckedById">
         update pms_spu
-        set is_checked=#{checked}
+        set is_checked=#{spuQuery.checked}
         where id = #{id}
     </update>
 
@@ -265,14 +265,14 @@
     <select id="countByBrandId" resultType="int">
         select count(*)
         from pms_spu
-        where brand_id = #{brandId}
+        where brand_id = #{spuQuery.brandId}
     </select>
 
     <!-- int countByTypeNumber(String typeNumber); -->
     <select id="countByTypeNumber" resultType="int">
         select count(*)
         from pms_spu
-        where type_number = #{typeNumber}
+        where type_number = #{spuQuery.typeNumber}
     </select>
 
     <!-- SpuVO getById(Long id); -->
@@ -304,44 +304,44 @@
         <include refid="ListQueryFields"/>
         FROM pms_spu
         <where>
-            <if test="name != null">
-                AND name=#{name}
+            <if test="spuQuery.name != null and spuQuery.name != ''">
+                AND name LIKE CONCAT('%', #{spuQuery.name}, '%')
             </if>
-            <if test="brandId != null">
-                AND brand_id=#{brandId}
+            <if test="spuQuery.brandId != null">
+                AND brand_id=#{spuQuery.brandId}
             </if>
-            <if test="categoryId != null">
-                AND category_id=#{categoryId}
+            <if test="spuQuery.categoryId != null">
+                AND category_id=#{spuQuery.categoryId}
             </if>
-            <if test="typeNumber != null">
-                AND type_number=#{typeNumber}
+            <if test="spuQuery.typeNumber != null">
+                AND type_number=#{spuQuery.typeNumber}
             </if>
-            <if test="published != null">
-                AND is_published=#{published}
+            <if test="spuQuery.published != null">
+                AND is_published=#{spuQuery.published}
             </if>
-            <if test="published == null">
+            <if test="spuQuery.published == null">
                 AND is_published=1
             </if>
-            <if test="checked != null">
-                AND is_checked=#{checked}
+            <if test="spuQuery.checked != null">
+                AND is_checked=#{spuQuery.checked}
             </if>
-            <if test="checked == null">
+            <if test="spuQuery.checked == null">
                 AND is_checked=1
             </if>
-            <if test="deleted != null">
-                AND is_deleted=#{deleted}
+            <if test="spuQuery.deleted != null">
+                AND is_deleted=#{spuQuery.deleted}
             </if>
-            <if test="deleted==null">
+            <if test="spuQuery.deleted==null">
                 AND is_deleted=0
             </if>
         </where>
         <!-- 排序白名单：防止 ORDER BY SQL 注入 -->
         <choose>
-            <when test="orderBy == 'sales_desc'">ORDER BY sales DESC</when>
-            <when test="orderBy == 'price_asc'">ORDER BY list_price ASC</when>
-            <when test="orderBy == 'price_desc'">ORDER BY list_price DESC</when>
-            <when test="orderBy == 'time_desc'">ORDER BY gmt_create DESC</when>
-            <when test="orderBy == 'time_asc'">ORDER BY gmt_create ASC</when>
+            <when test="spuQuery.orderBy == 'sales_desc'">ORDER BY sales DESC</when>
+            <when test="spuQuery.orderBy == 'price_asc'">ORDER BY list_price ASC</when>
+            <when test="spuQuery.orderBy == 'price_desc'">ORDER BY list_price DESC</when>
+            <when test="spuQuery.orderBy == 'time_desc'">ORDER BY gmt_create DESC</when>
+            <when test="spuQuery.orderBy == 'time_asc'">ORDER BY gmt_create ASC</when>
             <otherwise>
                 ORDER BY
                 is_deleted,

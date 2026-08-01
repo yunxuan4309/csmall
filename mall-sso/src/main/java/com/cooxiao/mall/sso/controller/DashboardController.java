@@ -56,7 +56,7 @@ public class DashboardController {
         try {
             Map<String, Object> orderStats = orderJdbc.queryForMap(
                     "SELECT COUNT(*) AS cnt, COALESCE(SUM(amount_of_actual_pay), 0) AS revenue " +
-                    "FROM oms_order WHERE DATE(gmt_create) = CURDATE() AND state = 3");
+                    "FROM oms_order WHERE DATE(gmt_pay) = CURDATE() AND state = 3");
             vo.setTodayOrders(((Number) orderStats.get("cnt")).intValue());
             vo.setTodayRevenue((BigDecimal) orderStats.get("revenue"));
         } catch (Exception e) {
@@ -85,7 +85,7 @@ public class DashboardController {
             List<Map<String, Object>> rows = orderJdbc.queryForList(
                     "SELECT DATE(gmt_create) AS dt, COUNT(*) AS cnt, " +
                     "COALESCE(SUM(amount_of_actual_pay), 0) AS revenue " +
-                    "FROM oms_order WHERE gmt_create >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND state = 3 " +
+                    "FROM oms_order WHERE gmt_pay >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND state = 3 " +
                     "GROUP BY dt ORDER BY dt");
             for (Map<String, Object> row : rows) {
                 TrendItem item = new TrendItem();

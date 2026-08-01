@@ -2,6 +2,7 @@ package com.cooxiao.mall.order.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.cooxiao.mall.common.config.PrefixConfiguration;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.restful.JsonPage;
@@ -41,6 +42,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -48,6 +50,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -72,6 +75,8 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
     private OmsPaymentRecordMapper paymentRecordMapper;
     @Autowired
     private PaymentStrategyFactory paymentStrategyFactory;
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
     // 新增订单的方法。
     // 库存扣减改为 MQ 异步处理，不再需要 @GlobalTransactional。
@@ -181,6 +186,14 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
     // 根据订单id,修改订单状态
     @Override
     public void updateOrderState(OrderStateUpdateDTO orderStateUpdateDTO) {
+        // 校验订单归属（防止越权取消他人订单）
+        OmsOrder existing = omsOrderMapper.selectOrderById(orderStateUpdateDTO.getId());
+        if (existing == null) {
+            throw new CoolSharkServiceException(ResponseCode.NOT_FOUND, "订单不存在");
+        }
+        if (!existing.getUserId().equals(getUserId())) {
+            throw new CoolSharkServiceException(ResponseCode.FORBIDDEN, "无权操作此订单");
+        }
         // 先实例化OmsOrder对象
         OmsOrder order=new OmsOrder();
         // orderStateUpdateDTO参数属性只有id和state,实现修改订单状态,进行赋值
@@ -191,6 +204,52 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         }
         // 调用动态修改方法,因为参数中只有state有值,所以只是修改订单状态
         omsOrderMapper.updateOrderById(order);
+        // 取消订单时清除 ordered 标记，允许用户重新秒杀
+        if (order.getState() != null && order.getState() == 2) {
+            clearSeckillOrdered(orderStateUpdateDTO.getId());
+        }
+    }
+
+    /**
+     * 支付成功后：① 标记秒杀已购买（永久，isPurchased 检查用），② 清除 ordered 标记。
+     */
+    private void markSeckillPurchased(Long orderId, Long userId) {
+        try {
+            List<OmsOrderItem> items = omsOrderItemMapper.selectOrderItemsByOrderId(orderId);
+            for (OmsOrderItem item : items) {
+                String reseckillKey = PrefixConfiguration.SeckillPrefixConfiguration.SECKILL_RE_SECKILL_PREFIX
+                        + item.getSkuId() + ":" + userId;
+                stringRedisTemplate.boundValueOps(reseckillKey).set("1");
+                String orderedKey = PrefixConfiguration.SeckillPrefixConfiguration.SECKILL_ORDERED_PREFIX
+                        + item.getSkuId() + ":" + userId;
+                stringRedisTemplate.delete(orderedKey);
+                log.info("支付成功，标记秒杀已购买: {}", reseckillKey);
+            }
+        } catch (Exception e) {
+            log.warn("标记秒杀已购买失败，订单id={}", orderId, e);
+        }
+    }
+
+    /**
+     * 清除 ordered 标记（取消/删除订单时调用），允许用户重新秒杀。
+     */
+    private void clearSeckillOrdered(Long orderId) {
+        try {
+            OmsOrder o = omsOrderMapper.selectOrderById(orderId);
+            if (o == null) return;
+            List<OmsOrderItem> items = omsOrderItemMapper.selectOrderItemsByOrderId(orderId);
+            for (OmsOrderItem item : items) {
+                String orderedKey = PrefixConfiguration.SeckillPrefixConfiguration.SECKILL_ORDERED_PREFIX
+                        + item.getSkuId() + ":" + o.getUserId();
+                String lockKey = PrefixConfiguration.SeckillPrefixConfiguration.SECKILL_ORDER_LOCK_PREFIX
+                        + item.getSkuId() + ":" + o.getUserId();
+                stringRedisTemplate.delete(orderedKey);
+                stringRedisTemplate.delete(lockKey);
+                log.info("清除秒杀下单标记和锁: {}", orderedKey);
+            }
+        } catch (Exception e) {
+            log.warn("清除秒杀下单标记失败，订单id={}", orderId, e);
+        }
     }
 
     // 分页查询指定时间区间,当前登录用户所有订单信息
@@ -302,6 +361,11 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         }
         omsOrderMapper.updateOrderById(updateOrder);
 
+        // 支付成功后标记秒杀已购买
+        if (simulated) {
+            markSeckillPurchased(order.getId(), order.getUserId());
+        }
+
         // 8.组装返回结果
         PayOrderVO payOrderVO = new PayOrderVO();
         payOrderVO.setId(order.getId());
@@ -324,6 +388,12 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
             throw new CoolSharkServiceException(ResponseCode.FORBIDDEN, "无权操作此订单");
         }
         omsOrderMapper.deleteById(orderId);
+        clearSeckillOrdered(orderId);
+    }
+
+    @Override
+    public List<Map<String, Object>> getSalesBetweenDates(String startDate, String endDate) {
+        return omsOrderMapper.selectSalesByDate(startDate, endDate);
     }
 
     /**
@@ -370,6 +440,9 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         updateOrder.setGmtPay(callbackResult.getGmtPayment() != null
                 ? callbackResult.getGmtPayment() : LocalDateTime.now());
         omsOrderMapper.updateOrderById(updateOrder);
+
+        // 支付成功后标记秒杀已购买
+        markSeckillPurchased(order.getId(), order.getUserId());
 
         // 4.更新支付流水
         if (record == null) {

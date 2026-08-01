@@ -187,8 +187,9 @@ services:
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_mall_ams?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_ADMIN_JDBC_URL: jdbc:mysql://mysql:3306/cs_mall_ams?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
       SPRING_DATASOURCE_USER_JDBC_URL: jdbc:mysql://mysql:3306/cs_mall_ums?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_ORDER_JDBC_URL: jdbc:mysql://mysql:3306/cs_mall_oms?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }

@@ -56,9 +56,9 @@
         sku_id=#{skuId}
     </select>
 
-    <!-- 新增sku信息到购物车表   -->
+    <!-- 新增sku信息到购物车表（重复时替换，配合 uk_user_sku 唯一约束） -->
     <insert id="saveCart" useGeneratedKeys="true" keyProperty="id">
-        insert into oms_cart(
+        replace into oms_cart(
             user_id,
             sku_id,
             title,

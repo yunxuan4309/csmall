@@ -156,6 +156,9 @@
           <if test="dto.state != null">
             AND oo.state = #{dto.state}
           </if>
+          <if test="dto.sn != null and dto.sn != ''">
+            AND oo.sn LIKE CONCAT('%', #{dto.sn}, '%')
+          </if>
         ORDER BY oo.gmt_modified DESC
     </select>
     <!--  利用动态sql,实现对订单对象中指定字段的修改  -->
@@ -228,6 +231,16 @@
     <!-- 根据订单编号查询订单详情 -->
     <select id="selectOrderBySn" resultMap="BaseResultMap">
         SELECT * FROM oms_order WHERE sn=#{sn}
+    </select>
+
+    <!-- 按日期范围查询每日销售额（已支付/已发货/已收货） -->
+    <select id="selectSalesByDate" resultType="java.util.HashMap">
+        SELECT DATE(gmt_create) AS date, SUM(amount_of_actual_pay) AS amount
+        FROM oms_order
+        WHERE gmt_create BETWEEN #{start} AND CONCAT(#{end}, ' 23:59:59')
+          AND state IN (1, 2, 3)
+        GROUP BY DATE(gmt_create)
+        ORDER BY date
     </select>
 
 </mapper>

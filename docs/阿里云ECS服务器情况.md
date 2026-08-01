@@ -1,6 +1,7 @@
 # 阿里云 ECS 云服务器情况
 
 > 创建日期：2026-07-29
+> 最后更新：2026-08-01
 > 用途：记录本次部署的阿里云 ECS 服务器全部配置信息
 
 ---
@@ -237,3 +238,37 @@ sudo usermod -aG docker ecs-user
 | Sentinel Dashboard | `ssh -L 8090:localhost:8090 ecs-user@8.156.77.197` 后访问 http://localhost:8090 |
 | RabbitMQ 管理 | `ssh -L 15672:localhost:15672 ecs-user@8.156.77.197` 后访问 http://localhost:15672 |
 | SkyWalking UI | `ssh -L 8088:localhost:8088 ecs-user@8.156.77.197` 后访问 http://localhost:8088 |
+
+---
+
+## 九、最近部署记录
+
+### 2026-08-01 晚间部署
+
+**部署范围**: 6 个模块 + 前端 + docker-compose
+
+| 模块 | 容器 | 改动 |
+|------|------|------|
+| mall-gateway-server | csmall-gateway | 新增 `/pms/**` 路由，修复 Nacos 双注册导致 500 |
+| mall-order-webapi | csmall-order | 秒杀已购买标记重构（markSeckillPurchased / clearSeckillOrdered） |
+| mall-product-webapi | csmall-product | SpuMapper/Mapper 参数重构（spuQuery），Controller 新增搜索参数 |
+| mall-seckill-webapi | csmall-seckill | 三把 Redis key 分离 + SeckillFallback 错误前缀移除 |
+| mall-sso | csmall-sso | Dashboard SQL gmt_create→gmt_pay + 新增 order 数据源 |
+| frontend（nginx） | csmall-frontend | Admin SPA 刷新保护 + /api/ams/ 前缀路由 + Dashboard Accept 头区分 |
+| docker-compose.yml | - | SSO 新增 SPRING_DATASOURCE_ORDER_JDBC_URL |
+
+**数据库变更**:
+- `cs_mall_ams.ams_permission` — 新增 `value` 列；插入 5 条缺失权限
+- `cs_mall_pms.pms_brand` — 新增 `pinyin`、`sales`、`enable` 等 8 列
+- `cs_mall_seckill.success` / `seckill_message_retry` — 清理测试残留数据
+
+**Redis 变更**:
+- 清理 `mall:seckill:reseckill:*`、`mall:seckill:order:lock:*` 残留 key
+
+### 当前已知问题
+
+| 问题 | 严重度 | 状态 |
+|------|--------|------|
+| csmall-resource 容器 Exited (1) | 中 | 待修复（不影响核心功能） |
+| 域名 ICP 备案 | 低 | 待服务器续费 3 个月以上 |
+| HTTPS/SSL 配置 | 低 | 待备案后配置 |

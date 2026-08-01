@@ -9,6 +9,9 @@ import com.cooxiao.mall.pojo.order.vo.OrderListVO;
 import org.apache.ibatis.annotations.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * @author=java.cooxiao.com QQ:25380243
  * @since=2024/9/21
@@ -31,4 +34,7 @@ public interface OmsOrderMapper extends BaseMapper<OmsOrder> {
     // 利用动态sql,实现对订单对象中指定字段的修改
     // 参数OmsOrder对象,其中必须包含id值,其它属性哪列有值就修改哪列
     int updateOrderById(OmsOrder order);
+
+    // 按日期范围查询每日销售额（统计已支付/已发货/已收货状态）
+    List<Map<String, Object>> selectSalesByDate(@Param("start") String startDate, @Param("end") String endDate);
 }

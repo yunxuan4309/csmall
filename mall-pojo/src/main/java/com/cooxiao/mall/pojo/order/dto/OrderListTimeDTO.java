@@ -23,4 +23,6 @@ public class OrderListTimeDTO implements OrderRegExpression,Serializable {
     private Integer pageSize;
     @ApiModelProperty(value="订单状态，0=未支付，1=已关闭，2=已取消，3=已支付，4=已签收，5=已拒收，6=退款处理中，7=已退款")
     private Integer state;
+    @ApiModelProperty(value="订单号模糊搜索")
+    private String sn;
 }

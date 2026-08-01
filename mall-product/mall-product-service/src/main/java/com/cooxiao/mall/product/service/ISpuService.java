@@ -68,7 +68,7 @@ public interface ISpuService {
      * @param pageSize 每页记录数
      * @return SPU的列表，如果无记录，则返回长度为0的列表
      */
-    JsonPage<SpuListItemVO> list(Integer page, Integer pageSize);
+    JsonPage<SpuListItemVO> list(Integer page, Integer pageSize, String name);
 
     /**
      * 从数据库中搜索SPU列表

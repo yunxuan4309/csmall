@@ -52,7 +52,7 @@ spring:
         - id: mall-sso
           uri: lb://mall-sso
           predicates:
-            - Path=/sso/**,/admin/sso/**,/user/sso/**,/user/info/**
+            - Path=/sso/**,/admin/sso/**,/admin/dashboard/**,/user/sso/**,/user/info/**
         # 文件资源
         - id: mall-resource
           uri: lb://mall-resource
@@ -73,8 +73,16 @@ spring:
           uri: lb://mall-ums
           predicates:
             - Path=/ums/user/register,/ums/user/checkValue
-        # 以下服务不对外暴露，仅通过Dubbo RPC内部调用：
-        # mall-ams（后台管理）、mall-product（商品管理）
+        # 后台管理（管理员/角色/权限，需登录 + @PreAuthorize 权限校验）
+        - id: mall-ams-admin
+          uri: lb://mall-ams
+          predicates:
+            - Path=/ams/**
+        # 商品管理（后台管理系统用）。直连 HTTP 端口，避免 Nacos 混入 Dubbo 20880
+        - id: mall-product-pms
+          uri: http://mall-product:9010
+          predicates:
+            - Path=/pms/**
 
 knife4j:
   production: true

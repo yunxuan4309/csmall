@@ -50,7 +50,7 @@ public interface IBrandService {
      * @param pageSize 每页记录数
      * @return 品牌的列表，如果无记录，则返回长度为0的列表
      */
-    JsonPage<BrandStandardVO> list(Integer page, Integer pageSize);
+    JsonPage<BrandStandardVO> list(Integer page, Integer pageSize, String name);
 
     /**
      * 利用类别id查询分页数据的品牌列表

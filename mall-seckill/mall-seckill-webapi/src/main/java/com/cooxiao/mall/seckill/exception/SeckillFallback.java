@@ -18,8 +18,10 @@ public class SeckillFallback {
                                              Throwable e){
         log.error("某个请求因为发生异常降级了!");
         e.printStackTrace();
-        return JsonResult.failed(
-                ResponseCode.INTERNAL_SERVER_ERROR,
-                "发生异常:错误信息为:"+e.getMessage());
+        String msg = e.getMessage();
+        if (msg == null || msg.isBlank()) {
+            msg = "秒杀服务繁忙，请稍后再试";
+        }
+        return JsonResult.failed(ResponseCode.INTERNAL_SERVER_ERROR, msg);
     }
 }

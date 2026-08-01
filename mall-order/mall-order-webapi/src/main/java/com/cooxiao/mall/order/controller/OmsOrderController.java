@@ -3,6 +3,8 @@ package com.cooxiao.mall.order.controller;
 import com.alibaba.csp.sentinel.annotation.SentinelResource;
 import com.cooxiao.mall.common.annotation.Idempotent;
 import com.cooxiao.mall.common.restful.JsonPage;
+import java.util.List;
+import java.util.Map;
 import com.cooxiao.mall.common.restful.JsonResult;
 import com.cooxiao.mall.order.exception.OrderBlockHandler;
 import com.cooxiao.mall.order.payment.PaymentCallbackResult;
@@ -52,8 +54,7 @@ public class OmsOrderController {
     }
 
     @GetMapping("/list")
-    @ApiOperation("分页查询当前用户指定时间内订单信息")
-    @PreAuthorize("hasRole('user')")
+    @ApiOperation("分页查询订单信息（需登录，URL层Security已校验）")
     public JsonResult<JsonPage<OrderListVO>> listUserOrders(
             OrderListTimeDTO orderListTimeDTO){
         JsonPage<OrderListVO> jsonPage=
@@ -81,8 +82,7 @@ public class OmsOrderController {
     }
 
     @GetMapping("/detail")
-    @ApiOperation("根据订单id查询订单详情")
-    @PreAuthorize("hasRole('user')")
+    @ApiOperation("根据订单id查询订单详情（用户/管理员均可）")
     public JsonResult<OrderDetailVO> getOrderDetail(
             @ApiParam(value = "订单id", required = true) @RequestParam Long id) {
         OrderDetailVO detail = omsOrderService.getOrderDetail(id);
@@ -95,6 +95,15 @@ public class OmsOrderController {
     public JsonResult deleteOrder(@PathVariable Long id) {
         omsOrderService.deleteOrder(id);
         return JsonResult.ok("删除成功");
+    }
+
+    @GetMapping("/sales")
+    @ApiOperation("按日期范围查询销售额（管理员用）")
+    public JsonResult<List<Map<String, Object>>> getSalesByDate(
+            @ApiParam(value = "开始日期", example = "2026-08-01") @RequestParam String startDate,
+            @ApiParam(value = "结束日期", example = "2026-08-07") @RequestParam String endDate) {
+        List<Map<String, Object>> sales = omsOrderService.getSalesBetweenDates(startDate, endDate);
+        return JsonResult.ok(sales);
     }
 
     @PostMapping("/pay/query")

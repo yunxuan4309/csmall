@@ -30,5 +30,9 @@ public class PrefixConfiguration {
         //秒杀商品库存
         public static final String SECKILL_SKU_STOCK_PREFIX="mall:seckill:sku:stock:";
         public static final String SECKILL_SKU_VO_PREFIX = "mall:seckill:sku:vo:";
+        // 下单锁，10分钟TTL防重复提交，与购买标记（SECKILL_RE_SECKILL_PREFIX）分离
+        public static final String SECKILL_ORDER_LOCK_PREFIX = "mall:seckill:order:lock:";
+        // 未支付下单标记，2h TTL防重复未支付订单，支付/取消后删除
+        public static final String SECKILL_ORDERED_PREFIX = "mall:seckill:ordered:";
     }
 }

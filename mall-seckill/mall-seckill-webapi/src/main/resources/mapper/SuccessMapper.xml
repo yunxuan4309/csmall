@@ -18,9 +18,9 @@
         <result column="bar_code" property="barCode" />
         <result column="data" property="data" />
     </resultMap>
-    <!--  新增Success对象到数据库的方法  -->
+    <!--  新增Success对象，重复时自动替换（取消后重买场景）  -->
     <insert id="saveSuccess" >
-        insert into success(
+        replace into success(
             id,
             user_id,
             user_phone,

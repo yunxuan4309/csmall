@@ -101,8 +101,9 @@ public class BrandController {
     @GetMapping("")
     public JsonResult<JsonPage<BrandStandardVO>> list(
             @RequestParam(required = false, defaultValue = WebConst.DEFAULT_PAGE) Integer page,
-            @RequestParam(required = false, defaultValue = WebConst.DEFAULT_PAGE_SIZE) Integer pageSize) {
-        return JsonResult.ok(brandService.list(page, pageSize));
+            @RequestParam(required = false, defaultValue = WebConst.DEFAULT_PAGE_SIZE) Integer pageSize,
+            @RequestParam(required = false) String name) {
+        return JsonResult.ok(brandService.list(page, pageSize, name));
     }
 
     /**

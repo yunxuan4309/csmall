@@ -73,8 +73,13 @@ spring:
           uri: lb://mall-ums
           predicates:
             - Path=/ums/user/register,/ums/user/checkValue
-        # 后台管理
-        - id: mall-ams
+        # 后台管理系统（管理员/角色/权限）
+        - id: mall-ams-admin
+          uri: lb://mall-ams
+          predicates:
+            - Path=/ams/**
+        # 后台管理旧路由保留
+        - id: mall-ams-legacy
           uri: lb://mall-ams
           predicates:
             - Path=/admin/**

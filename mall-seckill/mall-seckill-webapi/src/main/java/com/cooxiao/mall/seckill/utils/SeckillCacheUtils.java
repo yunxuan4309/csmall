@@ -41,4 +41,12 @@ public class    SeckillCacheUtils {
     public static String getSeckillSkuVOKey(Long skuId) {
         return PrefixConfiguration.SeckillPrefixConfiguration.SECKILL_SKU_VO_PREFIX+skuId;
    }
+
+    public static String getOrderLockKey(Long skuId, Long userId) {
+        return PrefixConfiguration.SeckillPrefixConfiguration.SECKILL_ORDER_LOCK_PREFIX + skuId + ":" + userId;
+    }
+
+    public static String getOrderedKey(Long skuId, Long userId) {
+        return PrefixConfiguration.SeckillPrefixConfiguration.SECKILL_ORDERED_PREFIX + skuId + ":" + userId;
+    }
 }

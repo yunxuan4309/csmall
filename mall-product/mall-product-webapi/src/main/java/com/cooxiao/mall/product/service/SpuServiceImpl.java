@@ -202,9 +202,16 @@ public class SpuServiceImpl implements ISpuService {
     }
 
     @Override
-    public JsonPage<SpuListItemVO> list(Integer page, Integer pageSize) {
+    public JsonPage<SpuListItemVO> list(Integer page, Integer pageSize, String name) {
         Page<SpuListItemVO> pageParam = new Page<>(page, pageSize);
-        IPage<SpuListItemVO> result = spuMapper.list(pageParam);
+        IPage<SpuListItemVO> result;
+        if (name != null && !name.isBlank()) {
+            SpuQuery q = new SpuQuery();
+            q.setName(name);
+            result = spuMapper.listByCustomCondition(pageParam, q);
+        } else {
+            result = spuMapper.list(pageParam);
+        }
         return JsonPage.restPage(result);
     }
 

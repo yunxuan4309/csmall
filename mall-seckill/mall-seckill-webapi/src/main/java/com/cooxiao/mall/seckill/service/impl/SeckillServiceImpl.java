@@ -30,6 +30,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author=java.cooxiao.com QQ:25380243
@@ -67,23 +68,21 @@ public class SeckillServiceImpl implements ISeckillService {
         Long userId=getUserId();
         // 从方法参数中订单项属性里获取skuId
         Long skuId=seckillOrderAddDTO.getSeckillOrderItemAddDTO().getSkuId();
-        // 我们要判断当前用户是否秒杀购买过这个商品,要判断用户userId和skuId
-        // 某个用户某件商品只能购买一次,使用userId和skuId生成一个Key
-        // mall:seckill:reseckill:2:1
-        String reSeckillCheckKey= SeckillCacheUtils.getReseckillCheckKey(skuId,userId);
-        // 确定了上面的key之后,用这个key向Redis发送一个increment指令
-        // 这个指令是stringRedisTemplate对象特有的,意思是增长,它的效果如下
-        // 1.如果这个key不存在,redis会创建这个key,并且值为1保存
-        // 2.如果这个key存在,redis会在这个key当前的值基础上加1保存 例如先是1,就会变成2
-        // 3.无论key是否存在,这个increment方法都会返回这个key最后的值
-        // 所以只要调用increment方法返回值为1,就表示当前用户没有购买过这个商品
-        Long seckillTimes=stringRedisTemplate
-                .boundValueOps(reSeckillCheckKey).increment();
-        // 返回值seckillTimes大于1
-        if(seckillTimes>1){
-            // 已经购买过了,抛出异常,终止程序
+        // 防重复提交：下单锁 setIfAbsent，1分钟自动过期，取消订单时由 order 模块主动删除
+        // 注意：此锁 key 与支付后的购买标记 key（reseckill）分离，下单不影响 isPurchased
+        String orderLockKey = SeckillCacheUtils.getOrderLockKey(skuId, userId);
+        Boolean locked = stringRedisTemplate.boundValueOps(orderLockKey)
+                .setIfAbsent("1", 1, TimeUnit.MINUTES);
+        if (Boolean.FALSE.equals(locked)) {
             throw new CoolSharkServiceException(
                     ResponseCode.FORBIDDEN,"您已经购买过这个商品了,谢谢您的支持");
+        }
+        // 检查是否存在未支付的秒杀订单（锁过期后的二次下单拦截）
+        String orderedKey = SeckillCacheUtils.getOrderedKey(skuId, userId);
+        if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(orderedKey))) {
+            stringRedisTemplate.delete(orderLockKey);
+            throw new CoolSharkServiceException(
+                    ResponseCode.FORBIDDEN, "您有一笔未支付的秒杀订单，请先支付或取消后再试");
         }
         // 程序运行到此处,表示用户确实是第一次购买该商品
         // 下面要判断这个商品是否还有库存
@@ -105,7 +104,7 @@ public class SeckillServiceImpl implements ISeckillService {
         if(leftStock<0){
             // 库存不足,要抛出异常终止程序,
             // 但是上面代码中已经记录了当前用户购买当前商品的次数,要恢复为0,才不影响用户下次购买
-            stringRedisTemplate.delete(reSeckillCheckKey);
+            stringRedisTemplate.delete(orderLockKey);
             throw new CoolSharkServiceException(
                     ResponseCode.BAD_REQUEST,"对不起,您要购买的商品已经售罄");
         }
@@ -119,10 +118,12 @@ public class SeckillServiceImpl implements ISeckillService {
         OrderAddVO orderAddVO;
         try {
             orderAddVO = dubboOrderService.addOrder(orderAddDTO);
+            // 标记"已下单未支付"，防止锁过期后重复下单，支付/取消后由 order 模块清理
+            stringRedisTemplate.boundValueOps(orderedKey).set(orderAddVO.getSn(), 2, TimeUnit.HOURS);
         } catch (Exception e) {
             log.error("Dubbo创建订单失败, skuId={}, userId={}, 补偿Redis库存", skuId, userId, e);
             stringRedisTemplate.boundValueOps(skuStockKey).increment();
-            stringRedisTemplate.delete(reSeckillCheckKey);
+            stringRedisTemplate.delete(orderLockKey);
             throw new CoolSharkServiceException(
                     ResponseCode.INTERNAL_SERVER_ERROR, "抢购人数过多，请稍后再试");
         }
@@ -158,7 +159,8 @@ public class SeckillServiceImpl implements ISeckillService {
             log.error("秒杀后处理失败, skuId={}, userId={}, exceptionType={}, exceptionMsg={}, 补偿Redis库存",
                     skuId, userId, e.getClass().getName(), e.getMessage(), e);
             stringRedisTemplate.boundValueOps(skuStockKey).increment();
-            stringRedisTemplate.delete(reSeckillCheckKey);
+            stringRedisTemplate.delete(orderLockKey);
+            stringRedisTemplate.delete(orderedKey);
             throw new CoolSharkServiceException(
                     ResponseCode.INTERNAL_SERVER_ERROR, "抢购人数过多，请稍后再试");
         }

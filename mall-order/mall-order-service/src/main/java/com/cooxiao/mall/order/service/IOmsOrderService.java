@@ -10,6 +10,9 @@ import com.cooxiao.mall.pojo.order.vo.OrderDetailVO;
 import com.cooxiao.mall.pojo.order.vo.OrderListVO;
 import com.cooxiao.mall.pojo.order.vo.PayOrderVO;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * <p>
  * 订单数据表 服务类
@@ -58,4 +61,9 @@ public interface IOmsOrderService{
      * @param orderId 订单ID
      */
     void deleteOrder(Long orderId);
+
+    /**
+     * 按日期范围查询每日销售额
+     */
+    List<Map<String, Object>> getSalesBetweenDates(String startDate, String endDate);
 }

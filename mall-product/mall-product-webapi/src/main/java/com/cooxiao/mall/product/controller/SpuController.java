@@ -133,8 +133,9 @@ public class SpuController {
     @GetMapping("")
     public JsonResult<JsonPage<SpuListItemVO>> list(
             @RequestParam(required = false, defaultValue = WebConst.DEFAULT_PAGE) Integer page,
-            @RequestParam(required = false, defaultValue = WebConst.DEFAULT_PAGE_SIZE) Integer pageSize) {
-        JsonPage<SpuListItemVO> spuList = spuService.list(page, pageSize);
+            @RequestParam(required = false, defaultValue = WebConst.DEFAULT_PAGE_SIZE) Integer pageSize,
+            @RequestParam(required = false) String name) {
+        JsonPage<SpuListItemVO> spuList = spuService.list(page, pageSize, name);
         return JsonResult.ok(spuList);
     }
 

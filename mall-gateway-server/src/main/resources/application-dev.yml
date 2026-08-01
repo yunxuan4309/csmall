@@ -75,5 +75,10 @@ spring:
           uri: http://localhost:10006
           predicates:
             - Path=/ums/user/register,/ums/user/checkValue
+        # 后台管理（管理员/角色/权限）
+        - id: mall-ams-admin
+          uri: http://localhost:10003
+          predicates:
+            - Path=/ams/**
         # 以下服务不对外暴露，仅通过 Dubbo RPC 内部调用：
-        # mall-ams（后台管理）、mall-product（商品管理）
+        # mall-product（商品管理，已有 /pms/ 路由）
