@@ -1,7 +1,7 @@
 # 阿里云 ECS 云服务器情况
 
 > 创建日期：2026-07-29
-> 最后更新：2026-08-01
+> 最后更新：2026-08-03
 > 用途：记录本次部署的阿里云 ECS 服务器全部配置信息
 
 ---
@@ -265,10 +265,19 @@ sudo usermod -aG docker ecs-user
 **Redis 变更**:
 - 清理 `mall:seckill:reseckill:*`、`mall:seckill:order:lock:*` 残留 key
 
+### 2026-08-03 resource 容器修复
+
+**问题**: csmall-resource 容器 2 天前 Exited (1)。
+
+**根因**: 07-31 整栈 + SkyWalking 同时部署、服务器负载过高，resource 启动时 Nacos gRPC 客户端 50s 未连上（STARTING 状态）→ 服务注册抛 `NacosException: Client not connected` → Spring 启动中止。而 mall-resource 是 11 个应用服务中**唯一漏配 `restart` 策略**的，Docker 一次都不重试，因此一直 Exited。
+
+**修复**: 给 `docker-compose.yml` 的 mall-resource 加 `restart: unless-stopped`，`docker compose up -d mall-resource` 拉起。验证：Nacos 注册成功（172.18.0.22:9060 healthy）、actuator `UP`、启动仅约 30s。备份：`docker-compose.yml.bak.20260803`。
+
+> **运维教训**: ① 应用服务必须配 restart 策略，否则一次瞬时故障就永久下线；② restart 只解决"崩溃拉起"，仍需监控告警防"静默挂 2 天"；③ 大版本部署时避免整栈同时重启。
+
 ### 当前已知问题
 
 | 问题 | 严重度 | 状态 |
 |------|--------|------|
-| csmall-resource 容器 Exited (1) | 中 | 待修复（不影响核心功能） |
 | 域名 ICP 备案 | 低 | 待服务器续费 3 个月以上 |
 | HTTPS/SSL 配置 | 低 | 待备案后配置 |

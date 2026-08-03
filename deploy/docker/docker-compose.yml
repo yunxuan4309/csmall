@@ -369,6 +369,7 @@ services:
       context: ./jars
       dockerfile: ../dockerfiles/mall-resource.Dockerfile
     container_name: csmall-resource
+    restart: unless-stopped
     ports: ["9060:9060"]
     environment:
       SPRING_PROFILES_ACTIVE: prod

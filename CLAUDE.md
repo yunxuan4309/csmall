@@ -58,12 +58,9 @@ npm run preview      # 预览生产构建
 
 ## 三、生产环境部署规划
 
-### 3.1 已知问题（部署前必须解决）
+### 3.1 已解决：`.env.production` 与代码匹配
 
-**CRITICAL**: `.env.production` 与代码不匹配
-- `.env.production` 只定义了 `VITE_API_BASE_URL=/api`
-- 但 `request.js` 使用了 5 个独立变量 `VITE_API_SSO/GATEWAY/UMS/FRONT/SECKILL`
-- **解决方案**: 需要统一为单实例或使用 Nginx 按路径分发
+> **2026-07-26 已修复**：`VITE_API_BASE_URL` 与 5 个独立变量的不匹配问题已解决。`.env.production` 现为多变量配置，6 个 `VITE_API_*` 均指向同一服务器地址，由 Nginx 按路径前缀分发到 Gateway。完整说明见后端 `docs/项目上下文文档.md`。
 
 ### 3.2 建议的 Nginx 配置
 
@@ -165,7 +162,7 @@ csmall-vue/
 | 商品列表/详情 | 完成 | 自动选中首个分类 |
 | 购物车 | 完成 | 增删改查 |
 | 订单创建 | 完成 | 省市区级联选择 |
-| 订单支付 | 完成 | 模拟支付（无真实支付） |
+| 订单支付 | 完成 | 支付宝沙箱 + 模拟支付双模式 |
 | 秒杀列表/详情 | 完成 | 倒计时、SKU选择 |
 | 秒杀下单 | 完成 | 随机码机制、限购 |
 | 后台管理 | 部分 | 秒杀管理 API 已添加，缺 UI |
@@ -198,9 +195,9 @@ git push origin master
 
 ## 八、待办清单
 
-- [ ] 完善 `.env.production` 或统一 API 实例
-- [ ] 添加 Nginx 配置文件到仓库
-- [ ] 添加 Dockerfile 和 docker-compose.yml
+- [x] 完善 `.env.production`（已改为多变量配置，2026-07-26）
+- [x] 添加 Nginx 配置文件到仓库（`nginx.conf`）
+- [x] 添加 Dockerfile 和 docker-compose.yml（`deploy/docker/`）
 - [ ] 清理敏感日志（`store/frontUser.js` 中的密码日志）
 - [ ] 组件按需引入优化包体积
 - [ ] 添加 ESLint/Prettier 配置
@@ -215,37 +212,39 @@ git push origin master
 
 ## 九、服务器部署速查
 
+> 本仓库早期曾用 systemd 部署（旧 IP `8.156.85.160`，`/data/jars/`），**现已迁移为 Docker Compose 部署**。以下为当前（2026-08）实际状态，完整信息见 `docs/阿里云ECS服务器情况.md` 与 `docs/项目上下文文档.md`。
+
 ### 9.1 服务器信息
 
 | 配置项 | 值 |
 |--------|-----|
-| 公网 IP | 8.156.85.160 |
+| 公网 IP | 8.156.77.197 |
 | 登录用户 | ecs-user |
 | 后端仓库 | D:\java\csmall |
-| 部署方式 | systemd（JAR 在 `/data/jars/`） |
+| 前端仓库 | D:\Vue-Workspace\csmall-vue |
+| 部署方式 | Docker Compose（22 容器），项目根目录 `/data/csmall/` |
 
 ### 9.2 /data 目录结构
 
 | 目录 | 用途 |
 |------|------|
-| `/data/jars/` | 所有微服务 JAR 包 |
-| `/data/jars/csmall.env` | **共享环境变量文件**（MySQL/Redis/RabbitMQ/AI Key 等） |
-| `/data/jars/logs/` | 应用日志 |
-| `/data/elasticsearch/` | ES 数据 + IK 分词器 |
-| `/data/frontend/` | 前端静态文件 |
-| `/data/csmall-upload/` | 用户上传的图片文件 |
+| `/data/csmall/` | 项目根目录（docker-compose.yml、.env、jars/、frontend/） |
+| `/data/csmall/.env` | **共享环境变量文件**（MySQL/Redis/RabbitMQ/AI Key 等） |
+| `/data/csmall/jars/` | 11 个微服务 JAR 包 |
+| `/data/csmall/frontend/` | 前端静态文件（dist/） |
+| `/data/csmall-upload/` | 用户上传的图片文件（Nginx 直接静态服务） |
 
 ### 9.3 更新环境变量文件
 
-每次 `csmall.env` 有改动（如新增环境变量），必须同步到服务器：
+每次 `/data/csmall/.env` 有改动（如新增环境变量），必须同步到服务器：
 
-```powershell
-# 本地→服务器
-scp D:\java\csmall\deploy\systemd\csmall.env ecs-user@8.156.85.160:/tmp/
+```bash
+# 本地→服务器（以 deploy/docker/.env.example 为模板填写）
+scp D:\java\csmall\deploy\docker\.env ecs-user@8.156.77.197:/tmp/.env
 
 # SSH 到服务器后
-sudo mv /tmp/csmall.env /data/jars/csmall.env
-sudo systemctl restart mall-gateway mall-sso mall-product mall-front mall-search mall-order mall-seckill mall-ums mall-ams mall-resource mall-ai
+sudo mv /tmp/.env /data/csmall/.env
+cd /data/csmall && docker compose up -d     # 生效新环境变量并重启受影响容器
 ```
 
-**重要**：改完 `csmall.env` 后所有服务都要重启，否则新环境变量不生效。
+**重要**：改完 `.env` 后相关服务都要重启，否则新环境变量不生效。

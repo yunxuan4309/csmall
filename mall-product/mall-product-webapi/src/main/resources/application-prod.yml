@@ -63,7 +63,7 @@ seata:
 custom:
   file-upload:
     server-local-path: /data/csmall-upload
-    resource-host: ${RESOURCE_HOST:http://8.156.85.160/}
+    resource-host: ${RESOURCE_HOST:http://8.156.77.197/}
 
 knife4j:
   production: true

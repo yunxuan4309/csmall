@@ -40,7 +40,7 @@
 ### 完成情况
 - 数据库中已改为纯相对路径存储 ✅
 - `ImageUrlPrefixHelper` 工具类已实现，覆盖 SPU组图/品牌Logo/分类图标 ✅
-- 开发环境（`localhost:9060`）和生产环境（`http://8.156.85.160/`）已分别验证通过 ✅
+- 开发环境（`localhost:9060`）和生产环境（`http://8.156.77.197/`）已分别验证通过 ✅
 - `pms_spu_detail.content` 富文本中的 `<img>` 相对路径**暂未处理**，属于已知遗留问题
 
 ### 问题描述
@@ -50,7 +50,7 @@
 JSON_ARRAY('RESOURCE_HOST/spu_1_1.jpg', ...)
 ```
 
-执行 SQL 前需要手动全局替换 `RESOURCE_HOST` → `http://localhost:9060`（开发）或 `http://8.156.85.160`（生产），容易出错且无法自动切换。
+执行 SQL 前需要手动全局替换 `RESOURCE_HOST` → `http://localhost:9060`（开发）或 `http://8.156.77.197`（生产），容易出错且无法自动切换。
 
 ### 推荐方案（方式 B）：数据库中存相对路径，服务层拼接前缀
 
@@ -135,8 +135,8 @@ private String formatPictures(String pictures) {
 ### 迁移步骤（长期方案）
 ```bash
 # 1. 将图片 scp 到服务器
-scp -r mall-resource/src/main/resources/static/*.jpg ecs-user@8.156.85.160:/data/csmall-upload/
-scp -r mall-resource/src/main/resources/static/*.png ecs-user@8.156.85.160:/data/csmall-upload/
+scp -r mall-resource/src/main/resources/static/*.jpg ecs-user@8.156.77.197:/data/csmall-upload/
+scp -r mall-resource/src/main/resources/static/*.png ecs-user@8.156.77.197:/data/csmall-upload/
 
 # 2. 从项目中删除 static/ 下的图片文件（保留代码中的引用）
 # 3. 确认 spring.web.resources.static-locations 配置包含 file:${custom.file-upload.server-local-base-path}
