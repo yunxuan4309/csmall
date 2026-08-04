@@ -45,6 +45,8 @@ public class SkuServiceImpl implements ISkuService {
     private SkuSpecificationMapper skuSpecificationMapper;
     @Autowired
     private SpuMapper spuMapper;
+    @Autowired
+    private ISpuService spuService;
 
     @Override
     public void addNew(SkuAddNewDTO skuAddNewDTO) {
@@ -56,6 +58,7 @@ public class SkuServiceImpl implements ISkuService {
         sku.setId(skuId);
         sku.setSort(skuAddNewDTO.getSort() == null ? DataCommonConst.SORT_DEFAULT : skuAddNewDTO.getSort());
         skuMapper.insert(sku);
+        syncSpuStock(skuAddNewDTO.getSpuId());
 
         String specifications = skuAddNewDTO.getSpecifications();
         log.debug("specifications = {}", specifications);
@@ -87,6 +90,11 @@ public class SkuServiceImpl implements ISkuService {
         int rows = skuMapper.updateFullInfoById(sku);
         if (rows != 1) {
             throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "更新SKU失败，服务器忙，请稍后再次尝试！");
+        }
+        // 更新 SKU 后同步 SPU 库存
+        SkuStandardVO exist = skuMapper.getById(id);
+        if (exist != null) {
+            syncSpuStock(exist.getSpuId());
         }
     }
 
@@ -139,6 +147,18 @@ public class SkuServiceImpl implements ISkuService {
         int rows = skuMapper.deleteById(id);
         if (rows != 1) {
             throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "删除SKU失败，服务器忙，请稍后再次尝试！");
+        }
+        syncSpuStock(exist.getSpuId());
+    }
+
+    /**
+     * SKU 变更后同步 SPU 库存 = SUM(所有 SKU stock)
+     */
+    private void syncSpuStock(Long spuId) {
+        try {
+            spuService.synchroniseStock(spuId);
+        } catch (Exception e) {
+            log.warn("同步 SPU 库存失败: spuId={}", spuId, e);
         }
     }
 
@@ -212,6 +232,7 @@ public class SkuServiceImpl implements ISkuService {
                 skuSpecificationMapper.insertBatch(specList);
             }
         }
+        syncSpuStock(skuGenerateDTO.getSpuId());
         return skuList.size();
     }
 
