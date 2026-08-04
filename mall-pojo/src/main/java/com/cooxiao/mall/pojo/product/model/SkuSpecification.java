@@ -22,7 +22,7 @@ public class SkuSpecification implements Serializable {
      * 记录id
      */
     @TableId(value = "id", type = IdType.ASSIGN_ID)
-    private Integer id;
+    private Long id;
 
     /**
      * SKU id

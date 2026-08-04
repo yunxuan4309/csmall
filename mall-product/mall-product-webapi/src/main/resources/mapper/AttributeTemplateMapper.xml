@@ -73,9 +73,9 @@
     </resultMap>
 
     <!-- int insert(AttributeTemplate attributeTemplate); -->
-    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into pms_attribute_template (name, pinyin, keywords, sort)
-        values (#{name}, #{pinyin}, #{keywords}, #{sort})
+    <insert id="insert">
+        insert into pms_attribute_template (id, name, pinyin, keywords, sort)
+        values (#{id}, #{name}, #{pinyin}, #{keywords}, #{sort})
     </insert>
 
     <!-- int deleteById(Long id); -->
@@ -137,7 +137,7 @@
         LEFT JOIN
         pms_attribute
         ON
-        pms_attribute_template.id=pms_attribute.template_id
+        pms_attribute_template.id=pms_attribute.attribute_template_id
         WHERE
         pms_attribute_template.id=#{id}
     </select>
@@ -151,7 +151,7 @@
         LEFT JOIN
         pms_attribute
         ON
-        pms_attribute_template.id=pms_attribute.template_id
+        pms_attribute_template.id=pms_attribute.attribute_template_id
         WHERE
         pms_attribute_template.id=#{id} AND pms_attribute.type=#{attributeType}
     </select>

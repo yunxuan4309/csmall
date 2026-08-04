@@ -40,7 +40,7 @@ public class AttributeController {
     @ApiOperation(value = "增加属性", notes = "需要商品后台【写】权限：/pms/product/update")
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/addnew")
-    public JsonResult<Void> addNew(@Valid AttributeAddNewDTO attributeAddnewDTO) {
+    public JsonResult<Void> addNew(@Valid @RequestBody AttributeAddNewDTO attributeAddnewDTO) {
         attributeService.addNew(attributeAddnewDTO);
         return JsonResult.ok();
     }
@@ -70,7 +70,7 @@ public class AttributeController {
     })
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/{id:[0-9]+}/update")
-    public JsonResult<Void> updateById(@PathVariable Long id, @Valid AttributeUpdateDTO attributeUpdateDTO) {
+    public JsonResult<Void> updateById(@PathVariable Long id, @Valid @RequestBody AttributeUpdateDTO attributeUpdateDTO) {
         attributeService.updateById(id, attributeUpdateDTO);
         return JsonResult.ok();
     }

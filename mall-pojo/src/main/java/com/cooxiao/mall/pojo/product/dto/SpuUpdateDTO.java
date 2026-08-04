@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.io.Serializable;
+import java.math.BigDecimal;
 
 @Data
 public class SpuUpdateDTO implements SpuRegExpression, Serializable {
@@ -113,6 +114,48 @@ public class SpuUpdateDTO implements SpuRegExpression, Serializable {
     @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请选择是否标记为删除！")
     @Range(max = 1, message = VALIDATE_MESSAGE_PREFIX + "选择的是否标记为已删除的数据格式错误！")
     private Integer deleted;
+
+    /**
+     * 价格（显示在列表中）
+     */
+    @ApiModelProperty(value = "价格")
+    private BigDecimal listPrice;
+
+    /**
+     * 当前库存（冗余）
+     */
+    @ApiModelProperty(value = "库存")
+    private Integer stock;
+
+    /**
+     * 库存预警阈值
+     */
+    @ApiModelProperty(value = "库存预警阈值")
+    private Integer stockThreshold;
+
+    /**
+     * 计件单位
+     */
+    @ApiModelProperty(value = "计件单位")
+    private String unit;
+
+    /**
+     * 组图URLs（JSON格式的相对路径）
+     */
+    @ApiModelProperty(value = "组图URLs")
+    private String pictures;
+
+    /**
+     * 关键词列表
+     */
+    @ApiModelProperty(value = "关键词列表")
+    private String keywords;
+
+    /**
+     * 标签列表
+     */
+    @ApiModelProperty(value = "标签列表")
+    private String tags;
 
     /**
      * SPU的详情

@@ -154,4 +154,9 @@
         update pms_sku set stock=stock-#{stock}
         where id=#{id} and stock>#{stock}
     </update>
+
+    <!-- int deleteBySpuId(Long spuId); -->
+    <delete id="deleteBySpuId">
+        delete from pms_sku where spu_id = #{spuId}
+    </delete>
 </mapper>

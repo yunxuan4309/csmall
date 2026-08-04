@@ -39,9 +39,9 @@
     </resultMap>
 
     <!-- int insert(BrandCategory brandCategory); -->
-    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into pms_brand_category (brand_id, category_id)
-        values (#{brandId}, #{categoryId})
+    <insert id="insert">
+        insert into pms_brand_category (id, brand_id, category_id)
+        values (#{id}, #{brandId}, #{categoryId})
     </insert>
 
     <!-- int deleteByBrandIdAndCategoryId(@Param("brandId") Long brandId, @Param("categoryId") Long categoryId); -->

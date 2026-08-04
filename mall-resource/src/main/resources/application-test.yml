@@ -42,7 +42,7 @@ custom:
   # 文件上传
   file-upload:
     # 上传到的根文件夹
-    server-local-base-path: E:/csmall-upload
+    server-local-base-path: D:/java/csmall/csmall-upload
     # 上传后文件的主机名
     resource-host: http://localhost:${server.port}/
     # 图片（例如商品图片）文件配置

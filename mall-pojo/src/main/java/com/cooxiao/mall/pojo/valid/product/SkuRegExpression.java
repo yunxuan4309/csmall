@@ -9,8 +9,8 @@ import com.cooxiao.mall.pojo.valid.RegExpression;
  */
 public interface SkuRegExpression extends RegExpression {
 
-    String REGEXP_TITLE = ".{2,16}";
-    String MESSAGE_TITLE = "标题名称必须由2~16字符组成！";
+    String REGEXP_TITLE = ".{2,100}";
+    String MESSAGE_TITLE = "标题名称必须由2~100字符组成！";
 
     String REGEXP_BAR_CODE = ".{16}";
     String MESSAGE_BAR_CODE = "条型码的长度不得超过16字符！（临时设定）";

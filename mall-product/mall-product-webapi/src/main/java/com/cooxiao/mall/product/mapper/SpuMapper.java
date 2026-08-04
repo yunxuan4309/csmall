@@ -75,6 +75,24 @@ public interface SpuMapper extends BaseMapper<Spu> {
     int updateStockById(@Param("id") Long id, @Param("stock") Integer stock);
 
     /**
+     * 修改SPU的删除状态（软删除）
+     *
+     * @param id      SPU id
+     * @param deleted 新的删除状态，1=已删除，0=未删除
+     * @return 受影响的行数
+     */
+    int updateDeletedById(@Param("id") Long id, @Param("deleted") Integer deleted);
+
+    /**
+     * 修改SPU的上下架状态
+     *
+     * @param id        SPU id
+     * @param published 新的上架状态，1=上架，0=下架
+     * @return 受影响的行数
+     */
+    int updatePublishedById(@Param("id") Long id, @Param("published") Integer published);
+
+    /**
      * 根据相册id统计SPU数量
      *
      * @param albumId 相册id

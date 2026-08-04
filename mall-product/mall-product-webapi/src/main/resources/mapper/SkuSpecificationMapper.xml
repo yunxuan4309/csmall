@@ -21,15 +21,18 @@
     </resultMap>
 
     <!-- int insertBatch(List<SkuSpecification> skuSpecifications); -->
-    <insert id="insertBatch" useGeneratedKeys="true" keyProperty="id">
-        insert into pms_sku_specification (sku_id, attribute_id, attribute_name, attribute_value, unit) values
+    <!-- 注意：id 由应用层雪花算法生成，必须在 SQL 中显式插入（勿用 useGeneratedKeys 依赖自增） -->
+    <insert id="insertBatch">
+        insert into pms_sku_specification (id, sku_id, attribute_id, attribute_name, attribute_value, unit, sort) values
         <foreach collection="list" item="item" separator=",">
             (
+            #{item.id},
             #{item.skuId},
             #{item.attributeId},
             #{item.attributeName},
             #{item.attributeValue},
-            #{item.unit}
+            #{item.unit},
+            #{item.sort}
             )
         </foreach>
     </insert>
@@ -48,5 +51,23 @@
         from pms_sku_specification
         where id = #{id}
     </select>
+
+    <!-- List<SkuSpecificationStandardVO> listBySkuId(Long skuId); -->
+    <select id="listBySkuId" resultMap="StandardResultMap">
+        select
+        <include refid="StandardQueryFields"/>
+        from pms_sku_specification
+        where sku_id = #{skuId}
+        order by sort
+    </select>
+
+    <!-- int deleteBySkuIds(List<Long> skuIds); -->
+    <delete id="deleteBySkuIds">
+        delete from pms_sku_specification
+        where sku_id in
+        <foreach collection="list" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
 
 </mapper>

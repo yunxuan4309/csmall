@@ -1,6 +1,7 @@
 package com.cooxiao.mall.pojo.product.model;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -28,6 +29,7 @@ public class Attribute implements Serializable {
     /**
      * 所属属性模板id
      */
+    @TableField("attribute_template_id")
     private Long templateId;
 
     /**
@@ -68,6 +70,7 @@ public class Attribute implements Serializable {
     /**
      * 是否允许自定义，1=允许，0=禁止
      */
+    @TableField("is_allow_customize")
     private Integer allowCustomize;
 
     /**

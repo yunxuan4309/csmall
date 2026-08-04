@@ -42,7 +42,7 @@ public class AttributeTemplateController {
     @ApiOperation(value = "增加属性模板", notes = "需要商品后台【写】权限：/pms/product/update")
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/addnew")
-    public JsonResult<Void> addNew(@Valid AttributeTemplateAddNewDTO attributeTemplateAddnewDTO) {
+    public JsonResult<Void> addNew(@Valid @RequestBody AttributeTemplateAddNewDTO attributeTemplateAddnewDTO) {
         attributeTemplateService.addNew(attributeTemplateAddnewDTO);
         return JsonResult.ok();
     }
@@ -72,7 +72,7 @@ public class AttributeTemplateController {
     })
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/{id:[0-9]+}/update")
-    public JsonResult<Void> updateById(@PathVariable Long id, @Valid AttributeTemplateUpdateDTO attributeTemplateUpdateDTO) {
+    public JsonResult<Void> updateById(@PathVariable Long id, @Valid @RequestBody AttributeTemplateUpdateDTO attributeTemplateUpdateDTO) {
         attributeTemplateService.updateById(id, attributeTemplateUpdateDTO);
         return JsonResult.ok();
     }

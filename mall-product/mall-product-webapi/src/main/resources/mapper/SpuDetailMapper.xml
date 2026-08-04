@@ -17,9 +17,10 @@
     </resultMap>
 
     <!-- int insert(SpuDetail spuDetail); -->
-    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into pms_spu_detail (spu_id, content)
-        values (#{spuId}, #{content})
+    <!-- 注意：id 由应用层雪花算法生成，必须在 SQL 中显式插入 -->
+    <insert id="insert">
+        insert into pms_spu_detail (id, spu_id, content)
+        values (#{id}, #{spuId}, #{content})
     </insert>
 
     <!-- int deleteBySpuId(Long spuId); -->

@@ -4,6 +4,7 @@ import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.ResponseCode;
 import com.cooxiao.mall.product.mapper.BrandCategoryMapper;
 import com.cooxiao.mall.pojo.product.model.BrandCategory;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,7 @@ public class BrandCategoryServiceImpl implements IBrandCategoryService {
 
         // 执行绑定
         BrandCategory brandCategory = new BrandCategory();
+        brandCategory.setId(IdWorker.getId());
         brandCategory.setBrandId(brandId);
         brandCategory.setCategoryId(categoryId);
         int rows = brandCategoryMapper.insert(brandCategory);

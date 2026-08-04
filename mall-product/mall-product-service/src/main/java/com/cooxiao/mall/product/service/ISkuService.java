@@ -2,6 +2,7 @@ package com.cooxiao.mall.product.service;
 
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.pojo.product.dto.SkuAddNewDTO;
+import com.cooxiao.mall.pojo.product.dto.SkuGenerateDTO;
 import com.cooxiao.mall.pojo.product.dto.SkuUpdateFullInfoDTO;
 import com.cooxiao.mall.pojo.product.vo.SkuStandardVO;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,5 +49,22 @@ public interface ISkuService {
      * @return SPU下的SKU的列表，如果无记录，则返回长度为0的列表
      */
     JsonPage<SkuStandardVO> list(Long spuId, Integer pageNum, Integer pageSize);
+
+    /**
+     * 根据属性模板选择的销售属性值，笛卡尔积生成 SKU 组合并批量入库
+     *
+     * @param skuGenerateDTO 生成请求（含 SPU id 和销售属性选择）
+     * @return 生成的 SKU 数量
+     */
+    @Transactional
+    int generateSkus(SkuGenerateDTO skuGenerateDTO);
+
+    /**
+     * 删除SKU（连同其规格明细）
+     *
+     * @param id SKU id
+     */
+    @Transactional
+    void deleteById(Long id);
 
 }

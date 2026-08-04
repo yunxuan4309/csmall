@@ -40,6 +40,7 @@ public class ForFrontSpuServiceImpl implements IForFrontSpuService {
         wrapper.eq(Spu::getCategoryId, categoryId)
                .eq(Spu::getChecked, 1)
                .eq(Spu::getDeleted, 0)
+               .eq(Spu::getPublished, 1)
                .orderByDesc(Spu::getGmtCreate);
         IPage<Spu> result = spuMapper.selectPage(pageParam, wrapper);
         return toSpuListItemPage(result);
@@ -51,6 +52,7 @@ public class ForFrontSpuServiceImpl implements IForFrontSpuService {
         LambdaQueryWrapper<Spu> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Spu::getChecked, 1)
                .eq(Spu::getDeleted, 0)
+               .eq(Spu::getPublished, 1)
                .orderByDesc(Spu::getGmtCreate);
         IPage<Spu> result = spuMapper.selectPage(pageParam, wrapper);
         return toSpuListItemPage(result);
@@ -92,6 +94,7 @@ public class ForFrontSpuServiceImpl implements IForFrontSpuService {
         LambdaQueryWrapper<Spu> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Spu::getChecked, 1)
                .eq(Spu::getDeleted, 0)
+               .eq(Spu::getPublished, 1)
                .orderByDesc(Spu::getGmtCreate);
         IPage<Spu> result = spuMapper.selectPage(pageParam, wrapper);
         return JsonPage.restPage(result);

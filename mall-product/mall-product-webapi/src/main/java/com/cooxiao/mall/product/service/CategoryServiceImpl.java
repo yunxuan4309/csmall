@@ -9,6 +9,7 @@ import com.cooxiao.mall.common.restful.ResponseCode;
 import com.cooxiao.mall.product.constant.DataCommonConst;
 import com.cooxiao.mall.product.mapper.CategoryAttributeTemplateMapper;
 import com.cooxiao.mall.product.mapper.CategoryMapper;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.cooxiao.mall.pojo.product.dto.CategoryAddNewDTO;
 import com.cooxiao.mall.pojo.product.dto.CategoryUpdateBaseInfoDTO;
 import com.cooxiao.mall.pojo.product.dto.CategoryUpdateFullInfoDTO;
@@ -62,6 +63,7 @@ public class CategoryServiceImpl implements ICategoryService {
         // 复制属性到即将插入数据的对象中
         // 由于存在处理业务的可能，不推荐使用BeanUtils.copyProperties()方法
         Category category = new Category();
+        category.setId(IdWorker.getId());
         category.setParentId(categoryAddNewDTO.getParentId());
         category.setName(categoryAddNewDTO.getName());
         category.setKeywords(categoryAddNewDTO.getKeywords());

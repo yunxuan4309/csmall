@@ -33,10 +33,11 @@
     </resultMap>
 
     <!-- int insert(Category category); -->
-    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into pms_category (name, parent_id, depth, keywords, sort, icon, enable, is_parent, is_display,
+    <insert id="insert">
+        insert into pms_category (id, name, parent_id, depth, keywords, sort, icon, enable, is_parent, is_display,
                                   gmt_create, gmt_modified)
-        values (#{name},
+        values (#{id},
+                #{name},
                 #{parentId},
                 #{depth},
                 #{keywords},

@@ -1,6 +1,6 @@
 # CoolShark 电商平台 — 数据库结构文档
 
-> 最后更新：2026-07-18
+> 最后更新：2026-08-03
 > 每个数据库一个子文件夹，内含该库所有表的 CREATE TABLE 语句（从 MySQL 8.0 实时导出）
 
 ---
@@ -34,15 +34,15 @@ database/
 │   ├── ams_permission.sql
 │   ├── ams_role.sql
 │   └── ams_role_permission.sql
-├── cs_mall_oms/                       # 订单库（3 张表 + undo_log）
+├── cs_mall_oms/                       # 订单库（4 张表 + undo_log）
 │   ├── oms_cart.sql
 │   ├── oms_order.sql
 │   ├── oms_order_item.sql
+│   ├── oms_payment_record.sql
 │   └── undo_log.sql
-├── cs_mall_ums/                       # 用户库（3 张表）
+├── cs_mall_ums/                       # 用户库（2 张表）
 │   ├── ums_user.sql
-│   ├── ums_login_log.sql
-│   └── pms_category.sql               # ⚠ 疑似误建（不属于此库）
+│   └── ums_login_log.sql
 ├── cs_mall_seckill/                   # 秒杀库（3 张表 + undo_log）
 │   ├── seckill_spu.sql
 │   ├── seckill_sku.sql
@@ -61,11 +61,11 @@ database/
 | cs_mall_pms | 商品 SPU/SKU/品牌/分类/属性/相册 | 14 | mall-product |
 | cs_mall_ams | 管理员/角色/权限/登录日志 | 6 | mall-ams, mall-sso |
 | cs_mall_oms | 订单/订单项/购物车 | 4 | mall-order |
-| cs_mall_ums | 用户/登录日志 | 3 | mall-ums, mall-sso |
+| cs_mall_ums | 用户/登录日志 | 2 | mall-ums, mall-sso |
 | cs_mall_seckill | 秒杀 SPU/SKU/成功记录 | 4 | mall-seckill |
 | cs_mall_resource | 用户上传文件记录 | 1 | mall-resource |
 
-> **总表数**: 32 张（含 4 个 Seata undo_log 表）
+> **总表数**: 32 个建表文件（29 张业务表 + 3 张 Seata undo_log 表）
 
 ---
 
@@ -104,13 +104,12 @@ mysql -u root -p < database/07-seckill-test-data.sql
 
 ## 注意事项
 
-1. **字符集**: 所有表使用 `utf8mb4`，排序规则 `utf8mb4_0900_ai_ci`
+1. **字符集**: 绝大多数表使用 `utf8mb4`，排序规则 `utf8mb4_0900_ai_ci`；唯一例外是 3 份 Seata `undo_log` 表使用 `utf8mb3`
 2. **存储引擎**: 全部使用 InnoDB
-3. **主键策略**: 所有主键由应用层生成（MyBatis-Plus `IdWorker` 雪花算法），非数据库自增
+3. **主键策略**: 业务表主键由应用层生成（MyBatis-Plus `IdWorker` 雪花算法），非数据库自增；例外：`undo_log`、`ams_login_log`、`ums_login_log` 使用了 `AUTO_INCREMENT`
 4. **时间字段**: `gmt_create` 默认 `CURRENT_TIMESTAMP`，`gmt_modified` 自动更新
 5. **undo_log**: Seata AT 模式回滚日志表，每个参与分布式事务的数据库都需要
-6. **cs_mall_ums.pms_category**: 该表不属于用户库，可能是误建或历史遗留，建议确认后清理
-7. **is_ 前缀字段**: 注意 MyBatis-Plus 不会自动映射 `is_deleted`/`is_published` 等字段，需 `@TableField` 注解
+6. **is_ 前缀字段**: 注意 MyBatis-Plus 不会自动映射 `is_deleted`/`is_published` 等字段，需 `@TableField` 注解
 
 ---
 

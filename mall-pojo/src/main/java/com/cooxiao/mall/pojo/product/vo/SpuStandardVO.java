@@ -89,9 +89,15 @@ public class SpuStandardVO implements Serializable {
     private String categoryName;
 
     /**
+     * 属性模板id
+     */
+    @ApiModelProperty(value = "属性模板id", position = 14)
+    private Long attributeTemplateId;
+
+    /**
      * 相册id
      */
-    @ApiModelProperty(value = "相册id", position = 14)
+    @ApiModelProperty(value = "相册id", position = 15)
     private Long albumId;
 
     /**

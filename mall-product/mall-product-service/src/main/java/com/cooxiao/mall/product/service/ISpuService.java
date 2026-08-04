@@ -54,6 +54,21 @@ public interface ISpuService {
     void synchronisePrice(Long id);
 
     /**
+     * 删除SPU（软删除，标记 is_deleted=1）
+     *
+     * @param id SPU id
+     */
+    void deleteById(Long id);
+
+    /**
+     * 更新SPU上下架状态
+     *
+     * @param id        SPU id
+     * @param published 1=上架，0=下架
+     */
+    void updatePublishedById(Long id, Integer published);
+
+    /**
      * 根据SPU id查询SPU详情
      *
      * @param id SPU id

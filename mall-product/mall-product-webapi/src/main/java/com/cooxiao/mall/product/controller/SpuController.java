@@ -158,4 +158,35 @@ public class SpuController {
         return JsonResult.ok(spuList);
     }
 
+    /**
+     * 删除SPU（软删除）
+     */
+    @ApiOperationSupport(order = 43)
+    @ApiOperation(value = "删除SPU", notes = "软删除（is_deleted=1），需要商品后台【写】权限：/pms/product/update")
+    @ApiImplicitParams({
+            @ApiImplicitParam(name = "id", value = "SPU id", paramType = "path", required = true, dataType = "long")
+    })
+    @PreAuthorize("hasAuthority('/pms/product/update')")
+    @PostMapping("/{id:[0-9]+}/delete")
+    public JsonResult<Void> deleteById(@PathVariable("id") Long id) {
+        spuService.deleteById(id);
+        return JsonResult.ok();
+    }
+
+    /**
+     * 更新SPU上下架状态
+     */
+    @ApiOperationSupport(order = 44)
+    @ApiOperation(value = "更新SPU上下架状态", notes = "published=1上架，0下架，需要商品后台【写】权限：/pms/product/update")
+    @ApiImplicitParams({
+            @ApiImplicitParam(name = "id", value = "SPU id", paramType = "path", required = true, dataType = "long"),
+            @ApiImplicitParam(name = "published", value = "上下架状态 1=上架 0=下架", paramType = "query", required = true, dataType = "int")
+    })
+    @PreAuthorize("hasAuthority('/pms/product/update')")
+    @PostMapping("/{id:[0-9]+}/published-status/update")
+    public JsonResult<Void> updatePublished(@PathVariable("id") Long id, @RequestParam Integer published) {
+        spuService.updatePublishedById(id, published);
+        return JsonResult.ok();
+    }
+
 }

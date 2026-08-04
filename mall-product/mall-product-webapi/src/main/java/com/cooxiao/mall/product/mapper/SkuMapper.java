@@ -73,4 +73,12 @@ public interface SkuMapper extends BaseMapper<Sku> {
      * @return
      */
     int updateStockById(@Param("id")Long skuId, @Param("stock")Integer quantity);
+
+    /**
+     * 根据SPU id删除其下所有SKU（模板变更时清理旧SKU用）
+     *
+     * @param spuId SPU id
+     * @return 受影响的行数
+     */
+    int deleteBySpuId(Long spuId);
 }

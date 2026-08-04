@@ -31,7 +31,7 @@ public class SkuUpdateFullInfoDTO implements SkuRegExpression, Serializable {
      */
     @ApiModelProperty(value = "当前库存")
     @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请填写当前库存！")
-    @Range(min = 1, max = 9999999, message = "当前库存必须是1~999999的值！")
+    @Range(min = 0, max = 9999999, message = "当前库存必须是0~999999的值！")
     private Integer stock;
 
     /**
@@ -39,7 +39,7 @@ public class SkuUpdateFullInfoDTO implements SkuRegExpression, Serializable {
      */
     @ApiModelProperty(value = "库存预警阈值")
     @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请填写库存预警阈值！")
-    @Range(min = 1, max = 9999999, message = "库存预警阈值必须是1~999999的值！")
+    @Range(min = 0, max = 9999999, message = "库存预警阈值必须是0~999999的值！")
     private Integer stockThreshold;
 
     /**
@@ -48,5 +48,29 @@ public class SkuUpdateFullInfoDTO implements SkuRegExpression, Serializable {
     @ApiModelProperty(value = "自定义排序序号")
     @Range(max = 99, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_SORT)
     private Integer sort;
+
+    /**
+     * 标题（冗余，可由规格值拼接）
+     */
+    @ApiModelProperty(value = "标题")
+    private String title;
+
+    /**
+     * 条形码
+     */
+    @ApiModelProperty(value = "条形码")
+    private String barCode;
+
+    /**
+     * 规格 JSON（[{attributeId, attributeName, attributeValue, unit}]）
+     */
+    @ApiModelProperty(value = "规格 JSON")
+    private String specifications;
+
+    /**
+     * 图片 JSON 数组（相对路径）
+     */
+    @ApiModelProperty(value = "图片 JSON 数组")
+    private String pictures;
 
 }

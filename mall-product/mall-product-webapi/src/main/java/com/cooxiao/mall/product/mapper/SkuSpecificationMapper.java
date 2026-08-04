@@ -39,4 +39,20 @@ public interface SkuSpecificationMapper {
      */
     SkuSpecificationStandardVO getById(Long id);
 
+    /**
+     * 根据SKU id查询其全部规格明细
+     *
+     * @param skuId SKU id
+     * @return 规格明细列表
+     */
+    List<SkuSpecificationStandardVO> listBySkuId(Long skuId);
+
+    /**
+     * 根据SKU id列表批量删除规格明细（模板变更清理旧SKU用）
+     *
+     * @param skuIds SKU id列表
+     * @return 受影响的行数
+     */
+    int deleteBySkuIds(List<Long> skuIds);
+
 }

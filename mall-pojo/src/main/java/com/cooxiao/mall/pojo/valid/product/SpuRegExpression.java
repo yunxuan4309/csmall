@@ -12,8 +12,8 @@ public interface SpuRegExpression extends RegExpression {
     String REGEXP_NAME = ".{2,16}";
     String MESSAGE_NAME = "名称必须由2~16字符组成！";
 
-    String REGEXP_TITLE = ".{2,16}";
-    String MESSAGE_TITLE = "标题名称必须由2~16字符组成！";
+    String REGEXP_TITLE = ".{2,100}";
+    String MESSAGE_TITLE = "标题名称必须由2~100字符组成！";
 
     String REGEXP_TYPE_NUMBER = ".{0,16}";
     String MESSAGE_TYPE_NUMBER = "SPU编号的长度不得超过16字符！";

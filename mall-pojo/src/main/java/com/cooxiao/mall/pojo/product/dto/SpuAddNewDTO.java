@@ -113,7 +113,8 @@ public class SpuAddNewDTO implements SpuRegExpression, Serializable {
      */
     @ApiModelProperty(value = "相册id", dataType = "long", required = true)
     @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请选择相册！")
-    @Min(value = 1, message = VALIDATE_MESSAGE_PREFIX + "选择的相册的数据格式错误！")
+    // 相册系统当前未启用（pms_album 表为空），0 表示"未关联相册"；企业级升级启用相册后再收紧
+    @Min(value = 0, message = VALIDATE_MESSAGE_PREFIX + "选择的相册的数据格式错误！")
     private Long albumId;
 
     /**

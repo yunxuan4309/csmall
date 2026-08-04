@@ -2,6 +2,7 @@ package com.cooxiao.mall.product.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
@@ -66,6 +67,7 @@ public class PictureServiceImpl implements IPictureService {
         // 执行新增
         Picture picture = new Picture();
         BeanUtils.copyProperties(pictureAddNewDTO, picture);
+        picture.setId(IdWorker.getId());
         picture.setCover(cover);
         picture.setSort(pictureAddNewDTO.getSort() == null ? DataCommonConst.SORT_DEFAULT : pictureAddNewDTO.getSort());
         int rows = pictureMapper.insert(picture);
@@ -102,6 +104,7 @@ public class PictureServiceImpl implements IPictureService {
 
         // 向图片表中插入数据
         Picture picture = new Picture();
+        picture.setId(IdWorker.getId());
         picture.setAlbumId(albumId);
         picture.setWidth(pictureSimpleVO.getWidth());
         picture.setHeight(pictureSimpleVO.getHeight());

@@ -2,6 +2,7 @@ package com.cooxiao.mall.product.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
@@ -48,6 +49,7 @@ public class AttributeServiceImpl implements IAttributeService {
         log.debug("增加商品属性：{}", attributeAddnewDTO);
         Attribute attribute = new Attribute();
         BeanUtils.copyProperties(attributeAddnewDTO, attribute);
+        attribute.setId(IdWorker.getId());
         attribute.setSort(attributeAddnewDTO.getSort() == null ? DataCommonConst.SORT_DEFAULT : attributeAddnewDTO.getSort());
         int rows = attributeMapper.insert(attribute);
         if (rows != 1) {

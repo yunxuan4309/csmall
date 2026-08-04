@@ -3,9 +3,9 @@
 <mapper namespace="com.cooxiao.mall.product.mapper.CategoryAttributeTemplateMapper">
 
     <!-- int insert(CategoryAttributeTemplate categoryAttributeTemplate); -->
-    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO pms_category_attribute_template (category_id, attribute_template_id)
-        VALUES (#{categoryId}, #{attributeTemplateId})
+    <insert id="insert">
+        INSERT INTO pms_category_attribute_template (id, category_id, attribute_template_id)
+        VALUES (#{id}, #{categoryId}, #{attributeTemplateId})
     </insert>
 
     <!-- int countByCategoryId(Long categoryId); -->

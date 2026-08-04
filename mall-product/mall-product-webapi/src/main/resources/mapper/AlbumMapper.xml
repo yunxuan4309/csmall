@@ -18,9 +18,9 @@
     </resultMap>
 
     <!-- int insert(Album album); -->
-    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into pms_album (name, description, sort)
-        values (#{name}, #{description}, #{sort})
+    <insert id="insert">
+        insert into pms_album (id, name, description, sort)
+        values (#{id}, #{name}, #{description}, #{sort})
     </insert>
 
     <!-- int deleteById(Long id); -->

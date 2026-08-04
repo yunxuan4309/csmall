@@ -18,6 +18,7 @@
             brand_name,
             category_id,
             category_name,
+            attribute_template_id,
             album_id,
             pictures,
             keywords,
@@ -51,6 +52,7 @@
         <result column="brand_name" property="brandName"/>
         <result column="category_id" property="categoryId"/>
         <result column="category_name" property="categoryName"/>
+        <result column="attribute_template_id" property="attributeTemplateId"/>
         <result column="album_id" property="albumId"/>
         <result column="pictures" property="pictures"/>
         <result column="keywords" property="keywords"/>
@@ -128,11 +130,11 @@
             brand_name, category_id, category_name, attribute_template_id, album_id,
             pictures, keywords, tags, sort, is_deleted,
             is_published, is_new_arrival, is_recommend, is_checked, gmt_check)
-        values (#{id}, #{name}, #{spuQuery.typeNumber}, #{title}, #{description},
-            #{listPrice}, #{stock}, #{stockThreshold}, #{unit}, #{spuQuery.brandId},
-            #{brandName}, #{spuQuery.categoryId}, #{categoryName}, #{attributeTemplateId}, #{albumId},
+        values (#{id}, #{name}, #{typeNumber}, #{title}, #{description},
+            #{listPrice}, #{stock}, #{stockThreshold}, #{unit}, #{brandId},
+            #{brandName}, #{categoryId}, #{categoryName}, #{attributeTemplateId}, #{albumId},
             #{pictures}, #{keywords}, #{tags}, #{sort}, #{deleted},
-            #{spuQuery.published}, #{newArrival}, #{recommend}, #{spuQuery.checked}, #{gmtCheck})
+            #{published}, #{newArrival}, #{recommend}, #{checked}, #{gmtCheck})
     </insert>
 
     <!-- int deleteById(Long id); -->
@@ -150,8 +152,8 @@
                 <if test="name != null">
                     name=#{name},
                 </if>
-                <if test="spuQuery.typeNumber != null">
-                    type_number=#{spuQuery.typeNumber},
+                <if test="typeNumber != null">
+                    type_number=#{typeNumber},
                 </if>
                 <if test="title != null">
                     title=#{title},
@@ -165,17 +167,20 @@
                 <if test="stockThreshold != null">
                     stock_threshold=#{stockThreshold},
                 </if>
+                <if test="stock != null">
+                    stock=#{stock},
+                </if>
                 <if test="unit != null">
                     unit=#{unit},
                 </if>
-                <if test="spuQuery.brandId != null">
-                    brand_id=#{spuQuery.brandId},
+                <if test="brandId != null">
+                    brand_id=#{brandId},
                 </if>
                 <if test="brandName != null">
                     brand_name=#{brandName},
                 </if>
-                <if test="spuQuery.categoryId != null">
-                    category_id=#{spuQuery.categoryId},
+                <if test="categoryId != null">
+                    category_id=#{categoryId},
                 </if>
                 <if test="categoryName != null">
                     category_name=#{categoryName},
@@ -210,8 +215,8 @@
                 <if test="deleted != null">
                     is_deleted=#{deleted},
                 </if>
-                <if test="spuQuery.published != null">
-                    is_published=#{spuQuery.published},
+                <if test="published != null">
+                    is_published=#{published},
                 </if>
                 <if test="newArrival != null">
                     is_new_arrival=#{newArrival},
@@ -219,8 +224,8 @@
                 <if test="recommend != null">
                     is_recommend=#{recommend},
                 </if>
-                <if test="spuQuery.checked != null">
-                    is_checked=#{spuQuery.checked},
+                <if test="checked != null">
+                    is_checked=#{checked},
                 </if>
                 <if test="checkUser != null">
                     check_user=#{checkUser},
@@ -236,7 +241,7 @@
     <!-- int updateCheckedById(@Param("id") Long id, @Param("isChecked") Integer isChecked); -->
     <update id="updateCheckedById">
         update pms_spu
-        set is_checked=#{spuQuery.checked}
+        set is_checked=#{checked}
         where id = #{id}
     </update>
 
@@ -251,6 +256,20 @@
     <update id="updateStockById">
         update pms_spu
         set stock=#{stock}
+        where id = #{id}
+    </update>
+
+    <!-- int updateDeletedById(@Param("id") Long id, @Param("deleted") Integer deleted); -->
+    <update id="updateDeletedById">
+        update pms_spu
+        set is_deleted=#{deleted}
+        where id = #{id}
+    </update>
+
+    <!-- int updatePublishedById(@Param("id") Long id, @Param("published") Integer published); -->
+    <update id="updatePublishedById">
+        update pms_spu
+        set is_published=#{published}
         where id = #{id}
     </update>
 

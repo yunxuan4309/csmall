@@ -10,6 +10,7 @@ import com.cooxiao.mall.product.constant.DataCommonConst;
 import com.cooxiao.mall.product.mapper.AlbumMapper;
 import com.cooxiao.mall.product.mapper.PictureMapper;
 import com.cooxiao.mall.product.mapper.SpuMapper;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.cooxiao.mall.pojo.product.dto.AlbumAddNewDTO;
 import com.cooxiao.mall.pojo.product.dto.AlbumUpdateDTO;
 import com.cooxiao.mall.pojo.product.model.Album;
@@ -51,6 +52,7 @@ public class AlbumServiceImpl implements IAlbumService {
 
         // 执行插入相册数据
         Album album = new Album();
+        album.setId(IdWorker.getId());
         album.setName(albumName);
         album.setDescription(albumAddnewDTO.getDescription());
         album.setSort(albumAddnewDTO.getSort() == null ? DataCommonConst.SORT_DEFAULT : albumAddnewDTO.getSort());

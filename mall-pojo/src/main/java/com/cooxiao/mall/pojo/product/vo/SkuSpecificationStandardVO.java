@@ -12,7 +12,7 @@ public class SkuSpecificationStandardVO implements Serializable {
      * 数据id
      */
     @ApiModelProperty(value = "数据记录id", position = 1)
-    private Integer id;
+    private Long id;
 
     /**
      * SKU id

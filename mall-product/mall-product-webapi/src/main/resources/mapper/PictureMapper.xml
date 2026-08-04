@@ -22,20 +22,22 @@
     </resultMap>
 
     <!-- int insert(Picture picture); -->
-    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into pms_picture (album_id, url, is_cover, description, width, height, sort)
-        values (#{albumId}, #{url}, #{cover}, #{description}, #{width}, #{height}, #{sort})
+    <!-- 注意：id 由应用层雪花算法生成，显式插入 -->
+    <insert id="insert">
+        insert into pms_picture (id, album_id, url, is_cover, description, width, height, sort)
+        values (#{id}, #{albumId}, #{url}, #{cover}, #{description}, #{width}, #{height}, #{sort})
     </insert>
 
     <!-- int insertBatch(List<Picture> pictures); -->
-    <insert id="insertBatch" useGeneratedKeys="true" keyProperty="id">
-        insert into pms_picture (album_id, url, is_cover, description, width, height, sort) values
+    <insert id="insertBatch">
+        insert into pms_picture (id, album_id, url, is_cover, description, width, height, sort) values
         <foreach collection="list" item="pic" separator=",">
             (
+            #{pic.id},
             #{pic.albumId},
             #{pic.url},
-            #{pic.description},
             #{pic.cover},
+            #{pic.description},
             #{pic.width},
             #{pic.height},
             #{pic.sort}

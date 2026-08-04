@@ -37,10 +37,10 @@
     </resultMap>
 
     <!-- int insert(Brand brand); -->
-    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        insert into pms_brand (name, pinyin, logo, description, keywords, sort, sales, product_count, comment_count,
+    <insert id="insert">
+        insert into pms_brand (id, name, pinyin, logo, description, keywords, sort, sales, product_count, comment_count,
                                positive_comment_count, enable)
-        values (#{name}, #{pinyin}, #{logo}, #{description}, #{keywords}, #{sort}, #{sales}, #{productCount},
+        values (#{id}, #{name}, #{pinyin}, #{logo}, #{description}, #{keywords}, #{sort}, #{sales}, #{productCount},
                 #{commentCount}, #{positiveCommentCount}, #{enable})
     </insert>
 

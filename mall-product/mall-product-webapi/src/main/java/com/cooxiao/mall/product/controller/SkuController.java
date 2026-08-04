@@ -3,6 +3,7 @@ package com.cooxiao.mall.product.controller;
 import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.JsonResult;
 import com.cooxiao.mall.pojo.product.dto.SkuAddNewDTO;
+import com.cooxiao.mall.pojo.product.dto.SkuGenerateDTO;
 import com.cooxiao.mall.pojo.product.dto.SkuUpdateFullInfoDTO;
 import com.cooxiao.mall.pojo.product.vo.SkuStandardVO;
 import com.cooxiao.mall.product.constant.WebConst;
@@ -41,6 +42,33 @@ public class SkuController {
     @PostMapping("/addnew")
     public JsonResult<Void> addNew(@Valid @RequestBody SkuAddNewDTO skuAddNewDTO) {
         skuService.addNew(skuAddNewDTO);
+        return JsonResult.ok();
+    }
+
+    /**
+     * 根据属性模板生成 SKU 组合（笛卡尔积批量生成）
+     */
+    @ApiOperationSupport(order = 11)
+    @ApiOperation(value = "根据属性模板生成SKU", notes = "按销售属性值笛卡尔积生成SKU，需要商品后台【写】权限：/pms/product/update")
+    @PreAuthorize("hasAuthority('/pms/product/update')")
+    @PostMapping("/generate")
+    public JsonResult<Integer> generate(@Valid @RequestBody SkuGenerateDTO skuGenerateDTO) {
+        int count = skuService.generateSkus(skuGenerateDTO);
+        return JsonResult.ok(count);
+    }
+
+    /**
+     * 删除SKU（连同其规格明细）
+     */
+    @ApiOperationSupport(order = 31)
+    @ApiOperation(value = "删除SKU", notes = "删除SKU及其规格明细，需要商品后台【写】权限：/pms/product/update")
+    @ApiImplicitParams({
+            @ApiImplicitParam(name = "id", value = "SKU id", paramType = "path", required = true, dataType = "long")
+    })
+    @PreAuthorize("hasAuthority('/pms/product/update')")
+    @PostMapping("/{id:[0-9]+}/delete")
+    public JsonResult<Void> deleteById(@PathVariable Long id) {
+        skuService.deleteById(id);
         return JsonResult.ok();
     }
 

@@ -2,6 +2,7 @@ package com.cooxiao.mall.product.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.cooxiao.mall.common.exception.CoolSharkServiceException;
 import com.cooxiao.mall.common.restful.JsonPage;
@@ -71,6 +72,7 @@ public class AttributeTemplateServiceImpl implements IAttributeTemplateService {
         // 执行新增属性模板
         AttributeTemplate attributeTemplate = new AttributeTemplate();
         BeanUtils.copyProperties(attributeTemplateAddnewDTO, attributeTemplate);
+        attributeTemplate.setId(IdWorker.getId());
         attributeTemplate.setSort(attributeTemplateAddnewDTO.getSort() == null ? DataCommonConst.SORT_DEFAULT : attributeTemplateAddnewDTO.getSort());
         log.debug("新增属性模板:" + attributeTemplate);
         int rows = attributeTemplateMapper.insert(attributeTemplate);
@@ -80,6 +82,7 @@ public class AttributeTemplateServiceImpl implements IAttributeTemplateService {
 
         // 执行新增类别与属性模板的关联
         CategoryAttributeTemplate categoryAttributeTemplate = new CategoryAttributeTemplate();
+        categoryAttributeTemplate.setId(IdWorker.getId());
         categoryAttributeTemplate.setCategoryId(attributeTemplateAddnewDTO.getCategoryId());
         categoryAttributeTemplate.setAttributeTemplateId(attributeTemplate.getId());
         rows = categoryAttributeTemplateMapper.insert(categoryAttributeTemplate);

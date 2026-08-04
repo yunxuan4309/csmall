@@ -30,7 +30,7 @@ public class AttributeTemplate implements Serializable {
     private String name;
 
     /**
-     * 属性模板名称的拼音
+     * 属性模板名称的拼音（预留，用于按拼音搜索/排序）
      */
     private String pinyin;
 

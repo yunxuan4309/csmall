@@ -9,6 +9,7 @@ import com.cooxiao.mall.common.restful.ResponseCode;
 import com.cooxiao.mall.product.constant.DataCommonConst;
 import com.cooxiao.mall.product.mapper.BrandMapper;
 import com.cooxiao.mall.product.mapper.SpuMapper;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.cooxiao.mall.pojo.product.dto.BrandAddNewDTO;
 import com.cooxiao.mall.pojo.product.dto.BrandUpdateDTO;
 import com.cooxiao.mall.pojo.product.model.Brand;
@@ -51,6 +52,7 @@ public class BrandServiceImpl implements IBrandService {
         // 执行新增
         Brand brand = new Brand();
         BeanUtils.copyProperties(brandAddNewDTO, brand);
+        brand.setId(IdWorker.getId());
         brand.setSort(brandAddNewDTO.getSort() == null ? DataCommonConst.SORT_DEFAULT : brandAddNewDTO.getSort());
         log.debug("新增品牌:" + brand);
         int rows = brandMapper.insert(brand);

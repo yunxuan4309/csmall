@@ -13,6 +13,7 @@ import com.cooxiao.mall.pojo.product.model.SpuDetail;
 import com.cooxiao.mall.pojo.product.query.SpuQuery;
 import com.cooxiao.mall.pojo.product.vo.BrandStandardVO;
 import com.cooxiao.mall.pojo.product.vo.CategoryStandardVO;
+import com.cooxiao.mall.pojo.product.vo.SkuStandardVO;
 import com.cooxiao.mall.pojo.product.vo.SpuListItemVO;
 import com.cooxiao.mall.pojo.product.vo.SpuStandardVO;
 import com.cooxiao.mall.product.constant.DataCommonConst;
@@ -22,6 +23,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 import java.math.BigDecimal;
 
@@ -45,6 +49,8 @@ public class SpuServiceImpl implements ISpuService {
     private CategoryMapper categoryMapper;
     @Autowired
     private SpuDetailMapper spuDetailMapper;
+    @Autowired
+    private SkuSpecificationMapper skuSpecificationMapper;
 
     @org.apache.dubbo.config.annotation.DubboReference(check = false)
     private ISpuSyncService spuSyncService;
@@ -53,6 +59,12 @@ public class SpuServiceImpl implements ISpuService {
     public void addNew(SpuAddNewDTO spuAddNewDTO) {
         // 通过MyBatis-Plus IdWorker生成分布式ID
         Long spuId = IdWorker.getId();
+
+        // 检查SPU编号是否已存在（数据库有唯一索引，提前校验避免抛出500）
+        int typeNumberCount = spuMapper.countByTypeNumber(spuAddNewDTO.getTypeNumber());
+        if (typeNumberCount > 0) {
+            throw new CoolSharkServiceException(ResponseCode.CONFLICT, "新增SPU失败，SPU编号已存在！");
+        }
 
         // 获取类别ID
         Long categoryId = spuAddNewDTO.getCategoryId();
@@ -113,6 +125,7 @@ public class SpuServiceImpl implements ISpuService {
         // 如果还提交了详情，则插入详情
         if (spuAddNewDTO.getContent() != null) {
             SpuDetail spuDetail = new SpuDetail();
+            spuDetail.setId(IdWorker.getId());
             spuDetail.setSpuId(spuId);
             spuDetail.setContent(spuAddNewDTO.getContent());
             rows = spuDetailMapper.insert(spuDetail);
@@ -133,10 +146,25 @@ public class SpuServiceImpl implements ISpuService {
     public void updateById(Long id, SpuUpdateDTO spuDTO) {
         Spu spu = new Spu();
         BeanUtils.copyProperties(spuDTO, spu);
+        spu.setId(id);
         String content = spuDTO.getContent();
         if (content != null && content.trim().length() > 0) {
             spuDetailMapper.updateDetailBySpuId(spu.getId(), spuDTO.getContent());
         }
+
+        // 如果属性模板被更换，旧模板生成的 SKU 已不适用，清理该 SPU 下的旧 SKU 及其规格
+        SpuStandardVO oldSpu = spuMapper.getById(id);
+        if (oldSpu != null && spu.getAttributeTemplateId() != null
+                && !spu.getAttributeTemplateId().equals(oldSpu.getAttributeTemplateId())) {
+            List<SkuStandardVO> oldSkus = skuMapper.listBySpuId(id);
+            if (oldSkus != null && !oldSkus.isEmpty()) {
+                List<Long> oldSkuIds = oldSkus.stream().map(SkuStandardVO::getId).collect(Collectors.toList());
+                skuSpecificationMapper.deleteBySkuIds(oldSkuIds);
+            }
+            skuMapper.deleteBySpuId(id);
+            log.warn("SPU {} 属性模板从 {} 变更为 {}，已清理旧 SKU", id, oldSpu.getAttributeTemplateId(), spu.getAttributeTemplateId());
+        }
+
         spuMapper.update(spu);
 
         // 异步通知 mall-ai 同步到 ES（失败不影响主流程）
@@ -161,6 +189,30 @@ public class SpuServiceImpl implements ISpuService {
         int rows = spuMapper.updateCheckedById(id, 1);
         if (rows != 1) {
             throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "审核失败，服务器忙，请稍后再次尝试！");
+        }
+    }
+
+    @Override
+    public void deleteById(Long id) {
+        SpuStandardVO spuStandardVO = spuMapper.getById(id);
+        if (spuStandardVO == null) {
+            throw new CoolSharkServiceException(ResponseCode.NOT_FOUND, "删除失败，尝试访问的SPU数据不存在！");
+        }
+        int rows = spuMapper.updateDeletedById(id, 1);
+        if (rows != 1) {
+            throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "删除失败，服务器忙，请稍后再次尝试！");
+        }
+    }
+
+    @Override
+    public void updatePublishedById(Long id, Integer published) {
+        SpuStandardVO spuStandardVO = spuMapper.getById(id);
+        if (spuStandardVO == null) {
+            throw new CoolSharkServiceException(ResponseCode.NOT_FOUND, "更新上架状态失败，尝试访问的SPU数据不存在！");
+        }
+        int rows = spuMapper.updatePublishedById(id, published);
+        if (rows != 1) {
+            throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "更新上架状态失败，服务器忙，请稍后再次尝试！");
         }
     }
 

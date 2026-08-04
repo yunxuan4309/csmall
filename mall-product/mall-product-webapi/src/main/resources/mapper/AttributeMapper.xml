@@ -6,7 +6,7 @@
     <sql id="StandardQueryFields">
         <if test="true">
             id,
-            template_id,
+            attribute_template_id,
             name,
             description,
             type,
@@ -21,7 +21,7 @@
     <!-- 标准查询映射结果 -->
     <resultMap id="StandardResultMap" type="com.cooxiao.mall.pojo.product.vo.AttributeStandardVO">
         <id column="id" property="id"/>
-        <result column="template_id" property="templateId"/>
+        <result column="attribute_template_id" property="templateId"/>
         <result column="name" property="name"/>
         <result column="description" property="description"/>
         <result column="type" property="type"/>
@@ -69,10 +69,10 @@
     </resultMap>
 
     <!-- int insert(Attribute attribute); -->
-    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO pms_attribute (name, description, type, input_type, value_list, unit, sort, is_allow_customize,
-                                   template_id)
-        VALUES (#{name}, #{description}, #{type}, #{inputType}, #{valueList}, #{unit}, #{sort}, #{allowCustomize},
+    <insert id="insert">
+        INSERT INTO pms_attribute (id, name, description, type, input_type, value_list, unit, sort, is_allow_customize,
+                                   attribute_template_id)
+        VALUES (#{id}, #{name}, #{description}, #{type}, #{inputType}, #{valueList}, #{unit}, #{sort}, #{allowCustomize},
                 #{templateId})
     </insert>
 
@@ -88,7 +88,7 @@
         update pms_attribute
         <set>
             <if test="templateId != null">
-                template_id=#{templateId},
+                attribute_template_id=#{templateId},
             </if>
             <if test="name != null">
                 name=#{name},
@@ -122,7 +122,7 @@
     <select id="countByTemplateId" resultType="int">
         SELECT COUNT(*)
         FROM pms_attribute
-        WHERE template_id = #{templateId}
+        WHERE attribute_template_id = #{templateId}
     </select>
 
     <!-- AttributeVO getById(Long id); -->
@@ -142,7 +142,7 @@
         LEFT JOIN
         pms_attribute_template
         ON
-        pms_attribute_template.id=pms_attribute.template_id
+        pms_attribute_template.id=pms_attribute.attribute_template_id
         WHERE
         pms_attribute.id=#{id}
     </select>
@@ -154,7 +154,7 @@
         FROM
         pms_attribute
         WHERE
-        template_id=#{templateId}
+        attribute_template_id=#{templateId}
         ORDER BY
         sort DESC, gmt_modified DESC
     </select>
@@ -166,15 +166,15 @@
         FROM
         pms_attribute
         WHERE
-        template_id=#{templateId} AND type=#{type}
+        attribute_template_id=#{templateId} AND type=#{type}
         ORDER BY
         sort DESC, gmt_modified DESC
     </select>
     <select id="selectAttributesBySpuId" resultMap="StandardResultMap">
-        SELECT pa.id, pa.template_id, pa.name, pa.description, pa.type
+        SELECT pa.id, pa.attribute_template_id, pa.name, pa.description, pa.type
                     , pa.input_type, pa.value_list, pa.unit, pa.sort, pa.is_allow_customize
         FROM pms_attribute pa
-        INNER JOIN pms_attribute_template pat ON pa.template_id = pat.id
+        INNER JOIN pms_attribute_template pat ON pa.attribute_template_id = pat.id
         INNER JOIN pms_category_attribute_template pcat ON pat.id=pcat.attribute_template_id
         INNER JOIN pms_category pc ON pc.id=pcat.category_id
         INNER JOIN pms_spu ps ON ps.category_id=pc.id

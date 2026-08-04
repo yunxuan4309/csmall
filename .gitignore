@@ -46,6 +46,9 @@ docs/服务器权限收紧方案.md
 ### 部署包（大文件，本地使用） ###
 deploy/
 
+### 本地上传目录（不入库） ###
+csmall-upload/
+
 ### 操作系统 ###
 .DS_Store
 Thumbs.db
