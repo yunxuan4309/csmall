@@ -58,7 +58,7 @@ public class AttributeTemplateServiceImpl implements IAttributeTemplateService {
         if (category.getParent() == null) {
             throw new CoolSharkServiceException(ResponseCode.NOT_ACCEPTABLE, "新增属性模板失败，选择的【类别】数据不完整，请联系系统管理员！");
         }
-        if (!category.getParent().equals(1)) {
+        if (category.getParent().equals(1)) {
             throw new CoolSharkServiceException(ResponseCode.NOT_ACCEPTABLE, "新增属性模板失败，选择的【类别】仍包括子级！");
         }
 

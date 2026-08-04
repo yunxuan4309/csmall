@@ -37,8 +37,7 @@ public class AttributeTemplateAddNewDTO implements AttributeTemplateRegExpressio
     /**
      * 属性模板名称的拼音
      */
-    @ApiModelProperty(value = "属性模板名称的拼音", required = true)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请填写名称的拼音！")
+    @ApiModelProperty(value = "属性模板名称的拼音（可选，仅允许英文字母）")
     @Pattern(regexp = REGEXP_PINYIN, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_PINYIN)
     private String pinyin;
 
