@@ -65,7 +65,6 @@ public class BrandUpdateDTO implements BrandRegExpression, Serializable {
      * 是否启用，1=启用，0=未启用
      */
     @ApiModelProperty(value = "是否启用，1=启用，0=未启用")
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请选择是否启用！")
     @Range(max = 1, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_ENABLE)
     private Integer enable;
 
