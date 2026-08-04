@@ -37,7 +37,7 @@ public class BrandAddNewDTO implements BrandRegExpression, Serializable {
      * 品牌Logo的URL
      */
     @ApiModelProperty(value = "品牌Logo的URL", required = true)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请输入Logo的URL！")
+    // Logo 可选（可上传后自动填充，也可不填）
     @Pattern(regexp = REGEXP_LOGO, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_LOGO)
     private String logo;
 
