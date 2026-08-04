@@ -12,8 +12,8 @@ public interface BrandRegExpression extends RegExpression {
     String REGEXP_NAME = ".{2,16}";
     String MESSAGE_NAME = "名称必须由2~16字符组成！";
 
-    String REGEXP_PINYIN = "[a-zA-Z\\s]{2,50}";
-    String MESSAGE_PINYIN = "名称的拼音必须由2~50字符组成！";
+    String REGEXP_PINYIN = "(?:|[a-zA-Z\\s]{2,50})";
+    String MESSAGE_PINYIN = "名称的拼音必须为英文（可选，2~50字符）！";
 
     String REGEXP_LOGO = ".{0,255}";
     String MESSAGE_LOGO = "Logo的URL的长度不得超过255字符！";
