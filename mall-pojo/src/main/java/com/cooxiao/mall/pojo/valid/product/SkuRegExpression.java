@@ -12,8 +12,8 @@ public interface SkuRegExpression extends RegExpression {
     String REGEXP_TITLE = ".{2,100}";
     String MESSAGE_TITLE = "标题名称必须由2~100字符组成！";
 
-    String REGEXP_BAR_CODE = ".{16}";
-    String MESSAGE_BAR_CODE = "条型码的长度不得超过16字符！（临时设定）";
+    String REGEXP_BAR_CODE = ".{0,16}";
+    String MESSAGE_BAR_CODE = "条型码的长度不得超过16字符！";
 
     String REGEXP_PICTURES = ".{0,500}";
     String MESSAGE_PICTURES = "条型码的长度不得超过500字符！（临时设定）";

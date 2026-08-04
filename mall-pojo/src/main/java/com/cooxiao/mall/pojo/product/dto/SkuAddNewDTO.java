@@ -55,8 +55,8 @@ public class SkuAddNewDTO implements SkuRegExpression, Serializable {
      * 所属相册id
      */
     @ApiModelProperty(value = "所属相册id", required = true, dataType = "long")
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请选择所属相册！")
-    @Min(value = 1, message = VALIDATE_MESSAGE_PREFIX + "选择的相册的数据格式错误！")
+    // 相册系统未启用，0=未关联
+    @Min(value = 0, message = VALIDATE_MESSAGE_PREFIX + "选择的相册的数据格式错误！")
     private Long albumId;
 
     /**
@@ -87,8 +87,7 @@ public class SkuAddNewDTO implements SkuRegExpression, Serializable {
      * 库存预警阈值
      */
     @ApiModelProperty(value = "库存预警阈值", required = true)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请填写库存预警阈值！")
-    @Range(min = 1, max = 9999999, message = "库存预警阈值必须是1~999999的值！")
+    @Range(min = 0, max = 9999999, message = "库存预警阈值必须是0~999999的值！")
     private Integer stockThreshold;
 
     /**
