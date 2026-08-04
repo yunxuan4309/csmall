@@ -18,7 +18,7 @@
         <result column="sort" property="sort"/>
     </resultMap>
 
-    <!-- 详情查询字段列表 -->
+    <!-- 详情查询字段列表（属性列加 attr_ 别名，避免与模板列 id/name/sort 冲突） -->
     <sql id="DetailsQueryFields">
         <if test="true">
             pms_attribute_template.id,
@@ -26,15 +26,15 @@
             pms_attribute_template.pinyin,
             pms_attribute_template.keywords,
             pms_attribute_template.sort,
-            pms_attribute.id,
-            pms_attribute.name,
-            pms_attribute.description,
-            pms_attribute.type,
-            pms_attribute.input_type,
-            pms_attribute.value_list,
-            pms_attribute.unit,
-            pms_attribute.sort,
-            pms_attribute.is_allow_customize
+            pms_attribute.id AS attr_id,
+            pms_attribute.name AS attr_name,
+            pms_attribute.description AS attr_description,
+            pms_attribute.type AS attr_type,
+            pms_attribute.input_type AS attr_input_type,
+            pms_attribute.value_list AS attr_value_list,
+            pms_attribute.unit AS attr_unit,
+            pms_attribute.sort AS attr_sort,
+            pms_attribute.is_allow_customize AS attr_is_allow_customize
         </if>
     </sql>
 
@@ -46,15 +46,15 @@
         <result column="keywords" property="keywords"/>
         <result column="sort" property="sort"/>
         <collection property="attributes" ofType="com.cooxiao.mall.pojo.product.vo.AttributeListItemVO">
-            <id column="id" property="id"/>
-            <result column="name" property="name"/>
-            <result column="description" property="description"/>
-            <result column="input_type" property="inputType"/>
-            <result column="type" property="type"/>
-            <result column="value_list" property="valueList"/>
-            <result column="unit" property="unit"/>
-            <result column="sort" property="sort"/>
-            <result column="is_allow_customize" property="allowCustomize"/>
+            <id column="attr_id" property="id"/>
+            <result column="attr_name" property="name"/>
+            <result column="attr_description" property="description"/>
+            <result column="attr_type" property="type"/>
+            <result column="attr_input_type" property="inputType"/>
+            <result column="attr_value_list" property="valueList"/>
+            <result column="attr_unit" property="unit"/>
+            <result column="attr_sort" property="sort"/>
+            <result column="attr_is_allow_customize" property="allowCustomize"/>
         </collection>
     </resultMap>
 
