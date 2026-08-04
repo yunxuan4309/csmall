@@ -28,8 +28,7 @@ public class BrandAddNewDTO implements BrandRegExpression, Serializable {
     /**
      * 品牌名称的拼音
      */
-    @ApiModelProperty(value = "品牌名称的拼音", required = true)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请填写名称的拼音！")
+    @ApiModelProperty(value = "品牌名称的拼音")
     @Pattern(regexp = REGEXP_PINYIN, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_PINYIN)
     private String pinyin;
 
@@ -44,16 +43,14 @@ public class BrandAddNewDTO implements BrandRegExpression, Serializable {
     /**
      * 品牌简介
      */
-    @ApiModelProperty(value = "品牌简介", required = true)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请填写简介！")
+    @ApiModelProperty(value = "品牌简介")
     @Pattern(regexp = REGEXP_DESCRIPTION, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_DESCRIPTION)
     private String description;
 
     /**
      * 关键词列表，各关键词使用英文的逗号分隔
      */
-    @ApiModelProperty(value = "关键词列表，各关键词使用英文的逗号分隔", required = true)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请填写关键词列表！")
+    @ApiModelProperty(value = "关键词列表，各关键词使用英文的逗号分隔")
     @Pattern(regexp = REGEXP_KEYWORDS, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_KEYWORDS)
     private String keywords;
 
@@ -68,7 +65,6 @@ public class BrandAddNewDTO implements BrandRegExpression, Serializable {
      * 是否启用，1=启用，0=未启用
      */
     @ApiModelProperty(value = "是否启用", notes = "1=启用，0=未启用", required = true)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请选择是否启用！")
     @Range(max = 1, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_ENABLE)
     private Integer enable;
 

@@ -39,7 +39,7 @@ public class BrandController {
     @ApiOperation(value = "增加品牌", notes = "需要商品后台【写】权限：/pms/product/update")
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/addnew")
-    public JsonResult<Void> addNew(@Valid BrandAddNewDTO brandAddnewDTO) {
+    public JsonResult<Void> addNew(@Valid @RequestBody BrandAddNewDTO brandAddnewDTO) {
         brandService.addNew(brandAddnewDTO);
         return JsonResult.ok();
     }
