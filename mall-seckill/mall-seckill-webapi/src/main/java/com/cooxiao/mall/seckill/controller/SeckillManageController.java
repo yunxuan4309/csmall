@@ -30,7 +30,7 @@ public class SeckillManageController {
 
     @PostMapping("/spu")
     @ApiOperation("新增秒杀SPU")
-    @PreAuthorize("hasRole('admin')")
+    @PreAuthorize("isAuthenticated()")
     public JsonResult<String> addSeckillSpu(@Validated @RequestBody SeckillSpuAddDTO seckillSpuAddDTO) {
         SeckillSpu seckillSpu = new SeckillSpu();
         BeanUtils.copyProperties(seckillSpuAddDTO, seckillSpu);
@@ -40,7 +40,7 @@ public class SeckillManageController {
 
     @DeleteMapping("/spu/{id}")
     @ApiOperation("删除秒杀SPU")
-    @PreAuthorize("hasRole('admin')")
+    @PreAuthorize("isAuthenticated()")
     public JsonResult<String> deleteSeckillSpu(@PathVariable Long id) {
         seckillSpuMapper.deleteById(id);
         return JsonResult.ok("删除秒杀SPU成功");
@@ -48,7 +48,7 @@ public class SeckillManageController {
 
     @PostMapping("/sku")
     @ApiOperation("新增秒杀SKU")
-    @PreAuthorize("hasRole('admin')")
+    @PreAuthorize("isAuthenticated()")
     public JsonResult<String> addSeckillSku(@Validated @RequestBody SeckillSkuAddDTO seckillSkuAddDTO) {
         SeckillSku seckillSku = new SeckillSku();
         BeanUtils.copyProperties(seckillSkuAddDTO, seckillSku);
@@ -61,7 +61,7 @@ public class SeckillManageController {
 
     @DeleteMapping("/sku/{id}")
     @ApiOperation("删除秒杀SKU")
-    @PreAuthorize("hasRole('admin')")
+    @PreAuthorize("isAuthenticated()")
     public JsonResult<String> deleteSeckillSku(@PathVariable Long id) {
         seckillSkuMapper.deleteById(id);
         return JsonResult.ok("删除秒杀SKU成功");
