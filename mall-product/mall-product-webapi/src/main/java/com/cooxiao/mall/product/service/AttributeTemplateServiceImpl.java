@@ -25,6 +25,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -143,7 +144,14 @@ public class AttributeTemplateServiceImpl implements IAttributeTemplateService {
     public AttributeTemplateDetailsVO getDetailsById(Long id) {
         AttributeTemplateDetailsVO attributeTemplateDetailsVO = attributeTemplateMapper.getDetailsById(id);
         if (attributeTemplateDetailsVO == null) {
-            throw new CoolSharkServiceException(ResponseCode.NOT_FOUND, "获取属性模板失败，尝试访问的数据不存在！");
+            // LEFT JOIN 无属性时 MyBatis 可能返回 null，退而查基本信息和空属性列表
+            AttributeTemplateStandardVO basic = attributeTemplateMapper.getById(id);
+            if (basic == null) {
+                throw new CoolSharkServiceException(ResponseCode.NOT_FOUND, "获取属性模板失败，尝试访问的数据不存在！");
+            }
+            attributeTemplateDetailsVO = new AttributeTemplateDetailsVO();
+            BeanUtils.copyProperties(basic, attributeTemplateDetailsVO);
+            attributeTemplateDetailsVO.setAttributes(new ArrayList<>());
         }
         return attributeTemplateDetailsVO;
     }
@@ -152,7 +160,14 @@ public class AttributeTemplateServiceImpl implements IAttributeTemplateService {
     public AttributeTemplateDetailsVO getDetailsIncludeSaleAttributeById(Long id) {
         AttributeTemplateDetailsVO attributeTemplateDetailsVO = attributeTemplateMapper.getDetailsByIdAndAttributeType(id, 1);
         if (attributeTemplateDetailsVO == null) {
-            throw new CoolSharkServiceException(ResponseCode.NOT_FOUND, "获取属性模板失败，尝试访问的数据不存在！");
+            // LEFT JOIN 无属性时 MyBatis 可能返回 null，退而查基本信息
+            AttributeTemplateStandardVO basic = attributeTemplateMapper.getById(id);
+            if (basic == null) {
+                throw new CoolSharkServiceException(ResponseCode.NOT_FOUND, "获取属性模板失败，尝试访问的数据不存在！");
+            }
+            attributeTemplateDetailsVO = new AttributeTemplateDetailsVO();
+            BeanUtils.copyProperties(basic, attributeTemplateDetailsVO);
+            attributeTemplateDetailsVO.setAttributes(new ArrayList<>());
         }
         return attributeTemplateDetailsVO;
     }
