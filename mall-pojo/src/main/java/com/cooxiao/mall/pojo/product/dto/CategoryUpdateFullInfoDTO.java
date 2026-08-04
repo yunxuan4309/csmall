@@ -29,7 +29,6 @@ public class CategoryUpdateFullInfoDTO implements CategoryRegExpression, Seriali
      * 关键词列表，各关键词使用英文的逗号分隔
      */
     @ApiModelProperty(value = "关键词列表，各关键词使用英文的逗号分隔", position = 2)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请填写关键词列表！")
     @Pattern(regexp = REGEXP_KEYWORDS, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_KEYWORDS)
     private String keywords;
 
@@ -37,7 +36,6 @@ public class CategoryUpdateFullInfoDTO implements CategoryRegExpression, Seriali
      * 图标图片的URL
      */
     @ApiModelProperty(value = "图标图片的URL", position = 3)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请输入图标图片的URL！")
     @Pattern(regexp = REGEXP_ICON, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_ICON)
     private String icon;
 
@@ -45,7 +43,6 @@ public class CategoryUpdateFullInfoDTO implements CategoryRegExpression, Seriali
      * 是否启用，1=启用，0=未启用
      */
     @ApiModelProperty(value = "是否启用，1=启用，0=未启用", position = 4)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请选择是否启用！")
     @Range(max = 1, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_ENABLE)
     private Integer enable;
 
@@ -53,7 +50,6 @@ public class CategoryUpdateFullInfoDTO implements CategoryRegExpression, Seriali
      * 是否显示在导航栏中，1=启用，0=未启用
      */
     @ApiModelProperty(value = "是否显示在导航栏中，1=启用，0=未启用", position = 5)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请选择是否显示在导航栏！")
     @Range(max = 1, message = VALIDATE_MESSAGE_PREFIX + "选择的是否显示在导航栏的数据格式错误！")
     private Integer display;
 

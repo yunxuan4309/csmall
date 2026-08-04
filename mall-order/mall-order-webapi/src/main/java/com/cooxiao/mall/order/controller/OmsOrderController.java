@@ -64,7 +64,7 @@ public class OmsOrderController {
 
     @PostMapping("/update/state")
     @ApiOperation("根据订单id修改订单状态")
-    @PreAuthorize("hasRole('user')")
+    @PreAuthorize("hasAnyRole('user','admin')")
     public JsonResult updateOrderState(@Validated @RequestBody OrderStateUpdateDTO orderStateUpdateDTO){
         omsOrderService.updateOrderState(orderStateUpdateDTO);
         return JsonResult.ok("修改完成!");

@@ -146,7 +146,7 @@ public class CategoryController {
     })
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/{id:[0-9]+}/full-info/update")
-    public JsonResult<Void> updateById(@PathVariable Long id, @Valid CategoryUpdateFullInfoDTO categoryUpdateFullInfoDTO) {
+    public JsonResult<Void> updateById(@PathVariable Long id, @Valid @RequestBody CategoryUpdateFullInfoDTO categoryUpdateFullInfoDTO) {
         categoryService.updateFullInfoById(id, categoryUpdateFullInfoDTO);
         return JsonResult.ok();
     }
