@@ -45,7 +45,7 @@ public class PictureController {
     @ApiOperation(value = "新增图片记录", notes = "需要商品后台【写】权限：/pms/product/update")
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/addnew")
-    public JsonResult<Void> addNew(@Valid PictureAddNewDTO pictureAddNewDTO) {
+    public JsonResult<Void> addNew(@Valid @RequestBody PictureAddNewDTO pictureAddNewDTO) {
         pictureService.addNew(pictureAddNewDTO);
         return JsonResult.ok();
     }

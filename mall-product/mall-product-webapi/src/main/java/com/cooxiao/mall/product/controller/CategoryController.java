@@ -41,7 +41,7 @@ public class CategoryController {
     @ApiOperation(value = "新增类别", notes = "需要商品后台【写】权限：/pms/product/update")
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/addnew")
-    public JsonResult<CategoryAddNewResultVO> addNew(@Valid CategoryAddNewDTO categoryAddNewDTO) {
+    public JsonResult<CategoryAddNewResultVO> addNew(@Valid @RequestBody CategoryAddNewDTO categoryAddNewDTO) {
         Long id = categoryService.addNew(categoryAddNewDTO);
         return JsonResult.ok(new CategoryAddNewResultVO(id));
     }
@@ -131,7 +131,7 @@ public class CategoryController {
     })
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/{id:[0-9]+}/base-info/update")
-    public JsonResult<Void> updateById(@PathVariable Long id, @Valid CategoryUpdateBaseInfoDTO categoryUpdateBaseInfoDTO) {
+    public JsonResult<Void> updateById(@PathVariable Long id, @Valid @RequestBody CategoryUpdateBaseInfoDTO categoryUpdateBaseInfoDTO) {
         categoryService.updateBaseInfoById(id, categoryUpdateBaseInfoDTO);
         return JsonResult.ok();
     }

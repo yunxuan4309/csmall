@@ -40,7 +40,7 @@ public class AlbumController {
     @ApiOperation(value = "新增相册", notes = "需要商品后台【写】权限：/pms/product/update")
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/addnew")
-    public JsonResult<AlbumAddNewResultVO> addNew(@Valid AlbumAddNewDTO albumAddDTO) {
+    public JsonResult<AlbumAddNewResultVO> addNew(@Valid @RequestBody AlbumAddNewDTO albumAddDTO) {
         Long id = albumService.addNew(albumAddDTO);
         AlbumAddNewResultVO albumAddVO = new AlbumAddNewResultVO();
         albumAddVO.setId(id);
@@ -72,7 +72,7 @@ public class AlbumController {
     })
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/{albumId:[0-9]+}/update")
-    public JsonResult<Void> updateById(@PathVariable Long albumId, @Valid AlbumUpdateDTO albumUpdateDTO) {
+    public JsonResult<Void> updateById(@PathVariable Long albumId, @Valid @RequestBody AlbumUpdateDTO albumUpdateDTO) {
         albumService.updateById(albumId, albumUpdateDTO);
         return JsonResult.ok();
     }
