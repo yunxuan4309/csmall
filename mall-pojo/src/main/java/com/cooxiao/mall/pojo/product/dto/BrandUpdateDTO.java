@@ -28,8 +28,7 @@ public class BrandUpdateDTO implements BrandRegExpression, Serializable {
     /**
      * 品牌名称的拼音
      */
-    @ApiModelProperty(value = "品牌名称的拼音", required = true)
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请填写名称的拼音！")
+    @ApiModelProperty(value = "品牌名称的拼音")
     @Pattern(regexp = REGEXP_PINYIN, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_PINYIN)
     private String pinyin;
 
@@ -45,7 +44,6 @@ public class BrandUpdateDTO implements BrandRegExpression, Serializable {
      * 品牌简介
      */
     @ApiModelProperty(value = "品牌简介")
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请填写简介！")
     @Pattern(regexp = REGEXP_DESCRIPTION, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_DESCRIPTION)
     private String description;
 
@@ -53,7 +51,6 @@ public class BrandUpdateDTO implements BrandRegExpression, Serializable {
      * 关键词列表，各关键词使用英文的逗号分隔
      */
     @ApiModelProperty(value = "关键词列表，各关键词使用英文的逗号分隔")
-    @NotNull(message = VALIDATE_MESSAGE_PREFIX + "请填写关键词列表！")
     @Pattern(regexp = REGEXP_KEYWORDS, message = VALIDATE_MESSAGE_PREFIX + MESSAGE_KEYWORDS)
     private String keywords;
 

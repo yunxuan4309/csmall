@@ -69,7 +69,7 @@ public class BrandController {
     })
     @PreAuthorize("hasAuthority('/pms/product/update')")
     @PostMapping("/{id:[0-9]+}/update")
-    public JsonResult<Void> updateById(@PathVariable Long id, @Valid BrandUpdateDTO brandUpdateDTODTO) {
+    public JsonResult<Void> updateById(@PathVariable Long id, @Valid @RequestBody BrandUpdateDTO brandUpdateDTODTO) {
         brandService.updateFullInfoById(id, brandUpdateDTODTO);
         return JsonResult.ok();
     }
