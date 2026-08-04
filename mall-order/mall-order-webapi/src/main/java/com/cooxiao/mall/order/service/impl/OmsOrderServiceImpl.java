@@ -191,8 +191,16 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         if (existing == null) {
             throw new CoolSharkServiceException(ResponseCode.NOT_FOUND, "订单不存在");
         }
-        if (!existing.getUserId().equals(getUserId())) {
+        // 管理员可操作任意订单，普通用户仅能操作自己的订单
+        boolean isAdmin = isCurrentUserAdmin();
+        if (!isAdmin && !existing.getUserId().equals(getUserId())) {
             throw new CoolSharkServiceException(ResponseCode.FORBIDDEN, "无权操作此订单");
+        }
+        // 非管理员的普通用户，限制只能正向流转状态（防止逆向篡改）
+        int newState = orderStateUpdateDTO.getState();
+        int oldState = existing.getState();
+        if (!isAdmin && !isValidStateTransition(oldState, newState)) {
+            throw new CoolSharkServiceException(ResponseCode.BAD_REQUEST, "不允许将订单状态从" + oldState + "改为" + newState);
         }
         // 先实例化OmsOrder对象
         OmsOrder order=new OmsOrder();
@@ -498,6 +506,41 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
 
     public Long getUserId(){
         return getUserInfo().getId();
+    }
+
+    /** 当前用户是否为管理员（可通过 userType 或 authorities 判断） */
+    private boolean isCurrentUserAdmin() {
+        try {
+            CsmallAuthenticationInfo info = getUserInfo();
+            return "ADMIN".equals(info.getUserType());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 状态正向流转校验
+     * 0未支付→可转为 1已关闭/2已取消/3已支付
+     * 3已支付→可转为 4已签收/5已拒收/6退款中
+     * 4已签收→可转为 5已拒收/6退款中
+     * 6退款中→可转为 7已退款
+     * 1已关闭→可转为 0(重新激活)/2(取消)
+     * 2已取消→可转为 0(重新激活)
+     * 5已拒收→终止
+     * 7已退款→终止
+     */
+    private boolean isValidStateTransition(int oldState, int newState) {
+        switch (oldState) {
+            case 0: return newState == 1 || newState == 2 || newState == 3;
+            case 3: return newState == 4 || newState == 5 || newState == 6;
+            case 4: return newState == 5 || newState == 6;
+            case 6: return newState == 7;
+            case 1: return newState == 0 || newState == 2;
+            case 2: return newState == 0;
+            case 5: return false;
+            case 7: return false;
+            default: return false;
+        }
     }
 
 }
