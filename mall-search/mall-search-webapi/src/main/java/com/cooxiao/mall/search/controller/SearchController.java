@@ -52,6 +52,13 @@ public class SearchController {
         return JsonResult.ok(jsonPage);
     }
 
+    @GetMapping("/sync")
+    @ApiOperation("从数据库同步全部商品到 ES")
+    public JsonResult<String> syncAll() {
+        searchService.loadSpuByPage();
+        return JsonResult.ok("同步完成");
+    }
+
     //以下是查询数据中的数据,通过logStash存入es中
     @GetMapping("/byLogstash")
     @ApiOperation("根据用户输入的关键字分页查询商品信息:logstash查询ES")

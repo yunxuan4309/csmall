@@ -62,7 +62,7 @@ custom:
       # 注意：不得超过spring.servlet.multipart中的核心配置值
       size-limit: 1MB
       # 允许的文件类型
-      content-type: image/png
+      content-type: image/jpeg, image/png
     # 类别图标配置
     category-icon:
       # 文件夹名称
@@ -71,4 +71,4 @@ custom:
       # 注意：不得超过spring.servlet.multipart中的核心配置值
       size-limit: 1MB
       # 允许的文件类型
-      content-type: image/png
+      content-type: image/jpeg, image/png
