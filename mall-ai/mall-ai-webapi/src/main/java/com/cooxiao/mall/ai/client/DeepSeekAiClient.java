@@ -61,6 +61,7 @@ public class DeepSeekAiClient implements AiClient {
     @Override
     public String chatWithModel(String systemPrompt, String userMessage,
                                  String model, boolean jsonMode) {
+        checkBudget();
         HttpHeaders headers = buildHeaders();
         List<Map<String, String>> messages = new ArrayList<>();
         if (systemPrompt != null && !systemPrompt.isBlank()) {
@@ -104,6 +105,7 @@ public class DeepSeekAiClient implements AiClient {
     }
 
     private String doChat(HttpHeaders headers, List<Map<String, String>> messages) {
+        checkBudget();
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", aiProperties.getChatModel());
         requestBody.put("messages", messages);
@@ -137,6 +139,17 @@ public class DeepSeekAiClient implements AiClient {
                 .getString("content");
     }
 
+    /**
+     * 预算强制检查：所有 DeepSeek API 调用发起前执行。
+     * 任何遗漏入口检查的调用路径（如 /ai/search）也会在此被拦下。
+     */
+    private void checkBudget() {
+        if (tokenBudgetService.isBudgetExceeded()) {
+            log.warn("AI 日预算已超限，拒绝调用 DeepSeek API");
+            throw new IllegalStateException("AI daily budget exceeded");
+        }
+    }
+
     // ========== Embedding API ==========
 
     @Override
@@ -160,6 +173,7 @@ public class DeepSeekAiClient implements AiClient {
     }
 
     private JSONObject doEmbed(List<String> inputs) {
+        checkBudget();
         HttpHeaders headers = buildHeaders();
 
         Map<String, Object> requestBody = new HashMap<>();

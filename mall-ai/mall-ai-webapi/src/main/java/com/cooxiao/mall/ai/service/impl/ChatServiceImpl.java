@@ -353,6 +353,8 @@ public class ChatServiceImpl {
         body.put("temperature", 0.7);
         body.put("max_tokens", 2000);
         body.put("stream", true);
+        // 2026-08-14 预算修复：请求返回 usage，否则流式调用无法记账（2元/日预算形同虚设）
+        body.put("stream_options", Map.of("include_usage", true));
 
         try (OutputStream os = conn.getOutputStream()) {
             os.write(JSON.toJSONString(body).getBytes(StandardCharsets.UTF_8));
@@ -365,6 +367,18 @@ public class ChatServiceImpl {
                 if (line.startsWith("data: ") && !line.equals("data: [DONE]")) {
                     try {
                         JSONObject data = JSON.parseObject(line.substring(6));
+                        // 流式末尾 chunk 携带 usage（stream_options.include_usage=true 时返回）
+                        JSONObject usage = data.getJSONObject("usage");
+                        if (usage != null) {
+                            int promptTokens = usage.getIntValue("prompt_tokens");
+                            int completionTokens = usage.getIntValue("completion_tokens");
+                            double cost = aiProperties.getChatInputPricePerMillion() * promptTokens / 1_000_000.0
+                                    + aiProperties.getChatOutputPricePerMillion() * completionTokens / 1_000_000.0;
+                            tokenBudgetService.record(cost);
+                            log.info("AI 流式记账：输入 {} tokens + 输出 {} tokens = {} 元",
+                                    promptTokens, completionTokens, String.format("%.4f", cost));
+                            continue;
+                        }
                         JSONObject delta = data.getJSONArray("choices")
                                 .getJSONObject(0).getJSONObject("delta");
                         String content = delta.getString("content");

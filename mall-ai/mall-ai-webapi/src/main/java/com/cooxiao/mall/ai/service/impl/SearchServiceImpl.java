@@ -65,6 +65,21 @@ public class SearchServiceImpl {
     // ==================== AI 语义重排序 ====================
 
     public SearchResultVO search(String keyword, int page, int pageSize) {
+        // 0. 预算检查（2026-08-14 补充：/ai/search 此前无预算检查，可被无限调用）
+        if (tokenBudgetService.isBudgetExceeded()) {
+            log.warn("今日 AI 预算已超限，跳过 AI 重排序，按 ES 原始排序返回");
+            List<Map<String, Object>> rawCandidates = esKeywordSearch(keyword, RERANK_RESULT);
+            List<RelatedProductVO> rawProducts = rawCandidates.stream()
+                    .map(this::mapToVO)
+                    .filter(java.util.Objects::nonNull)
+                    .collect(Collectors.toList());
+            SearchResultVO busy = new SearchResultVO();
+            busy.setProducts(rawProducts);
+            busy.setAiExplanation("AI 服务繁忙，已按关键词匹配度排序");
+            busy.setTotalCount((long) rawProducts.size());
+            return busy;
+        }
+
         // 1. ES 多路召回 Top-15
         List<Map<String, Object>> candidates = esKeywordSearch(keyword, RERANK_CANDIDATE);
         if (candidates.isEmpty()) {

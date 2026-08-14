@@ -80,14 +80,10 @@ public class ResourceWebSecurityConfiguration {
                 "/webjars/**",
                 "/swagger-resources/**",
                 "/v2/api-docs/**",
-                "/v3/api-docs/**",
-                // SSE 流式接口：依靠 SSOFilter + Authorization Header 鉴权
-                // permitAll 是为了避免异步 dispatch 时 Spring Security 二次检查丢失上下文
-                "/ai/chat/stream",
-                // AI 搜索增强接口公开访问（无需登录即可搜索商品）
-                "/ai/search",
-                "/ai/search/suggest",
-                "/ai/product/*/related"));
+                "/v3/api-docs/**"));
+        // 2026-08-14 安全收紧：/ai/** 全部要求登录（含 /ai/chat/stream、/ai/search），
+        // 防止匿名用户无限消耗 DeepSeek API Token。stream 的 userId 在控制器同步阶段已捕获，
+        // async 写流不依赖 SecurityContext，登录后流式功能不受影响。
         if (syncWhitelisted) {
             matchers.add("/ai/sync");
             matchers.add("/ai/sync/**");
