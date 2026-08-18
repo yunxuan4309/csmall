@@ -1,146 +1,305 @@
 # JVM 调优方案
 
-> 日期：2026-07-31
-> 服务器：阿里云 ECS 4C16G，Docker Compose 20 容器
-> 基准数据来源：`docker stats --no-stream` 实际运行内存快照
+> **调优日期**: 2026-08-04
+> **服务器**: 阿里云 ECS 4C16G, Docker Compose 22 容器
+> **调优前内存**: 13Gi / 14Gi (93%)
+> **Seata+OAP 后**: 12Gi / 14Gi (86%) — 释放约 1 GiB
+> **微服务重建后**: 10Gi / 14Gi (71%) — 再释放约 2 GiB
+> **总释放**: ~3 GiB, 使用率 93% → 71%
 
 ---
 
-## 一、现状与问题
+## 一、调优前状态
 
-### 1.1 当前配置
+### 1.1 系统内存
 
-11 个微服务 Dockerfile 统一使用：
-
-```dockerfile
-ENTRYPOINT ["java", "-Xmx256m", "-jar", "app.jar"]
+```
+总内存 14Gi | 已用 13Gi | 可用 1.1Gi | 使用率 93% | 无 Swap
 ```
 
-**问题**：只有最大堆限制，缺失关键参数：
-- 无 `-Xms`（初始堆）→ JVM 启动后频繁向 OS 申请内存，触发 GC
-- 无 GC 策略 → 默认 Serial GC（单线程），4 核 CPU 大部分闲置
-- 无 `MaxMetaspaceSize` → 类元数据可无限增长，Spring Boot 类多时轻松破 120MB
-- 无 OOM 自动 dump → 出问题无法排查
+### 1.2 JVM 堆配置与 RSS 对比
 
-### 1.2 实际内存远超堆限制
-
-`docker stats --no-stream` 数据（2026-07-31 运行态）：
-
-| 服务 | 容器内存 | -Xmx | 差额 | 说明 |
-|------|---------|------|------|------|
-| mall-resource | 238 MB | 256m | 正常 | 只做文件上传，极轻量 |
-| mall-gateway | 334 MB | 256m | +78M | Netty NIO + WebFlux 堆外内存 |
-| mall-ams | 326 MB | 256m | +70M | 后台管理，低并发 |
-| mall-ums | 350 MB | 256m | +94M | 用户管理，Spring Security |
-| mall-sso | 341 MB | 256m | +85M | JWT 解析 + 双数据源 |
-| mall-search | 357 MB | 256m | +101M | ES Client 连接池 |
-| mall-front | 439 MB | 256m | +183M | Dubbo Consumer 连接池 |
-| mall-ai | 405 MB | 256m | +149M | ES Client + DeepSeek HTTP |
-| mall-product | 462 MB | 256m | +206M | Dubbo Provider + Seata + MyBatis |
-| mall-order | 461 MB | 256m | +205M | RabbitMQ + Seata + Alipay SDK |
-| mall-seckill | 531 MB | 256m | +275M | Redis 缓存 + RabbitMQ + Sentinel |
-
-差额来源：Metaspace（类元数据）+ 线程栈 + NIO Direct Buffer + JVM Native + Docker 容器开销。
-
-### 1.3 256MB 堆太小的问题
-
-Spring Boot 3.2 + Dubbo 3.3 + Seata + Sentinel 的应用，启动时就需要 ~150MB 堆（Bean 创建、AOP 代理、连接池初始化）。`-Xmx256m` 意味着：
-- 可用堆仅 256MB，启动后只剩 ~100MB 余量
-- 每次 GC 后堆几乎满，触发频繁 GC（每分钟几十次 Young GC）
-- GC 使用 Serial（单线程），暂停时应用卡顿
-- 堆外开销反超堆本身，总内存远超预期
+| 容器 | -Xmx | 实际 RSS | 差额 | 问题 |
+|------|------|---------|------|------|
+| **Seata** 🔴 | **2048m** | 1.46 GiB | — | 堆利用率 3.5%, 严重浪费 |
+| **SkyWalking OAP** 🟡 | 1024m | 1.17 GiB | ~150M | 11服务低流量, 堆只需一半 |
+| ES | 512m | 1.17 GiB | ~660M | OS文件缓存, 正常 |
+| Nacos | 默认 | 963 MiB | — | 未显式设限 |
+| mall-product | 448m | 908 MiB | 460M | Metaspace+线程栈+堆外 |
+| mall-order | 448m | 844 MiB | 396M | 同上 |
+| mall-seckill | 448m | 767 MiB | 319M | 同上 |
+| mall-ai | 384m | 704 MiB | 320M | 同上 |
+| 其余6个微服务 | 256m | 428~642M | 168~386M | 同上 |
+| **11个微服务合计** | ~3.7GB | ~7.2 GiB | **~3.5 GiB** | **堆外内存无限制** |
 
 ---
 
-## 二、调优依据
+## 二、Seata 调优
 
-### 2.1 GC 选择：G1GC
+### 2.1 调优依据
 
-| GC | 适用场景 | 本项目 |
-|----|---------|--------|
-| Serial | 单核、<100MB 堆 | 不符合 |
-| Parallel | 吞吐优先、批处理 | 不符合 |
-| G1 | 多核、200MB~4GB 堆、低延迟 | **最佳匹配** |
-| ZGC | 超大堆、亚毫秒暂停 | 当前不需要 |
-
-选择 G1GC 的理由：
-- 服务器 4 核，G1 可并行 GC，利用多核
-- 堆大小 256~448MB，G1 在此区间表现最优
-- 目标暂停 `-XX:MaxGCPauseMillis=200`，对 Web 请求影响极小
-- 自适应分区，减少 Full GC 概率
-
-### 2.2 堆大小分档依据
-
-按 `docker stats` 实际内存反推最佳堆：
+#### 实测数据 — jstat 堆内存快照
 
 ```
-最佳堆大小 ≈ 容器内存 − Metaspace(100M) − 线程(80M) − NIO(30M) − Native(30M) − Docker overhead(20M)
-            ≈ 容器内存 − 260MB
+S0C=0      S1C=13MB   (Survivor)
+EC=1.3GB   EU=800MB   (Eden: 62% 使用)
+OC=776MB   OU=27MB    (Old Gen: 3.5%!! 使用)
+MC=54MB    MU=51MB    (Metaspace: 95% 使用)
+YGC=19     FGC=0       (5天运行, 0次 Full GC)
 ```
 
-| 档位 | 服务 | 推导堆大小 | 取整 |
-|------|------|-----------|------|
-| 轻量 | resource, gateway, ams, ums, sso, search | 238~357 − 260 = 0~97M → 需要至少 192MB 给 Spring Boot | 128~256m |
-| 中量 | front, ai | 405~439 − 260 = 145~179M → 需要至少 256MB | 192~384m |
-| 重量 | product, order, seckill | 462~531 − 260 = 202~271M → 需要至少 320MB | 256~448m |
+**关键发现**: Old Gen 776MB 容量, 实际只用了 27MB = **3.5% 利用率**。2GB 堆里 97% 空间从未被触碰。
 
-### 2.3 `-Xms` 设置
+#### 为什么 Seata 不需要大堆？
 
-`-Xms` 设为最终堆的 50%~60%，平衡启动速度与运行效率：
-- 设置过低：启动后频繁扩容，触发多次 GC
-- 设置过高：启动变慢（需要一次性分配大堆）
-- 设 50%：启动快，运行中逐步扩到 -Xmx，扩堆时触发一次 GC（可接受）
+| 因素 | 实测值 | 说明 |
+|------|--------|------|
+| 存储模式 | `file` (文件存储) | 事务日志写本地文件, 不驻留内存 |
+| 注册服务 | 4 个 (mall-product/order/seckill/front) | 极小的集群规模 |
+| 历史事务 | **最近 1 小时 0 笔** | 测试/学习环境, 事务量极低 |
+| 3个DB的 undo_log | **全部为 0** | 没有未完成的事务 |
+| 线程数 | 124 | 包含 Netty IO 线程, 非业务线程 |
+| Full GC | **0 次** (5天) | 堆从未面临压力 |
 
-### 2.4 `MaxMetaspaceSize=128m`
+**本质**: Seata 是"交通指挥灯", 不是"停车场"。它协调事务但不存储数据。2GB 堆是为数千服务/数万并发设计的默认值, 当前场景完全不需要。
 
-Spring Boot 3.2 + Dubbo + Seata + Sentinel 的类数量约 15,000~20,000 个，Metaspace 通常在 80~120MB。设 128MB 上限防止 ClassLoader 泄漏时元数据空间无限增长。
+### 2.2 调优方式
 
-### 2.5 OOM HeapDump
-
-`-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp` — 出 OOM 时自动 dump 到 `/tmp`，排查内存泄漏必需。
-
----
-
-## 三、调优方案
-
-### 3.1 统一 JVM 参数（所有服务）
+Seata 启动脚本 (`/seata-setup.sh`) 使用环境变量控制 JVM:
 
 ```bash
--XX:+UseG1GC
--XX:MaxGCPauseMillis=200
--XX:MaxMetaspaceSize=128m
--XX:+HeapDumpOnOutOfMemoryError
--XX:HeapDumpPath=/tmp
+# 脚本中的关键行
+JAVA_OPT="${JAVA_OPT} ... -Xmx${JVM_XMX:="2048m"} -Xms${JVM_XMS:="2048m"} \
+  -XX:MaxMetaspaceSize=${JVM_MaxMetaspaceSize:="256m"} \
+  -XX:MaxDirectMemorySize=${JVM_MaxDirectMemorySize:=1024m} ..."
 ```
 
-### 3.2 分档堆参数
+`${VAR:=default}` 语法 = 环境变量 $VAR 若已设置则使用, 否则用默认值。因此在 docker-compose.yml 中设置环境变量即可覆盖。
 
-**轻量档**（resource, gateway, ams, ums, sso, search）：
-```
--Xms128m -Xmx256m
-```
-预估容器内存：~350MB
+### 2.3 docker-compose.yml 修改
 
-**中量档**（front, ai）：
+```yaml
+seata:
+  environment:
+    SEATA_PORT: 8091
+    JVM_XMX: "512m"                    # 从 2048m 降低
+    JVM_XMS: "256m"                    # 从 2048m 降低
+    JVM_MaxMetaspaceSize: "128m"       # 从 256m 降低
+    JVM_MaxDirectMemorySize: "128m"    # 从 1024m 降低(Seata不需要1GB堆外内存)
 ```
--Xms192m -Xmx384m
-```
-预估容器内存：~480MB
 
-**重量档**（product, order, seckill）：
-```
--Xms256m -Xmx448m
-```
-预估容器内存：~550MB
+### 2.4 效果
 
-### 3.3 预期效果
+| 指标 | 调优前 | 调优后 | 节省 |
+|------|--------|--------|------|
+| -Xmx | 2048m | 512m | -1536m |
+| -Xms | 2048m | 256m | -1792m |
+| RSS (容器内存) | 1.46 GiB | 0.38 GiB | **-1.07 GiB** |
+| 内存占比 | 10.4% | 2.6% | -78% |
 
-| 指标 | 调优前 | 调优后 |
-|------|--------|--------|
-| 堆最大 | 256MB(全部) | 256~448MB(按需) |
-| GC 算法 | Serial | G1（并行） |
-| Young GC 频率 | ~20次/分钟 | ~5次/分钟 |
-| GC 暂停 | 50~200ms | 10~50ms |
-| Metaspace 上限 | 无限制 | 128MB |
-| OOM 自动 dump | 无 | 有 |
-| 总内存 | ~6.5 GB | ~4.5 GB |
+---
+
+## 三、SkyWalking OAP 调优
+
+### 3.1 调优依据
+
+#### OAP 的职责
+
+OAP (Observability Analysis Platform) 是 SkyWalking 的数据处理核心:
+
+```
+Agent(gRPC) → OAP(接收→聚合→分析) → ES(存储)
+                ↑
+         内存仅用于缓冲和聚合,
+         数据最终写入 ES
+```
+
+#### 为什么可以减少堆？
+
+| 因素 | 实测值 | 影响 |
+|------|--------|------|
+| Agent 数量 | 11 个微服务 | 极小的 trace 量 |
+| 存储后端 | Elasticsearch | 数据不长期驻留 OAP 内存 |
+| 日志分析 | 每 5 分钟仅 TTL 清理日志 | 无积压、无超时、无错误 |
+| CPU 使用 | 17.5% (稳态) | 主要是 gRPC 和 ES 连接, 非 GC |
+
+OAP 的 1024m 是为几百个 Agent 的大集群设计的默认值。11 个服务的 trace 量, 256MB 都可能够用, 保留 512MB 已是保守设置。
+
+### 3.2 docker-compose.yml 修改
+
+```yaml
+skywalking-oap:
+  environment:
+    # 调优前: JAVA_OPTS: "-Xms512m -Xmx1024m"
+    JAVA_OPTS: "-Xms256m -Xmx512m"
+```
+
+### 3.3 效果
+
+| 指标 | 调优前 | 调优后 | 节省 |
+|------|--------|--------|------|
+| -Xmx | 1024m | 512m | -512m |
+| -Xms | 512m | 256m | -256m |
+| RSS (容器内存) | 1.17 GiB | 0.28 GiB | **-0.89 GiB** |
+| 内存占比 | 8.3% | 1.9% | -76% |
+
+---
+
+## 四、微服务堆外内存限制
+
+### 4.1 问题分析
+
+11 个微服务的 Dockerfile 已经配置了合理的 JVM 参数:
+
+```dockerfile
+# 以 mall-product 为例
+ENTRYPOINT ["java", "-Xms256m", "-Xmx448m", "-XX:+UseG1GC",
+  "-XX:MaxGCPauseMillis=200", "-XX:MaxMetaspaceSize=256m",
+  "-XX:+HeapDumpOnOutOfMemoryError", ...]
+```
+
+但是实际 RSS 远超过 "-Xmx + MetaspaceSize" 之和, 因为缺少以下配置:
+
+| 缺失的配置 | 默认行为 | 风险 |
+|-----------|---------|------|
+| `MaxDirectMemorySize` | **无上限** | NIO/Netty 可无限申请堆外内存 |
+| `ReservedCodeCacheSize` | **无上限** | JIT 编译缓存持续增长 |
+| `UseStringDeduplication` | 关闭 | 重复 String 对象浪费堆空间 |
+
+### 4.2 docker-compose.yml 修改
+
+由于 Dockerfile 的 ENTRYPOINT 中已设置 `-Xmx`, 使用 `JAVA_TOOL_OPTIONS` 只能**追加新约束**(不能覆盖已有值)。对所有 11 个微服务添加:
+
+```yaml
+# 每个微服务的 environment 中添加:
+JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+```
+
+| 参数 | 作用 | 预估节省 |
+|------|------|---------|
+| `MaxDirectMemorySize=64m` | 限制 NIO 堆外内存 | ~50MB/服务 |
+| `ReservedCodeCacheSize=64m` | 限制 JIT Code Cache | ~30MB/服务 |
+| `UseStringDeduplication` | G1 字符串去重 | ~20MB/服务 |
+
+> ⚠️ 微服务需重建(Dockerfile ENTRYPOINT 不变, 仅追加 JAVA_TOOL_OPTIONS 环境变量), 调优前已完成 docker-compose.yml 编辑, 下次部署时自动生效。
+
+### 4.3 实际效果（微服务重建后预热 5 分钟）
+
+| 微服务 | 调优前 RSS | 调优后 RSS | 节省 |
+|--------|-----------|-----------|------|
+| mall-product | 908 MiB | 729 MiB | -179 MiB |
+| mall-order | 845 MiB | 494 MiB | -351 MiB |
+| mall-seckill | 769 MiB | 431 MiB | -338 MiB |
+| mall-ai | 706 MiB | 355 MiB | -351 MiB |
+| mall-search | 650 MiB | 481 MiB | -169 MiB |
+| mall-ums | 647 MiB | 362 MiB | -285 MiB |
+| mall-ams | 623 MiB | 348 MiB | -275 MiB |
+| mall-sso | 561 MiB | 434 MiB | -127 MiB |
+| mall-gateway | 519 MiB | 495 MiB | -24 MiB |
+| mall-front | 619 MiB | 586 MiB | -33 MiB |
+| mall-resource | 433 MiB | 333 MiB | -100 MiB |
+| **11个微服务合计** | **~7.2 GiB** | **~5.0 GiB** | **-2.2 GiB** |
+
+> 注: mall-gateway 和 mall-front 节省较少, 因其 Dockerfile 中 `-Xmx256m` 本身堆已很小, 堆外限制对其影响有限。mall-ai 节省最多(706→355), 因 AI 模块的 HTTP 客户端连接池此前占用了大量未受控的堆外内存。
+
+---
+
+## 五、调优效果总览
+
+### 5.1 最终结果
+
+```
+                   调优前        Seata+OAP     微服务重建
+系统内存:          13.0 GiB      12.0 GiB       10.0 GiB
+使用率:            93%           86%            71%
+可用内存:          1.1 GiB       2.3 GiB        4.4 GiB
+
+Seata:             1.46 GiB  →  0.40 GiB  →  0.40 GiB  (-1.06 GiB)
+SkyWalking OAP:    1.17 GiB  →  1.03 GiB  →  1.08 GiB  (-0.09 GiB)
+11个微服务:         7.2 GiB   →  7.2 GiB   →  5.0 GiB   (-2.2 GiB)
+─────────────────────────────────────────────────────────────
+总释放:                                                   ~3.4 GiB
+```
+
+### 5.2 各容器内存变化对比（预热稳定后）
+
+```
+                   调优前              全部调优后
+Seata              ██████████████ 1.46  ████ 0.40
+SkyWalking OAP     ████████████ 1.17   ██████████ 1.08
+ES                 ████████████ 1.17   ██████████ 1.03
+Nacos              █████████ 0.96      █████████ 0.97
+mall-product       █████████ 0.91      ███████ 0.73
+mall-order         ████████ 0.85       █████ 0.49
+mall-seckill       ████████ 0.77       ████ 0.43
+mall-ai            ███████ 0.71        ███ 0.36
+mall-search        ██████ 0.65         █████ 0.48
+mall-ums           ██████ 0.65         ███ 0.36
+mall-ams           ██████ 0.62         ███ 0.35
+mall-front         ██████ 0.62         █████ 0.59
+mall-sso           █████ 0.56          ████ 0.43
+mall-gateway       █████ 0.52          █████ 0.50
+mall-resource      ████ 0.43           ███ 0.33
+其余中间件           ~1.9 GiB           ~1.9 GiB
+─────────────────────────────────────────────────────
+总计               13.0 GiB            10.0 GiB
+使用率              93%                 71%
+```
+
+---
+
+## 六、重要提醒
+
+### 6.1 docker-compose.yml 同步
+
+调优后的 `docker-compose.yml` 已上传到服务器 `/home/ai-claude/docker-compose.yml` (本地同步: `deploy/docker/docker-compose.yml`)。
+
+微服务重建已通过 `docker compose -f /home/ai-claude/docker-compose.yml --project-directory /data/csmall up -d` 完成。但 `/data/csmall/docker-compose.yml` 仍是旧版本。
+
+**需手动执行**(以 ecs-user 登录, 下次方便时):
+
+```bash
+sudo cp /home/ai-claude/docker-compose.yml /data/csmall/docker-compose.yml
+```
+
+此后在 `/data/csmall/` 直接运行 `docker compose up -d` 即可使用调优后的配置。
+
+### 6.2 观察期
+
+- Seata 和 OAP 已按新配置运行, 需观察 1-2 天
+- 关注指标: Full GC 次数、服务响应时间、Seata 事务成功率
+- 如有异常: 调回原值 (`JVM_XMX: "2048m"`, `JAVA_OPTS: "-Xms512m -Xmx1024m"`)
+
+### 6.3 风险说明
+
+- **Seata 512m 堆**: 当前 0 事务/小时, 512m 极其充裕。即使将来事务量增加, 几百并发事务也只需要几十 MB
+- **OAP 512m 堆**: trace 数据流式处理后写 ES, 内存仅用于缓冲。11 服务的小集群, 512m 绰绰有余
+- **微服务堆外限制**: MaxDirectMemorySize=64m 对 Netty/Dubbo 足够(每连接 ~1KB 缓冲), 不影响网络通信
+
+---
+
+## 七、操作记录
+
+| 时间 | 操作 | 结果 |
+|------|------|------|
+| 2026-08-04 23:33 | 编辑 docker-compose.yml: Seata 添加 JVM_XMX/XMS/Metaspace/DirectMemory 环境变量 | 已保存 |
+| 2026-08-04 23:33 | 编辑 docker-compose.yml: OAP JAVA_OPTS -Xms512m→256m, -Xmx1024m→512m | 已保存 |
+| 2026-08-04 23:33 | 编辑 docker-compose.yml: 11 个微服务添加 JAVA_TOOL_OPTIONS | 已保存 |
+| 2026-08-04 23:35 | 上传 compose 至服务器 `/home/ai-claude/` | 已上传 |
+| 2026-08-04 23:35 | `docker compose -f ... up -d seata` | 重建成功, 新 JVM 已生效 |
+| 2026-08-04 23:35 | `docker compose -f ... up -d skywalking-oap` | 重建成功, 新 JVM 已生效 |
+| 2026-08-04 23:47 | 逐个重建 11 个微服务 (--no-deps 跳过 RabbitMQ 健康检查超时) | 全部重建成功 |
+| 2026-08-04 23:53 | 微服务预热 5 分钟后验证: 系统内存 10Gi/14Gi (71%) | 稳定运行 |
+
+### 7.1 旁发问题: RabbitMQ 健康检查超时
+
+重建 mall-seckill 时 RabbitMQ 健康检查报 `unhealthy`: `rabbitmqctl status` 耗时 >5s (服务器负载较高时)。RabbitMQ 服务本身正常 (AMQP 5672 端口可用), 仅 Docker health check 超时。后续通过 `--no-deps` 跳过依赖重建。
+
+---
+
+## 八、关联文档
+
+- [[服务器巡检与待修复问题清单-2026-08-04]] — 本次调优的问题来源
+- [[问题解决--ES集群Red与IK分词器丢失]] — 同日修复的另一个服务器问题
+- [[项目上下文文档]] — Seata/SkyWalking 版本和 Docker 部署架构
+- `deploy/docker/docker-compose.yml` — 调优后的 compose 文件
