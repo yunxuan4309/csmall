@@ -9,6 +9,7 @@
 
 > 基于 Spring Cloud Alibaba 的全功能微服务电商平台，支持商品浏览、搜索、购物车、订单支付、秒杀及 AI 智能导购。
 > 已按企业级标准完成 **P0-P3 四阶段升级**：幂等防重、全局限流熔断、MQ 削峰、SkyWalking 链路追踪、CI/CD、SQL 注入清零、单元测试、Flyway 数据库版本化。
+> 生产环境以 **Docker Compose 部署 21 个容器**至阿里云 ECS，稳定运行中。
 
 ---
 
@@ -41,13 +42,14 @@ CoolShark 是一个面向 C 端消费者的全功能电商平台后端服务，�
 | 注册中心 & 配置中心 | Nacos | 2.5.2 |
 | 流量控制 | Sentinel | - |
 | 数据库 | MySQL | 8.0 |
-| 连接池 | Druid | 1.2.24 |
+| 连接池 | Druid（mall-resource 使用 HikariCP） | 1.2.24 |
 | 缓存 | Redis + Redisson | 7.x |
-| 消息队列 | RabbitMQ | 3.13.7 |
-| 搜索引擎 | Elasticsearch + IK 分词器 | 7.17.29 |
+| 消息队列 | RabbitMQ | 4.x |
+| 搜索引擎 | Elasticsearch + IK 分词器 | 8.6.0 |
 | API 文档 | Knife4j (OpenAPI 3) | 4.5.0 |
 | 认证授权 | JWT + Spring Security | - |
-| 部署运维 | systemd / Nginx / 阿里云 ECS | - |
+| 部署运维 | Docker Compose（21 容器）/ Nginx / 阿里云 ECS | - |
+| 链路追踪 | SkyWalking | 9.7.0 |
 | AI | DeepSeek Chat API | V4 |
 
 ---
@@ -124,23 +126,33 @@ CoolShark 是一个面向 C 端消费者的全功能电商平台后端服务，�
 - MySQL 8.0
 - Redis 7.x
 - Nacos 2.5.2
-- RabbitMQ 3.13.x（可选，秒杀功能需要）
-- Elasticsearch 7.17.x（可选，搜索/AI功能需要）
+- RabbitMQ 4.x（可选，秒杀功能需要）
+- Elasticsearch 8.6.0（可选，搜索/AI功能需要）
 
-### 启动步骤
+### 启动步骤（方式一：Docker Compose，推荐）
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/yunxuan4309/csmall.git
+cd csmall
+
+# 2. 进入部署目录，参考 deploy/docker/.env.example 填写 .env
+cd deploy/docker
+cp .env.example .env    # 修改 .env 中的数据库密码、AI Key 等
+
+# 3. 一键构建并启动全部容器
+docker compose up -d --build
+```
+
+### 启动步骤（方式二：本地 jar 运行）
 
 ```bash
 # 1. 启动中间件（MySQL、Redis、Nacos、RabbitMQ、ES）
 
-# 2. 克隆项目
-git clone https://github.com/yunxuan4309/csmall.git
-cd csmall
-
-# 3. 编译打包
+# 2. 编译打包
 mvn clean package -DskipTests
 
-# 4. 按顺序启动微服务
-# 顺序：提供者 → 消费者 → Gateway
+# 3. 按顺序启动微服务（提供者 → 消费者 → Gateway）
 java -jar mall-ams/mall-ams-webapi/target/mall-ams-webapi-*.jar
 java -jar mall-ums/mall-ums-webapi/target/mall-ums-webapi-*.jar
 java -jar mall-product/mall-product-webapi/target/mall-product-webapi-*.jar
@@ -214,16 +226,32 @@ java -jar mall-gateway-server/target/mall-gateway-server-*.jar
 
 ## 📦 部署
 
-### 生产环境
+### 生产环境（Docker Compose）
 
 | 配置项 | 值 |
 |--------|-----|
 | 云厂商 | 阿里云 ECS（成都） |
 | 规格 | 4 核 16G 经济型 e |
-| 操作系统 | Alibaba Cloud Linux 3 |
-| 部署方式 | systemd 托管（11 个微服务） |
-| 反向代理 | Nginx 80 端口 |
-| 敏感信息 | 统一 `csmall.env` 环境变量注入 |
+| 操作系统 | Ubuntu 24.04 |
+| 部署方式 | Docker Compose（11 微服务 + 9 中间件/前端/监控 = 21 容器） |
+| 项目根目录 | `/data/csmall/`（docker-compose.yml + .env + jars/ + frontend/） |
+| 反向代理 | Nginx 80 端口（SPA 静态资源 + API 反向代理） |
+| 敏感信息 | `/data/csmall/.env` 环境变量注入 |
+| 链路追踪 | SkyWalking OAP 9.7.0 + UI |
+
+### 中间件（Docker 容器）
+
+| 服务 | 容器名 | 端口 |
+|------|--------|------|
+| MySQL 8.0 | csmall-mysql | 3306 |
+| Redis 7 | csmall-redis | 6379 |
+| Nacos 2.5.2 | csmall-nacos | 8848 / 9848 |
+| RabbitMQ 4 | csmall-rabbitmq | 5672 / 15672 |
+| Elasticsearch 8.6 | csmall-es | 9200 / 9300 |
+| Seata 2.1.0 | csmall-seata | 8091 / 7091 |
+| Sentinel | csmall-sentinel | 8090 |
+| SkyWalking OAP/UI | csmall-skywalking-oap / -ui | 11800 / 12800 / 8088 |
+| Nginx 前端 | csmall-frontend | 80 |
 
 ### 启动顺序
 
