@@ -1,4 +1,4 @@
-# 08 JVM 性能
+﻿# 08 JVM 性能
 > **核心问题**：JVM 调优依据、堆/堆外内存、GC、压测
 > 难度：高
 > **内容时效声明（2026-09-06 第一轮复习完成）**：本文档内容已按当时服务器/代码实测核对。**此后不随意修改**——若因 TODO 实施、代码变更导致内容过期，先更新对应事实来源文档（问题解决/评估报告/上下文文档），再回来改本档；面试使用请以最新实测为准。
@@ -12,7 +12,9 @@
 【追问6】动态年龄判定是什么？
 【追问7】G1 是什么？为什么项目用它？
 【简答】**GC = Garbage Collection（垃圾回收）**——JVM 自动管理内存、回收不再使用对象的机制，开发者不用手动 free。JVM 内存分堆和堆外：堆按对象存活概率分成新生代（Eden + 2×Survivor）和老年代（Old Gen）；GC 自动回收不再使用的对象，分 Minor GC（只扫新生代，毫秒级）和 Full GC（扫全堆，秒级）。诊断用 jstat 家族工具看各区域使用量和 GC 次数。
-【深挖】**一、堆内存结构（分代模型）**
+【深挖】
+
+**一、堆内存结构（分代模型）**
 
 | 区域 | 放什么 | 回收方式 |
 |---|---|---|
@@ -23,7 +25,10 @@
 - **为什么分代**：统计规律"绝大多数对象朝生夕死"（80%+ 活不过第一轮 GC）→ 让它们死在新生代（区域小、回收快），老年代保持干净（Full GC 少）
 - **对象一生**：new → Eden → Minor GC 存活 → 进 S0/S1 反复复制（默认 15 次，动态年龄）→ 晋升 Old → 等 Full GC
 - **大对象例外**：超大对象（大数组）直接进老年代，绕开新生代——大对象多了会挤爆 Old 引发 Full GC
-- **类比**：新生代=新员工试用区（大部分试用期就走人），Old=正式员工区（人少但清退成本高）**二、GC 是什么**
+- **类比**：新生代=新员工试用区（大部分试用期就走人），Old=正式员工区（人少但清退成本高）
+
+**二、GC 是什么**
+
 - **GC = Garbage Collection 垃圾回收**：自动找出"不再被引用的对象"，释放其内存——开发者不用手动 free（C/C++ 要手动，易内存泄漏/悬垂指针）
 - **怎么判断垃圾**：可达性分析——从 **GC Roots**（局部变量/静态变量/常量池/本地方法栈）出发做引用链扫描，不可达 = 垃圾。引用计数法有循环引用缺陷，主流不用
 - **三大回收算法**（先懂"碎片"：内存被零散回收后留下的小洞——总空间够，但找不到连续大块放不下大对象。类比停车场：B 车被拖走空出 5 格，但被 A/C 夹住，要放 6 格的车放不下。类比 OS：就是操作系统内存管理的**外部碎片**，JVM = 自己管理堆的"迷你 OS"，分页/紧凑同一套思想）：  ① **标记-清除**：标记存活 → 清除垃圾。不搬对象所以快，但垃圾零散分布 → **有碎片**（老年代用，常配合整理）  ② **标记-复制**：内存分两块，存活对象复制到空块（紧凑排列）→ 整块清空。**无碎片**但浪费一半空间（新生代用，存活率低搬得少，Survivor 兜底——所以新生代永远没碎片）  ③ **标记-整理**：标记后把存活对象全推到一端消除碎片。**无碎片 + 利用率高**但最慢（老年代用，存活率高复制不划算）
@@ -32,39 +37,54 @@
 |---|---|---|---|---|
 | 标记-清除 | 不搬 | 有 | 快 | 老年代 |
 | 标记-复制 | 搬存活 | 无 | 快 | 新生代 |
-| 标记-整理 | 搬存活 | 无 | 最慢 | 老年代 |  💡 **面试深度点**：G1 把堆分成固定大小 Region（区域化），就是借鉴 OS **分页**"固定大小页框消除外部碎片"的思想——这也是项目用 G1 的原因之一
+| 标记-整理 | 搬存活 | 无 | 最慢 | 老年代 |
+
+- 💡 **面试深度点**：G1 把堆分成固定大小 Region（区域化），就是借鉴 OS **分页**"固定大小页框消除外部碎片"的思想——这也是项目用 G1 的原因之一
 - **STW（Stop The World）**：GC 时应用线程必须暂停——这是 GC 调优的核心矛盾：追求低停顿（G1/ZGC）还是高吞吐（Parallel）
-- 面试话术："GC 是 JVM 自动的内存回收机制，用可达性分析判断垃圾，开发者不用手动管理内存。代价是 STW——回收时应用线程暂停，所以调优就是在这对矛盾里找平衡"**三、Full GC 是什么**
+- 面试话术："GC 是 JVM 自动的内存回收机制，用可达性分析判断垃圾，开发者不用手动管理内存。代价是 STW——回收时应用线程暂停，所以调优就是在这对矛盾里找平衡"
+
+**三、Full GC 是什么**
+
 - **Minor GC（Young GC）**：只扫新生代，毫秒级、频繁——正常现象，不用怕
 - **Full GC**：扫**整个堆**（老年代 + 新生代 + Metaspace），STW 秒级——高并发下就是"服务假死"
 - **触发条件**：① 老年代满 ② Metaspace 满 ③ 晋升失败（Survivor 放不下直接升 Old，Old 也满）④ 代码调 System.gc()（可加 -XX:+DisableExplicitGC 禁用）
 - **健康指标**：FGC 次数应该极少——项目实测 Seata 5 天 **YGC=19 / FGC=0**（⭐ 实测），0 次 Full GC 才是敢把 2G 堆降到 512M 的底气
 - **Full GC 频繁的排查方向**：内存泄漏（对象只增不减）/ 大对象直进老年代 / 堆设太小 / 晋升失败
-- 面试话术："Minor GC 扫新生代毫秒级不可怕，**Full GC 扫全堆停顿秒级才是线上卡顿的头号嫌疑**。我调优的核心目标就是让 FGC 趋近于 0"**四、诊断工具（jstat 家族）**
+- 面试话术："Minor GC 扫新生代毫秒级不可怕，**Full GC 扫全堆停顿秒级才是线上卡顿的头号嫌疑**。我调优的核心目标就是让 FGC 趋近于 0"
+
+**四、诊断工具（jstat 家族）**
+
 - `jstat -gc <pid>`：堆各区域容量/使用量 + GC 次数耗时，输出列：  
 - S0C/S1C/S0U/S1U（Survivor 容量/使用）、EC/EU（Eden）、OC/OU（Old）、MC/MU（Metaspace）  
 - YGC/YGCT（Minor GC 次数/耗时）、FGC/FGCT（Full GC 次数/耗时）、GCT（总耗时）
 - 其他指令：`jstat -gcutil`（使用率百分比，更直观）、`-gccapacity`（含未分配容量）、`-gcnew`/`-gcold`（只看新生代/老年代）、`-class`（类加载数）、`-compiler`（JIT 编译）
 - **兄弟工具**：`jps`（找 PID，一切的前提）/ `jmap -heap`（堆概览）/ `jstack`（线程栈，CPU 暴涨时抓）/ `jinfo`（看参数）/ `jcmd`（万能入口）
-- ⚠️ **诚实点**：生产容器是 JRE（temurin:21-jre-alpine），只有 java/jfr/keytool，**无 jstat/jstack/jmap/jcmd**（TODO #28 实测）——调优当时能跑 jstat 是因为 Seata 官方镜像是 JDK。面试答"用什么测的"要补一句"现在容器是 JRE 抓不了，所以我评估换 JDK 镜像/装 Arthas"**五、对象的一生（场景流程：秒杀压测）**
+- ⚠️ **诚实点**：生产容器是 JRE（temurin:21-jre-alpine），只有 java/jfr/keytool，**无 jstat/jstack/jmap/jcmd**（TODO #28 实测）——调优当时能跑 jstat 是因为 Seata 官方镜像是 JDK。面试答"用什么测的"要补一句"现在容器是 JRE 抓不了，所以我评估换 JDK 镜像/装 Arthas"
+
+**五、对象的一生（场景流程：秒杀压测）**
+
 > 场景：100 并发打秒杀接口，后端每秒创建大量对象。盯住其中一个订单对象看完整生命周期：
 - **① 出生**：`new SeckillOrder()` → 分配在 **Eden**。同时出生一堆"工具人"对象（DTO/日志/序列化缓冲）全挤在 Eden。类比：新生婴儿室
 - **② 第一次 Minor GC**（Eden 满触发）：JVM 从 GC Roots 沿引用链扫描——大部分请求已处理完、栈帧弹出、没人引用 → **当场死亡回收**；少数还被引用的 → 复制到 **S0**，Eden 清空。类比：第一次试用期考核，80% 走人
 - **③ 反复 Minor GC**：对象在 **S0 ↔ S1** 之间来回复制（像两个桶倒水：永远一边倒空一边接收），每次存活 age+1。复制 = 紧凑排列 = 无碎片
 - **④ 晋升**：age 到 15（或动态年龄判定 / Survivor 放不下）→ 晋升 **Old Gen**。能活这么久的多是被长寿对象引用（会话/缓存/连接池）。⚠️ 大对象例外：直接进老年代
 - **⑤ Full GC**：老年代也满 → 扫**整个堆**（新生代+老年代+Metaspace），标记-整理移动存活对象，**STW 秒级 = 服务假死**
-- **⑥ 死亡**：不可达 → 回收 → 内存归还**六、GC Roots 与引用链**
+- **⑥ 死亡**：不可达 → 回收 → 内存归还
+
+**六、GC Roots 与引用链**
+
 - **GC Roots = 回收的"根"，引用扫描的起点**——绝对活着、不可回收：栈上局部变量 / 静态变量 / 常量池 / 活跃线程
 - **引用链**：从 GC Roots 出发，对象 A 引用 B、B 引用 C……连成的链条——注意是**对象实例之间的引用关系**，不是类之间的关系  
-```  GC Roots（栈上局部变量 order）    └──
-> Order 对象 ──
-> Address 对象              └──
-> List<Item
-> ──
-> Item 对象    ← 链上全存活  
+```
+GC Roots（栈上局部变量 order）
+  └──> Order 对象 ──> Address 对象
+                    └──> List<Item> ──> Item 对象   ← 链上全存活
 ```
 - 能走到的 = 存活；走不到的 = **不可达 = 垃圾**。类比：族谱——从祖先往下数得着的都是活人，失联的清理
-- **静态变量是 GC Roots** → 它引用的对象永远可达、永不回收（除非类被卸载）**七、静态变量与内存泄漏**
+- **静态变量是 GC Roots** → 它引用的对象永远可达、永不回收（除非类被卸载）
+
+**七、静态变量与内存泄漏**
+
 - 静态变量引用的对象**不占 Eden**——它永远活着，熬过 15 轮自然晋升**老年代**长期驻留
 - **真正要避免的不是静态变量，而是"无界静态集合"**（static Map/List 只进不出）：  
 - 每次请求往里塞数据、永不删除 → 老年代被撑满 → **Full GC 频繁 → 假死**  
@@ -74,7 +94,8 @@
 - **为什么无界静态集合会挤爆老年代**：static Map 是 GC Roots → 每次请求 put 进去的 value **永远可达** → Minor GC 死不了 → 熬过 15 轮晋升老年代 → 老年代**只进不出被填满** → 满则触发 Full GC，但扫了也白扫（对象还被引用着）→ 老年代依旧满 → 又触发 → **Full GC 越来越频繁 → 假死 → 最终 OOM**。类比：只进不出的仓库，货都有主人，翻仓库也扔不掉
 - **为什么会只进不出**：① 只 put 不 remove（最常见——拿 HashMap 当缓存却忘了淘汰）② key 永不重复（时间戳/UUID 当 key，每次请求都是新 key，map 只增不减）③ key 是增长维度（userId 当 key，用户越多 map 越大）。根治 = 缓存带 TTL/淘汰策略/上限，或直接上 Redis/Caffeine
 
-## 八、动态年龄判定（Survivor 快满时提前晋升）
+**八、动态年龄判定（Survivor 快满时提前晋升）**
+
 - 默认要熬到 age=15 才晋升，但如果 **Survivor 快满了**，JVM 不等 15，提前晋升一批
 - **规则**：从 age=1 开始累加各年龄对象的大小，**累加超过 Survivor 一半（50%）的那个年龄及以上的对象，全部晋升**
 - **数字例子**：Survivor 容量 10MB，里面住着——  
@@ -83,14 +104,19 @@
 - 3 岁对象 5MB（合计 10MB，满了）  
 - JVM 累加：1 岁 2MB → 加上 2 岁共 5MB = **达到一半（5MB）** → **2 岁及以上（3+5=8MB）全部晋升老年代**，Survivor 只剩 1 岁的 2MB，腾出空间
 - 类比：宿舍 10 个床位住满了——宿管不一个个劝退，直接算"哪一批老员工加起来超过一半床位"整批转正搬走，腾地方
-- 作用：防止 Survivor 溢出（放不下强行升 Old 反而更糟）；`-XX:MaxTenuringThreshold=15` 只是上限，实际晋升由动态判定决定**九、G1 收集器速览（Garbage First，JDK 9+ 默认）**
+- 作用：防止 Survivor 溢出（放不下强行升 Old 反而更糟）；`-XX:MaxTenuringThreshold=15` 只是上限，实际晋升由动态判定决定
+
+**九、G1 收集器速览（Garbage First，JDK 9+ 默认）**
+
 - **G1 = Garbage First（垃圾优先）**：回收时**优先收"垃圾最多"的 Region**——哪块垃圾密度高先收哪块，回收收益最大化（名字由来）
 - **堆切成大量固定大小 Region**（典型 1~32MB），**没有物理分代**——每个 Region 角色动态：这轮是 Eden，下轮可能变 Survivor/Old，按需划分
 - **回收不扫全堆，增量收**：每次只收一批垃圾最多的 Region，配合 `-XX:MaxGCPauseMillis=200`（项目实测）= 告诉 G1"每次停顿别超 200ms"，它自己算收多少块不超时 → **停顿可控**
 - **对比传统**：传统（Parallel/CMS）= 物理一整块 Eden/Old，必须全区域扫，停顿不可控；G1 = Region 化增量收，停顿可控（类比：传统=全小区大扫除日一次全扫停摆；G1=哪栋楼垃圾最多先清哪栋）
 - **借鉴 OS 分页**：固定大小 Region = 固定大小页框 → 消除外部碎片 + 只处理需要的区域（呼应二、碎片类比）
 - **项目实证**：11 个微服务容器实测全部 `UseG1GC + MaxGCPauseMillis=200`（08 Q1 参数表）；低流量下停顿目标几乎不触发，配合"FGC 趋 0"
-- 面试话术："G1 是 JDK9+ 默认收集器，把堆切成固定大小 Region、角色动态划分，回收时优先处理垃圾最多的 Region，配合 MaxGCPauseMillis 做到停顿可控——像分页让 OS 只换需要的页，G1 只收收益最高的区域"【速记】"堆分新生代（Eden+Survivor）老年代（Old），Metaspace 在堆外；GC 自动回收垃圾，Minor 扫新生代毫秒级、**Full 扫全堆秒级=线上卡顿元凶**；对象一生：Eden → Minor GC 存活 → S0/S1 反复复制 → age 15 或动态年龄判定 → 晋升 Old → Full GC 回收；GC Roots=引用扫描起点（局部变量/静态变量），引用链走不到=垃圾；静态变量引用的对象永不回收，要防的是**无界静态集合**；G1=垃圾优先收集器，Region 化、增量回收、停顿可控（项目 UseG1GC+MaxGCPauseMillis=200）；调优目标 FGC 趋 0——Seata 实测 5 天 0 次 Full GC；诊断 jstat -gc 看 OU/EU/YGC/FGC"
+- 面试话术："G1 是 JDK9+ 默认收集器，把堆切成固定大小 Region、角色动态划分，回收时优先处理垃圾最多的 Region，配合 MaxGCPauseMillis 做到停顿可控——像分页让 OS 只换需要的页，G1 只收收益最高的区域"
+
+【速记】"堆分新生代（Eden+Survivor）老年代（Old），Metaspace 在堆外；GC 自动回收垃圾，Minor 扫新生代毫秒级、**Full 扫全堆秒级=线上卡顿元凶**；对象一生：Eden → Minor GC 存活 → S0/S1 反复复制 → age 15 或动态年龄判定 → 晋升 Old → Full GC 回收；GC Roots=引用扫描起点（局部变量/静态变量），引用链走不到=垃圾；静态变量引用的对象永不回收，要防的是**无界静态集合**；G1=垃圾优先收集器，Region 化、增量回收、停顿可控（项目 UseG1GC+MaxGCPauseMillis=200）；调优目标 FGC 趋 0——Seata 实测 5 天 0 次 Full GC；诊断 jstat -gc 看 OU/EU/YGC/FGC"
 ---
 ### Q1. 你做了哪些 JVM 调优？依据是什么？🔴
 【追问1】为什么敢降 Seata 的堆？
@@ -174,7 +200,7 @@
 【简答】遇到过 Druid 连接池线程挂死（资源服务上传时），排查后换 HikariCP。OOM 处理：配置 HeapDump + 分析。
 【深挖】
 - **Druid 线程挂死**：上传请求时线程挂死，定位到连接池问题，  换 HikariCP 解决
-- **OOM 应对**：JVM 配 `-XX:  +HeapDumpOnOutOfMemoryError` +   `HeapDumpPath`，OOM 时自动 dump 分析
+- **OOM 应对**：JVM 配 `-XX:+HeapDumpOnOutOfMemoryError` +   `HeapDumpPath`，OOM 时自动 dump 分析
 - **堆外 OOM**：Direct buffer memory（  Netty 等），限制 MaxDirectMemorySize
 - **CPU 暴涨排查流程**（面试场景题标准答案）：  ① top 找 CPU 高进程 → ② top -Hp 找线程 → ③ 线程号转十六  进制 → ④ jstack 抓栈搜 nid → ⑤ 判断：业务死循环/锁等待/  GC 线程（GC 就转内存排查）
 - **Full GC 排查流程**：  ① jstat -gcutil 看 GC 频率/停顿/Old 占比 → ② jmap -heap  看堆配置 → ③ jmap -dump 抓堆转储（⚠️ STW 低峰做）→  ④ MAT Dominator Tree/Leak Suspects 找大头 → ⑤ 对照代码：  无界集合/连接未关/ThreadLocal 不 remove/大对象查询
@@ -184,13 +210,20 @@
 - **为什么泄漏**：key 是**弱引用**（ThreadLocal 外部引用没了 → key 变 null），但 value 是强引用还留在 map；若线程是**线程池长命线程**（不销毁）→ value 永远被持有 → 泄漏。所以**用后必须 remove**（项目 TraceIdFilter 请求结束 MDC.remove 就是正确示范；不 remove 还会线程池复用串号——下个请求看到上个 traceId）  
 - **父子线程通信**：ThreadLocal 默认**不传给子线程**（子线程自己的 map 是空的）；方案：① `InheritableThreadLocal`（JDK 内置，创建子线程时**复制一份**——只复制创建那一刻，之后父改子不变，且**线程池场景失效**）② `TransmittableThreadLocal`（TTL，阿里开源，**任务提交时传递、执行完恢复**——线程池/异步场景标配，跨线程传 traceId 用它）  
 - **传递代码示例**（traceId 场景，看输出）：    
-```java    // ① 默认 ThreadLocal:不传 → 子线程 null ❌    ThreadLocal<String
-> tl = new ThreadLocal<>(); tl.set("T-001");    new Thread(() -
-> System.out.println(tl.get())).start();        // null    // ② InheritableThreadLocal:创建时复印一次 ✅(之后父改子不变,线程池失效)    InheritableThreadLocal<String
-> itl = new InheritableThreadLocal<>(); itl.set("T-001");    new Thread(() -
-> System.out.println(itl.get())).start();       // T-001    // ③ TTL:每次任务提交时传递、执行完恢复 → 线程池标配 ✅    pool.submit(TtlRunnable.get(() -
-> System.out.println(ttl.get())));  // 随任务传    
-```  
+```java
+// ① 默认 ThreadLocal：不传 → 子线程 null ❌
+ThreadLocal<String> tl = new ThreadLocal<>();
+tl.set("T-001");
+new Thread(() -> System.out.println(tl.get())).start();   // null
+
+// ② InheritableThreadLocal：创建时复印一次 ✅（之后父改子不变，线程池失效）
+InheritableThreadLocal<String> itl = new InheritableThreadLocal<>();
+itl.set("T-001");
+new Thread(() -> System.out.println(itl.get())).start();  // T-001
+
+// ③ TTL：每次任务提交时传递、执行完恢复 → 线程池标配 ✅
+pool.submit(TtlRunnable.get(() -> System.out.println(ttl.get())));  // 随任务传
+```
 - **总结表**：默认 ThreadLocal=不传(null)；InheritableThreadLocal=创建时复印一次（线程池场景失效）；TTL=每次任务都传（线程池/异步标配，跨线程 traceId 用它）  
 - **MDC 用法示范**（防泄漏+防串号）：`try { MDC.put("traceId", uuid); chain.doFilter(...); } finally { MDC.remove(); }`——finally 保证异常也清（项目 TraceIdFilter 即此写法）  
 - **与项目连接**：HTTP 链路 MDC 有值，但**定时任务/MQ/Dubbo 线程 `[]` 空**（ThreadLocal 默认不跨线程）→ 跨线程传递方案 = TTL；项目选 SW logback 集成（TODO #16）覆盖全场景，更省人力。面试讲："跨线程 traceId 我知道 TTL 方案，项目用 SW logback 集成覆盖"  
