@@ -1,5 +1,7 @@
 # Spring Boot 2.x → 3.x 技术栈迁移问题汇总
 
+> ⚠️ **版本更正（2026-09-03 核实）**：迁移过程目标 3.5.7，但**最终落地版本为 3.2.5**——第四轮迁移（git commit 5ff0bd2）因阿里云镜像可用性 + SCA 兼容问题从 3.5.7 降级锁定 3.2.5（根 pom 实证：spring-boot.version=3.2.5 + Spring Cloud 2023.0.3 + SCA 2023.0.1.2）。本文 3.5.7 为迁移过程中的版本。
+
 > 时间：2026-05-08 ~ 2026-05-09
 > 内容：Spring Boot 2.x → 3.5.7 全链路迁移（含 Spring Security 6.x、Jakarta EE 9+、MyBatis-Plus 4.x 等）
 
@@ -331,11 +333,13 @@ public Knife4jSwaggerProvider(ObjectProvider<RouteLocator> routeLocatorProvider)
 
 ## 八、关键版本信息
 
-| 组件 | 版本 |
-|---|---|
-| Spring Boot | 3.5.7 |
-| Spring Security | 6.5.x |
-| MyBatis Plus | 3.5.7 |
-| MyBatis Plus Generator | 3.5.7 |
-| Java | 21 |
-| Jakarta EE | 9+ |
+> ⚠️ 下表为迁移过程版本（3.5.7）；**最终落地：Spring Boot 3.2.5**（降级原因见文首更正）
+
+| 组件 | 版本（过程） | 最终落地 |
+|---|---|---|
+| Spring Boot | 3.5.7 | **3.2.5** |
+| Spring Security | 6.5.x | 6.2.x（Boot 3.2.5 配套） |
+| MyBatis Plus | 3.5.7 | 3.5.9 |
+| MyBatis Plus Generator | 3.5.7 | 3.5.9 |
+| Java | 21 | 21 |
+| Jakarta EE | 9+ | 9+ |

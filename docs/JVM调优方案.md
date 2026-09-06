@@ -1,7 +1,8 @@
 # JVM 调优方案
 
+> **状态**: ✅ 已执行完成（2026-08-22 确认：调优全部生效，§6.1 compose 已同步至 `/data/csmall/docker-compose.yml`）
 > **调优日期**: 2026-08-04
-> **服务器**: 阿里云 ECS 4C16G, Docker Compose 22 容器
+> **服务器**: 阿里云 ECS 4C16G, Docker Compose 21 容器
 > **调优前内存**: 13Gi / 14Gi (93%)
 > **Seata+OAP 后**: 12Gi / 14Gi (86%) — 释放约 1 GiB
 > **微服务重建后**: 10Gi / 14Gi (71%) — 再释放约 2 GiB
@@ -84,7 +85,7 @@ seata:
     SEATA_PORT: 8091
     JVM_XMX: "512m"                    # 从 2048m 降低
     JVM_XMS: "256m"                    # 从 2048m 降低
-    JVM_MaxMetaspaceSize: "128m"       # 从 256m 降低
+    JVM_MaxMetaspaceSize: "128m"       # ⚠️ 2026-08-28 修正：方案值 128m 与实测不符，运行中为 256m（SW Agent 40+ 插件类超 128MB 撑爆 Metaspace 的历史坑，见 SkyWalking 部署记录）
     JVM_MaxDirectMemorySize: "128m"    # 从 1024m 降低(Seata不需要1GB堆外内存)
 ```
 
