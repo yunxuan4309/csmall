@@ -5,14 +5,15 @@ services:
     image: mysql:8.0
     container_name: csmall-mysql
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
       - ./mysql-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    mem_limit: 1g
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -23,12 +24,17 @@ services:
   redis:
     image: redis:7-alpine
     container_name: csmall-redis
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
+      - ./redis/redis-master.conf:/usr/local/etc/redis/redis.conf
+    mem_limit: 256m
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -44,6 +50,11 @@ services:
       - "9848:9848"
     environment:
       MODE: standalone
+      # R7: 堆 1g→512m（standalone 注册量小，最大单点内存收益 ~480M）
+      JVM_XMS: "512m"
+      JVM_XMX: "512m"
+      JVM_XMN: "256m"
+    mem_limit: 1g
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/"]
       interval: 15s
@@ -64,6 +75,7 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    mem_limit: 256m
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
       interval: 10s
@@ -86,6 +98,7 @@ services:
     volumes:
       - es_data:/usr/share/elasticsearch/data
       - /data/csmall/es-plugins/analysis-ik:/usr/share/elasticsearch/plugins/analysis-ik
+    mem_limit: 1.5g
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 15s
@@ -107,6 +120,7 @@ services:
       JVM_XMS: "256m"
       JVM_MaxMetaspaceSize: "128m"
       JVM_MaxDirectMemorySize: "128m"
+    mem_limit: 512m
     depends_on:
       nacos:
         condition: service_healthy
@@ -126,7 +140,9 @@ services:
     ports:
       - "8090:8858"
     environment:
-      JAVA_OPTS: "-Dserver.port=8858"
+      # R7: 显式限制堆，消除默认 ~3.5G 堆上限隐患
+      JAVA_OPTS: "-Dserver.port=8858 -Xms128m -Xmx256m"
+    mem_limit: 512m
     networks:
       - csmall-net
 
@@ -141,6 +157,7 @@ services:
       SW_STORAGE: elasticsearch
       SW_STORAGE_ES_CLUSTER_NODES: elasticsearch:9200
       JAVA_OPTS: "-Xms256m -Xmx512m"
+    mem_limit: 1.5g
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -154,6 +171,7 @@ services:
       - "8088:8080"
     environment:
       SW_OAP_ADDRESS: http://skywalking-oap:12800
+    mem_limit: 512m
     depends_on:
       - skywalking-oap
     networks:
@@ -170,10 +188,12 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       JWT_SECRET: ${JWT_SECRET}
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+    mem_limit: 768m
     depends_on: { nacos: { condition: service_healthy } }
     volumes:
       - /data/csmall/skywalking-agent:/skywalking-agent:ro
@@ -188,6 +208,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
@@ -197,6 +218,7 @@ services:
       SPRING_DATASOURCE_USER_JDBC_URL: jdbc:mysql://mysql:3306/cs_mall_ums?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
       SPRING_DATASOURCE_ORDER_JDBC_URL: jdbc:mysql://mysql:3306/cs_mall_oms?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+    mem_limit: 768m
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }
@@ -213,6 +235,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
@@ -221,6 +244,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_mall_pms?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
       CUSTOM_FILE_UPLOAD_RESOURCE_HOST: http://8.156.77.197/
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+    mem_limit: 1g
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }
@@ -239,10 +263,12 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       JWT_SECRET: ${JWT_SECRET}
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+    mem_limit: 1g
     restart: on-failure
     depends_on: { nacos: { condition: service_healthy } }
     volumes:
@@ -258,6 +284,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
@@ -269,6 +296,7 @@ services:
       SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+    mem_limit: 1g
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }
@@ -289,10 +317,12 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       JWT_SECRET: ${JWT_SECRET}
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+    mem_limit: 768m
     depends_on:
       nacos: { condition: service_healthy }
       elasticsearch: { condition: service_healthy }
@@ -311,6 +341,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
@@ -322,6 +353,7 @@ services:
       SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+    mem_limit: 1g
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }
@@ -341,6 +373,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
@@ -348,6 +381,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_mall_ums?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+    mem_limit: 768m
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }
@@ -364,6 +398,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
@@ -371,6 +406,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_mall_ams?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+    mem_limit: 768m
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }
@@ -388,6 +424,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       MYSQL_USERNAME: root
@@ -396,6 +433,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cs_mall_resource?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
       CUSTOM_FILE_UPLOAD_RESOURCE_HOST: http://8.156.77.197/
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+    mem_limit: 768m
     volumes:
       - /data/csmall-upload:/data/csmall-upload
       - /data/csmall/skywalking-agent:/skywalking-agent:ro
@@ -414,6 +452,7 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       JWT_SECRET: ${JWT_SECRET}
@@ -421,6 +460,7 @@ services:
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
       CUSTOM_FILE_UPLOAD_RESOURCE_HOST: http://8.156.77.197/
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+    mem_limit: 1g
     depends_on:
       nacos: { condition: service_healthy }
       elasticsearch: { condition: service_healthy }
@@ -435,6 +475,7 @@ services:
       dockerfile: ../Dockerfile.frontend
     container_name: csmall-frontend
     ports: ["80:80"]
+    mem_limit: 256m
     volumes:
       - /data/csmall-upload:/data/csmall-upload
     depends_on: [mall-gateway]
