@@ -16,6 +16,12 @@
             <artifactId>mall-pojo</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
+        <!-- 引用秒杀模块对外接口（IForOrderSeckillRecordService，支付前校验本单成交状态 —— TODO #14 P0 方案Y） -->
+        <dependency>
+            <groupId>com.cooxiao.mall</groupId>
+            <artifactId>mall-seckill-service</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
     </dependencies>
     <build>
         <plugins>

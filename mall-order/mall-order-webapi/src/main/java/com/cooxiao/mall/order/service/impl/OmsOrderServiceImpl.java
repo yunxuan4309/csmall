@@ -34,6 +34,7 @@ import com.cooxiao.mall.pojo.order.vo.OrderDetailVO;
 import com.cooxiao.mall.pojo.order.vo.OrderItemListVO;
 import com.cooxiao.mall.pojo.order.vo.OrderListVO;
 import com.cooxiao.mall.pojo.order.vo.PayOrderVO;
+import com.cooxiao.mall.seckill.service.order.IForOrderSeckillRecordService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.apache.dubbo.config.annotation.DubboService;
@@ -77,6 +78,10 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
     private PaymentStrategyFactory paymentStrategyFactory;
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+
+    /** 秒杀成交状态查询（支付前校验本单是否已落库 —— TODO #14 P0 方案Y） */
+    @DubboReference
+    private IForOrderSeckillRecordService dubboSeckillRecordService;
 
     // 新增订单的方法。
     // 库存扣减改为 MQ 异步处理，不再需要 @GlobalTransactional。
@@ -325,6 +330,14 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
             throw new CoolSharkServiceException(ResponseCode.FORBIDDEN, "无权操作此订单");
         }
 
+        // 3.5 秒杀订单：付款前校验本单是否已成功落库（TODO #14 P0 方案Y）
+        // 防"Redis 预扣放行但 DB 扣减失败(rows==0, 未写入 success)"的用户付了钱没货。
+        // 查"本单成交状态"而非"剩余库存"：成交单必有 success 记录，不误拦；
+        // 未落库单(如 Redis 与 DB 不一致导致多放)在此拦截支付。
+        if (isSeckillOrder(order)) {
+            validateSeckillRecordBeforePay(order);
+        }
+
         // 4.确定支付方式
         Integer paymentType = payOrderDTO.getPaymentType();
         if (paymentType == null) {
@@ -421,6 +434,31 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         }
         OmsOrder order = omsOrderMapper.selectOrderBySn(orderSn);
         return order == null ? null : order.getState();
+    }
+
+    /**
+     * 秒杀订单付款前校验"本单是否已成功落库"（TODO #14 P0 方案Y）。
+     * 查 success 表是否有本 orderSn 记录：
+     * - 有（MQ 已扣减成功）→ 放行支付
+     * - 无 → 拦截（该单 Redis 放行但 DB 扣减失败，付了会没货）
+     * Dubbo 查询失败（seckill 不可用）：保守放行 + 告警 —— 避免故障阻断正常支付，
+     * 库存/成交兜底由第3层（落库失败留痕告警）与 P1 对账负责。
+     */
+    private void validateSeckillRecordBeforePay(OmsOrder order) {
+        try {
+            boolean recorded = dubboSeckillRecordService.isSeckillSuccessRecorded(order.getSn());
+            if (!recorded) {
+                log.warn("秒杀订单付款前校验：订单 {} 未落库（success 无记录），拦截支付", order.getSn());
+                throw new CoolSharkServiceException(
+                        ResponseCode.BAD_REQUEST, "该秒杀订单未成功扣减库存，无法支付，请联系客服处理");
+            }
+            log.info("秒杀订单付款前校验通过（已落库），订单号: {}", order.getSn());
+        } catch (CoolSharkServiceException e) {
+            throw e;
+        } catch (Exception e) {
+            // Dubbo 超时/网络异常：保守放行（不阻断支付）
+            log.error("秒杀订单付款前成交状态校验异常，放行支付，订单号: {}", order.getSn(), e);
+        }
     }
 
     @Override

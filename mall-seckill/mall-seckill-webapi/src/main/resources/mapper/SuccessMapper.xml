@@ -17,6 +17,7 @@
         <result column="gmt_modified" property="gmtModified" />
         <result column="bar_code" property="barCode" />
         <result column="data" property="data" />
+        <result column="order_sn" property="orderSn" />
     </resultMap>
     <!--  新增Success对象，重复时自动替换（取消后重买场景）  -->
     <insert id="saveSuccess" >
@@ -46,9 +47,7 @@
                    #{orderSn}
                )
     </insert>
-
-
-
-
-
+    <select id="selectByOrderSn" resultMap="BaseResultMap">
+        select * from success where order_sn = #{orderSn} limit 1
+    </select>
 </mapper>
