@@ -545,6 +545,7 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 > - Controller 触发注解：`DeliveryAddressController.addAddress/editAddress`、`AdminController.updateAdmin/addAdmin` 补 @Validated（ums/ams）
 > - 已编译验证（mall-common/mall-pojo/mall-ums/mall-ams/mall-seckill）
 > ⚠️ **延伸发现（已核实非线上风险）**：前端 `admin.js`（REST 风格 add/update/delete）是**废弃残留无人引用**，真接口在 `sso.js`+AdminController；AdminAddDTO 后端接口暂无前端页面接入。
+> ✅ **2026-09-07 已彻底核查 + 标记废弃**：admin.js 全项目零 import/零调用（6 方法全无引用，仅 api/index.js re-export 而 index.js 本身也无人用）；调用路由在后端均不存在。已在 `src/api/admin.js` 头部加废弃标注 + `src/api/index.js` re-export 行加 TODO 提示（前端仓库，待提交）。
 > 回归说明：doRegister 补 @Valid 后，传非法值将触发 400（依赖新增的 MethodArgumentNotValidException handler），已编译验证。
 
 > **2026-08-28 新增（源自 06-安全设计 Q6 审计）**：全项目审计 39 个 @RequestBody 接口，**5 个漏了 @Validated 触发开关**（规则在 DTO 但没触发 = 校验静默失效）：`UserController.doRegister`（**注册最严重**——UserRegistryDTO 的 @NotNull/@Pattern 全失效，非法数据可入库）、`DeliveryAddressController.addAddress/editAddress`（地址增改）、`AdminController.updateAdmin`（管理员更新）。`PaymentCallbackController.wechatNotify`（String body）无需 DTO 校验，可豁免。
