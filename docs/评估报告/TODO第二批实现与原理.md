@@ -1,7 +1,7 @@
 # TODO 第二批实现与原理（面试深挖应对）
 
 > **创建日期**: 2026-09-07
-> **状态**: 🟡 进行中——第二批"正确性 + 面试/演示价值"共 8 项，已完成 **#8（AI 预算时区）**、**#23（DTO 校验）**、**#36 第一步（MQ requeue 修复）**；其余见正文各节状态。
+> **状态**: 🟡 进行中——第二批"正确性 + 面试/演示价值"，已完成 **#8（AI 预算时区）**、**#23（DTO 校验+全局异常补全）**、**#36（requeue 限次 + 订单 DLX）**；#14 已补入第二批（P0 消费者静默丢弃待做）；其余见正文各节状态。
 > **用途**: 面试深挖应对 —— 每条都含「原理 → 本项目实现 → 代码实证 → 遇到的问题/疑惑 → 面试话术」
 > **关联**: [[TODO文件]] 第二批（#33 / #8 / #36 / #13 / #29 / #23 / #5 / #2+#34）、[[TODO第一批实现与原理]]（第一批执行 + §九 实战经验写法参考）
 
@@ -13,14 +13,15 @@
 |---|---|---|---|---|
 | 1 | **#33** | 双索引数据不一致 | 用户可见 bug | ⏳ 待做（需方案取舍：快修 vs 重构统一索引） |
 | 2 | **#8** | AI 预算按北京时间结算 | 唯一线上代码 bug | ✅ **已完成**（~10 行，TokenBudgetService 时区） |
-| 3 | **#36** | DLX 死信 + requeue 修复 | MQ 可靠性 | 🟡 **第一步已完成**（requeue 限 3 次）；DLX 待做 |
+| 3 | **#36** | DLX 死信 + requeue 修复 | MQ 可靠性 | ✅ **已完成**（requeue 限 3 次 + 订单 DLX + OrderDlxConsumer） |
 | 4 | **#13** | Nacos 开启认证 | 安全 | ⏳ 待做（需维护窗口原子切换） |
-| 5 | **#29** | 数据库定期备份 | 运维底线 | ⏳ 待做（需 ecs-user 配 cron） |
-| 6 | **#23** | 漏触发接口补 @Validated | 校验静默失效 | ✅ **已完成**（含审计修正 + 全局异常处理器补全） |
-| 7 | **#5** | Sentinel 能力补齐 | 面试价值 | ⏳ 待做（P0 规则可随时，P1 热点需改造） |
-| 8 | **#2+#34** | AI 接口限流 + 并发闸门 | AI 承载 | ⏳ 待做（后置，改动最大） |
+| 5 | **#14** | Redis 主从切换防数据 | 消费者可靠性 + Redis 一致性 | ⏳ 待做（P0 落库失败不静默 = SeckillQueueConsumer 静默丢弃；P0 付款前查库存；P1/P2 归第三批） |
+| 6 | **#29** | 数据库定期备份 | 运维底线 | ⏳ 待做（需 ecs-user 配 cron） |
+| 7 | **#23** | 漏触发接口补 @Validated | 校验静默失效 | ✅ **已完成**（含审计修正 + 全局异常处理器补全） |
+| 8 | **#5** | Sentinel 能力补齐 | 面试价值 | ⏳ 待做（P0 规则可随时，P1 热点需改造） |
+| 9 | **#2+#34** | AI 接口限流 + 并发闸门 | AI 承载 | ⏳ 待做（后置，改动最大） |
 
-**执行顺序**：代码批（#8→#23→#36 第一步）→ 运维批（#29/#13）→ 设计批（#33/#5/#2+#34）。第一批已证明"先本地改 → 编译验证 → 维护窗口部署"的节奏有效。
+**执行顺序**：代码批（#8→#23→#36 已完）→ 下一目标 #14 P0（消费者静默丢弃，与 #36 同款 x-death 方案）→ 运维批（#29/#13）→ 设计批（#33/#5/#2+#34）。第一批已证明"先本地改 → 编译验证 → 维护窗口部署"的节奏有效。
 
 ---
 
@@ -152,9 +153,9 @@ private long getSecondsUntilMidnight() {
 
 ---
 
-## 三、#36 MQ requeue 修复 + DLX（第一步完成，含全链路现状）
+## 三、#36 MQ requeue 修复 + DLX（已完成，含实战问题）
 
-> 详细 MQ 全链路现状分析与阶段规划见本系列配套分析（TODO 第二批讨论记录）。本节记录**已实施的第一步**与原理。
+> 详细 MQ 全链路现状分析与阶段规划见本系列配套分析（TODO 第二批讨论记录）。本节记录**已完成的两步**（requeue 修复 + 订单 DLX）与实战踩坑。
 
 ### 3.1 问题本质
 
@@ -195,7 +196,61 @@ private int countRequeue(List<Map<String, Object>> xDeath) {
 
 ### 3.4 面试话术
 
-"订单库存扣减消费者原本是 `basicNack(requeue=true)`——毒消息会无限重试挂单。我没用一刀切的 requeue=false（会误丢瞬时故障），而是读 RabbitMQ 的 **x-death 头做限次重试**：前 3 次失败保留重试机会，之后丢弃并留 ERROR 日志。过程中发现订单模块的可靠性配置是空白的——无发送确认、无 retry（自定义容器工厂绕过了 Boot 默认装配）、无 DLX，与秒杀链路（本地消息表 + MessageRetryTask）形成鲜明对比。"
+"订单库存扣减消费者原本是 `basicNack(requeue=true)`——毒消息会无限重试挂单。我没用一刀切的 requeue=false（会误丢瞬时故障），而是读 RabbitMQ 的 **x-death 头做限次重试**：前 3 次失败保留重试机会，之后 requeue=false 进死信。第二步我补了 **DLX**：order_queue 声明 dead-letter 指向死信交换机，新增 OrderDlxConsumer 记录死信原因 + 告警——形成『限次重试 → 死信留痕 → 人工补偿』的闭环。过程中发现订单模块的可靠性配置是空白的——无发送确认、无 retry（自定义容器工厂绕过了 Boot 默认装配），与秒杀链路（本地消息表 + MessageRetryTask）形成鲜明对比。"
+
+### 3.5 DLX 实现（订单队列死信）
+
+**设计**（Spring AMQP 声明式）：
+```java
+// OrderQueueConfig —— 业务队列声明死信参数
+@Bean
+public Queue orderQueue() {
+    return QueueBuilder.durable(ORDER_QUEUE)
+            .deadLetterExchange(ORDER_DLX_EX)   // order_ex_dlx
+            .deadLetterRoutingKey(ORDER_DLX_RK)  // order_dlx_rk
+            .build();
+}
+// + DLX 三件套：order_ex_dlx 交换机、order_queue_dlx 队列(durable)、绑定
+```
+
+**死信消费者** `OrderDlxConsumer`（新增）：
+- 监听 `order_queue_dlx`，按**原始 String 收消息体**（不反序列化业务类型，兼容不同版本）
+- 读 x-death 头提取死信原因 + 输出 `【MQ死信告警】` ERROR 日志（供人工补偿）
+- ack 消费防死信堆积；未来可扩展：落库死信表 / 外部告警（TODO #30）
+
+**死信链路闭环**：
+```
+OrderQueueConsumer 重试 3 次耗尽 → basicNack(requeue=false)
+  → RabbitMQ reject → order_queue 声明了 DLX → order_ex_dlx
+  → order_queue_dlx → OrderDlxConsumer 记录原因 + 告警
+```
+
+### 3.6 实战问题：启动报错 406 PRECONDITION_FAILED（⭐ 本地复现 + 修复）
+
+**现象**：DLX 代码改完后本地启动 mall-order，报：
+```
+Caused by: ... PRECONDITION_FAILED - inequivalent arg 'x-dead-letter-exchange'
+for queue 'order_queue' in vhost '/': received the value 'order_ex_dlx'
+of type 'longstr' but current is none
+→ Failed to start bean '...RabbitListenerEndpointRegistry' → Application run failed
+```
+
+**根因（关键认知）**：**RabbitMQ 队列参数在队列创建后不可变**。
+- 本地 RabbitMQ 早已存在旧 `order_queue`（无死信参数，arguments 仅 x-queue-type）
+- 新代码声明"同名的、带 x-dead-letter-exchange 的队列" → RabbitMQ 检测参数不匹配 → **406 PRECONDITION_FAILED**
+- **Spring AMQP 声明不会更新已存在队列**——它只是发 queue.declare，由 Broker 校验一致性
+
+**修复**：删除旧队列（0 积压零风险）→ 重启应用 → Spring 自动重建带 DLX 的队列。
+```bash
+# 管理 API 删除（本地 guest/guest）
+curl -u guest:guest -X DELETE http://127.0.0.1:15672/api/queues/%2F/order_queue
+```
+
+**经验教训（面试可讲）**：
+1. **MQ 队列声明是一次性的**——改队列参数（DLX/TTL/durable）必须删队列重建，不像代码可热更新
+2. **部署前必查积压**：删队列会丢消息——本项目 order_queue 演示期 0 积压零风险；生产必须先确认积压/先迁移
+3. 同理适用于：交换机/绑定参数变更、TTL 调整——**Broker 端资源不可变**是 RabbitMQ 设计约束
+4. 本问题在我们自己的代码注释里已预警（"需先删旧队列"），但**本地启动时还是踩了**——预警写进注释 ≠ 执行时记得，最好部署清单化
 
 ---
 
@@ -204,6 +259,7 @@ private int countRequeue(List<Map<String, Object>> xDeath) {
 | 编号 | 事项 | 方案文档 | 关键难点 |
 |---|---|---|---|
 | #33 | 双索引不一致 | 无（TODO 已给方向） | 方案取舍：快修（补 2 条）vs 重构（统一索引+向量字段差异）|
+| #14 | Redis 主从防数据（P0 部分） | [[Redis主从切换防数据问题方案]] | P0 落库失败不静默（SeckillQueueConsumer 静默丢弃→x-death 限次）+ P0 付款前查 DB 库存 |
 | #13 | Nacos 认证 | [[集群化与配置中心迁移方案]] §A0 | 11 服务+Seata+Dubbo 全配账号，原子切换 |
 | #29 | 数据库备份 | 无（TODO 已给命令） | 需 ecs-user 配 cron |
 | #5 | Sentinel 补齐 | [[Sentinel能力补充计划]] | P0 规则随时 / P1 热点参数改造 |
@@ -213,7 +269,7 @@ private int countRequeue(List<Map<String, Object>> xDeath) {
 
 ## 五、第二批通用面试话术（贯穿主线）
 
-**主线叙事**："第二批我按'收益/成本/独立性'排序做了代码批：#8 修了 AI 预算 8:00 重置的时区 bug（10 行）；#23 做了一轮校验审计——过程中修正了原审计'漏触发 vs 没规则'的混淆，补了 5 个 DTO 规则 + 类级/参数级 @Validated，还发现并补全了全局异常处理器对 MethodArgumentNotValidException 的缺失（否则校验失败会返回 500 而不是 400）；#36 把订单消费者的无限 requeue 改成 x-death 限次重试。三条线都踩了认知坑：时区不能依赖环境、DTO 校验有表达边界（or/跨字段）、自定义容器工厂会绕过 Spring retry。"
+**主线叙事**："第二批我按'收益/成本/独立性'排序做了代码批：#8 修了 AI 预算 8:00 重置的时区 bug（10 行）；#23 做了一轮校验审计——过程中修正了原审计'漏触发 vs 没规则'的混淆，补了 5 个 DTO 规则 + 类级/参数级 @Validated，还发现并补全了全局异常处理器对 MethodArgumentNotValidException 的缺失（否则校验失败会返回 500 而不是 400）；#36 把订单消费者的无限 requeue 改成 x-death 限次重试，并补了 DLX 死信链路——期间踩了 RabbitMQ 队列参数不可变（406 PRECONDITION_FAILED）的坑。三条线都踩了认知坑：时区不能依赖环境、DTO 校验有表达边界（or/跨字段）、自定义容器工厂会绕过 Spring retry、MQ 队列声明是一次性的。"
 
 **被追问"为什么不等公司方案"时**：个人项目我是 owner，但每个决策对齐企业做法（DLX/发送确认/kid 轮换/审计先行），说明知道生产标准与当前取舍。
 
