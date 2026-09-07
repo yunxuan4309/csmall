@@ -1,7 +1,7 @@
 # TODO 第一批实现与原理（面试深挖应对）
 
 > **创建日期**: 2026-09-07
-> **状态**: 本地仓库已实现（compose 加固评审稿 + redis.conf 模板 + Dockerfile 清理 + .env.example 更新）；服务器部署待维护窗口执行（需 ecs-user 写 /data/csmall 文件 + sudo）
+> **状态**: ✅ **已执行完毕（2026-09-07 维护窗口）**——#25 JWT 随机化、R7 内存（mem_limit+Nacos/Sentinel 降堆）、#24 MySQL 强密码+端口收窄、R1~R4 Redis 加固、#38 Dockerfile 清理 全部完成并回归通过。Swap 仍待用户 sudo 执行。实战经验（Redis 数据迁移丢失、gateway 启动竞态）见文末 §九。
 > **用途**: 面试深挖应对 —— 每条都含「原理 → 本项目实现 → 代码/服务器实证 → 企业演进 → 面试话术」
 > **关联**: [[TODO文件]] 第一批（#25 / R7 / #24 / R1~R4 / #38）、[[Redis配置加固与哨兵模式方案]]、[[服务器内存优化方案]]
 
@@ -375,4 +375,69 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 ---
 
-**维护提示**: 服务器执行完成后，回填"执行日期/验证结果"到本文档头部，并把 TODO 文件第一批条目移入"已完成"表。
+## 九、实战执行记录（2026-09-07 维护窗口，含两个踩坑教训）
+
+> 真实执行比方案多出两个坑，都已解决并记录——面试讲"执行中踩坑→定位→修复"比讲方案更有说服力。
+
+### 9.1 执行结果快照（全部验证通过）
+
+| 验证项 | 结果 |
+|---|---|
+| 21 容器 | 全部 Up，RestartCount=0，无 unhealthy |
+| 内存 | available **2.0G → 3.9G**（mem_limit + Nacos 512m 生效）|
+| MySQL | root 强密码（43 位），`127.0.0.1:3306` 收窄，ALTER USER 双 host 完成 |
+| Redis | requirepass/AOF/maxmemory 256mb/volatile-lru 全部生效，`127.0.0.1:6379` |
+| JWT | 11 容器 env 全部 = 新随机值且互相一致 |
+| 认证链路 | admin 登录 ✅、带 token 访问后台返回真实数据 ✅、无/伪造 token 401 ✅ |
+| 秒杀预热 | Redis 数据丢失后由 `SeckillInitialJob`（每分钟）自动重建，DBSIZE 0→15 |
+| Nacos | 23 服务注册正常，gateway 修复后 healthy |
+
+### 9.2 坑 ①：Redis 从 RDB 切 AOF 的数据丢失（⚠️ 最值得讲）
+
+**现象**：compose 重建后 Redis DBSIZE=0（原 21 键丢失），数据卷 dump.rdb 从 8157 字节变 89 字节（空库）。
+
+**根因链（三层）**：
+1. **Redis 7 启动逻辑**：`appendonly yes` 但 AOF 目录不存在时，**不会回退加载已有 RDB**，直接以空库启动并创建空 AOF——日志里没有 "DB loaded from disk" 就是信号
+2. **我的"备份"无效**：`redis-cli SAVE` 把数据写回**同一个数据卷**的 dump.rdb，并未复制到卷外 → 后续空库关闭时覆盖了原文件
+3. **正确做法没执行**：文档 §4.3 写过"重建前先在线 `CONFIG SET appendonly yes` 热开 AOF"，但执行时直接重建容器，跳过了这步
+
+**正确迁移姿势（教训固化）**：
+```bash
+# 数据还在内存时先热开 AOF（零停机，自动做首次 rewrite）
+redis-cli CONFIG SET appendonly yes
+# 确认 appendonlydir/ 生成后，再以 appendonly yes 配置重启容器
+# 备份必须 docker cp 到卷外：docker cp csmall-redis:/data/dump.rdb /data/csmall/backup/
+```
+
+**影响与自愈**：丢失的是缓存数据（秒杀库存/随机码/购买标记/token 黑名单），非业务数据；DB（success 唯一键 + 条件扣减）兜底不超卖；库存/随机码由 `SeckillInitialJob` 每分钟自动重建。**演示项目可接受，商业化前必须按正确姿势迁移**。
+
+**面试价值**：能讲"我实操 Redis RDB→AOF 切换踩了数据丢失的坑，根因是 Redis 7 不回退加载 RDB + 备份没出卷，正确做法是热开 AOF"——比背文档强得多。
+
+### 9.3 坑 ②：gateway 与 Nacos 的启动竞态（重启即愈但暴露配置缺陷）
+
+**现象**：全量重建后 gateway `Application run failed`（Nacos 注册 `Client not connected`），未监听 10087、未注册 Nacos；但因 compose 中 gateway **无 restart 策略**且 JVM 未退出，容器显示 running 实际不可用。
+
+**根因**：gateway 重建时 Nacos 尚未完全就绪（grpc 9848 竞态），首次注册失败即整个 Spring 上下文启动失败。
+
+**修复（两层）**：
+1. 即时：`docker restart csmall-gateway`（Nacos 已稳 → 启动成功）
+2. 根治：compose gateway 补 `restart: on-failure`（与 product/order/seckill 等 6 个服务对齐），`docker update --restart on-failure csmall-gateway` 即时生效 + compose 持久化
+
+**经验**：① 依赖 Nacos 的服务重建时有启动竞态，`restart: on-failure` 是底线（gateway 之前漏了）；② 容器 "running" ≠ 服务可用，验证要看端口监听 + Nacos 注册 + 实际请求。
+
+### 9.4 坑 ③：redis.conf 挂载权限（容器 redis 用户读不了 600 属主文件）
+
+**现象**：redis 容器启动失败 `can't open config file: Permission denied`。
+
+**根因**：conf 被 `chmod 600` 且属主是宿主机 ecs-user，容器内 redis 以 `redis` 用户（uid 999）运行 → 读不了。
+
+**修复**：通过 docker root 方式改属主（无需宿主机 sudo）：
+```bash
+docker run --rm --user root -v /data/csmall/redis:/data/redis redis:7-alpine \
+  sh -c "chown -R redis:redis /data/redis && chmod 600 /data/redis/redis-master.conf"
+```
+**经验**：挂载给容器的配置文件，属主必须是**容器内运行用户**（redis=999），不是宿主机用户；用 docker root 容器 chown 是无需 sudo 的正解。
+
+---
+
+**维护提示**: TODO 文件第一批条目已全部完成（#38 → git 清理；#25/R7/#24/R1~R4 → 2026-09-07 执行），可移入"已完成"表；Swap 待用户 sudo 执行后补记。
