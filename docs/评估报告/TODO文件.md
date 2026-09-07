@@ -31,7 +31,7 @@
 | 2 | **#8** ✅ | AI 预算按北京时间结算 | ✅ 已修复（2026-09-07，TokenBudgetService 时区） |
 | 3 | **#36** ✅ | DLX 死信 + OrderQueueConsumer requeue 修复 | ✅ 已完成（x-death 限次重试 + 订单队列 DLX + OrderDlxConsumer）；秒杀消费者静默丢弃见 #14 |
 | 4 | **#13** | Nacos 开启认证 | 实测无 token 读配置 200，内网失陷可注册假服务（服务伪装） |
-| 5 | **#14** 🔴 | Redis 主从切换防数据（五层） | 含 P0 落库失败不静默（SeckillQueueConsumer basicAck 静默丢弃 = 付款订单悬挂无痕，与 #36 同属消费者可靠性）+ P0 付款前查 DB 库存；P1/P2 归第三批 |
+| 5 | **#14** 🟡 | Redis 主从切换防数据（五层） | ✅ P0 落库失败不静默已修（2026-09-07）+ order_type 治本完成（本地实测验证）；⏳ P0 付款前查库存待做（依赖 order_type 已就绪）；P1/P2 归第三批 |
 | 6 | **#29** | 数据库定期备份 | 实测无任何 mysqldump；数据是"命"，备份是运维底线 |
 | 7 | **#23** ✅ | 漏触发接口补 @Validated | ✅ doRegister 已修（DTO 真规则）；其余 4 个 DTO 无规则另议 |
 | 8 | **#5** | Sentinel 能力补齐 | 3 接口规则空转 + 热点限流——面试价值最高 |
@@ -424,15 +424,21 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 > ⚠️ 与集群化方案的阶段 A0 合并执行（同窗口重启服务）；备选 B=8848 映射改 127.0.0.1（只挡外部，不解决内网）。
 > 📄 详见 [[集群化与配置中心迁移方案]] 阶段 A0
 
-### 14. 【Redis】主从切换防数据问题（五层方案，2026-08-26 评估，待实施）
+### 14. 【Redis】主从切换防数据问题（五层方案）🟡 部分完成（2026-09-07）
+
+> ✅ **2026-09-07 完成**：
+> - **P0 落库失败不静默（第3层）✅**：SeckillQueueConsumer 库存不足从 basicAck 静默丢弃改为三兜底——失败留痕 + 已付款告警（新增 IOmsOrderService.getOrderStateBySn Dubbo 查询）+ x-death 限次重试（与 #36 同款）
+> - **订单 order_type 标识（治本前置）✅**：oms_order 加 order_type 列（Flyway V6），秒杀入口置 1、普通入口强制 0（防伪造）；markSeckillPurchased/clearSeckillOrdered 仅秒杀单执行（修复"普通订单被误当秒杀单写 reseckill 标记"的潜在 bug）；本地普通购买实测验证守卫生效
+> - **P2 配置层**：随 R2 主从哨兵一起（#9，第三批）
+> - **P1 对账任务**：待做
 
 > **2026-08-26 新增**：Redis 主从复制异步 → 主挂瞬间丢最后几笔写（库存 DECR/购买标记/幂等锁可能丢）。代码层无法 100% 消灭（本质），目标是"让丢失无害化"。
 
 **五层方案（按优先级）**：
-- 🔴 **P0 付款前校验 DB 库存**：支付接口加 DB 库存校验（不是 Redis），不够拦截不让付款——把"付款后补救"变"付款前拦截"（防最严重事故：付了钱没货）
-- 🔴 **P0 落库失败不静默**：SeckillQueueConsumer 库存不足改"失败留痕 + 已付款告警 + nack 重试"（现在是 basicAck 静默丢弃）
-- 🟠 **P1 对账任务**：定时 Redis vs DB 比对，以 DB 为准自动修正漂移 + 预热校验
-- 🟡 **P2 配置层**：min-replicas-to-write 1（随 R2 主从哨兵一起）
+- 🔴 **P0 付款前校验 DB 库存**：支付接口加 DB 库存校验（不是 Redis），不够拦截不让付款——**待做**（依赖 order_type 已完成，现在 order 可识别秒杀单；需在支付时按秒杀单查 seckill_stock）
+- 🔴 **P0 落库失败不静默**：✅ 已完成（2026-09-07，SeckillQueueConsumer 三兜底）
+- 🟠 **P1 对账任务**：定时 Redis vs DB 比对，以 DB 为准自动修正漂移 + 预热校验（待做）
+- 🟡 **P2 配置层**：min-replicas-to-write 1（随 R2 主从哨兵一起，#9）
 
 > 架构层已做（Redis=闸门/DB=账本，条件扣减兜底）；配置层依托 R1~R4。
 > 📄 **完整方案（五层详解/代码示例/实施清单/风险回滚）见 [[Redis主从切换防数据问题方案]]**
