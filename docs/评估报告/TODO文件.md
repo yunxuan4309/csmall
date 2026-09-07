@@ -431,6 +431,7 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 > - **订单 order_type 标识（治本前置）✅**：oms_order 加 order_type 列（Flyway V6），秒杀入口置 1、普通入口强制 0（防伪造）；markSeckillPurchased/clearSeckillOrdered 仅秒杀单执行（修复"普通订单被误当秒杀单写 reseckill 标记"的潜在 bug）；本地普通购买实测验证守卫生效
 > - **P2 配置层**：随 R2 主从哨兵一起（#9，第三批）
 > - **P1 对账任务**：待做
+> - **🔧 秒杀 SPU VO 缓存一致性 bug（2026-09-07 本地实测发现并修复）**：`getSeckillSpu`（详情页）先读 Redis 缓存 `mall:seckill:spu:vo:{pmsSpuId}`，该 VO 在**改秒杀时间窗口**后不失效（TTL 约 2h）→ 详情页读到**旧窗口**误显示"秒杀已结束"，而**列表页** `listSeckillSpus` 直接查 DB（显示进行中），两页不一致。已修：`SeckillManageController` 新增/删除秒杀 SPU 时 `redisTemplate.delete(该 VO key)` 主动失效（`evictSeckillSpuVoCache`）。**注意局限**：仅"经管理端接口改窗口"会触发失效；若直接改 DB 表（如本次本地演示），仍会命中旧缓存直到 TTL 到期——根治需在 `getSeckillSpu` 读缓存时校验窗口/或改时区/缓存双写，待后续评估。
 
 > **2026-08-26 新增**：Redis 主从复制异步 → 主挂瞬间丢最后几笔写（库存 DECR/购买标记/幂等锁可能丢）。代码层无法 100% 消灭（本质），目标是"让丢失无害化"。
 
