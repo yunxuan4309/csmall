@@ -118,6 +118,13 @@ public class OrderAddDTO implements OrderRegExpression,Serializable {
     private Integer paymentType;
 
     /**
+     * 订单类型，0=普通订单，1=秒杀订单。
+     * 普通下单不传(默认0)；秒杀入口(SeckillServiceImpl)显式置 1。
+     */
+    @ApiModelProperty(value="订单类型,0=普通订单，1=秒杀订单",example = "0",hidden = true)
+    private Integer orderType;
+
+    /**
      * 状态，0=未支付，1=已关闭（超时未支付），2=已取消，3=已支付，4=已签收，5=已拒收，6=退款处理中，7=已退款
      */
     @ApiModelProperty(value="状态，0=未支付，1=已关闭（超时未支付），2=已取消，3=已支付，4=已签收，5=已拒收，6=退款处理中，7=已退款",example = "0")

@@ -162,6 +162,10 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         if(order.getState()==null){
             order.setState(0);
         }
+        // 订单类型默认普通(0)；秒杀入口已显式置 1
+        if(order.getOrderType()==null){
+            order.setOrderType(0);
+        }
 
         // 为了保证当前订单下单时间gmt_order和数据生成时间gmt_create一致
         // 我们为下列属性赋相同的值
@@ -212,8 +216,8 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         }
         // 调用动态修改方法,因为参数中只有state有值,所以只是修改订单状态
         omsOrderMapper.updateOrderById(order);
-        // 取消订单时清除 ordered 标记，允许用户重新秒杀
-        if (order.getState() != null && order.getState() == 2) {
+        // 取消订单时清除 ordered 标记，允许用户重新秒杀（仅秒杀订单 —— order_type=1）
+        if (order.getState() != null && order.getState() == 2 && isSeckillOrder(existing)) {
             clearSeckillOrdered(orderStateUpdateDTO.getId());
         }
     }
@@ -369,8 +373,8 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         }
         omsOrderMapper.updateOrderById(updateOrder);
 
-        // 支付成功后标记秒杀已购买
-        if (simulated) {
+        // 支付成功后标记秒杀已购买（仅秒杀订单 —— order_type=1）
+        if (simulated && isSeckillOrder(order)) {
             markSeckillPurchased(order.getId(), order.getUserId());
         }
 
@@ -396,7 +400,18 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
             throw new CoolSharkServiceException(ResponseCode.FORBIDDEN, "无权操作此订单");
         }
         omsOrderMapper.deleteById(orderId);
-        clearSeckillOrdered(orderId);
+        // 仅秒杀订单删除时清理秒杀标记/锁（order_type=1）
+        if (isSeckillOrder(order)) {
+            clearSeckillOrdered(orderId);
+        }
+    }
+
+    /**
+     * 判断订单是否为秒杀订单（order_type=1）。
+     * 历史数据 order_type 为 null 时视为普通订单(0)。
+     */
+    private boolean isSeckillOrder(OmsOrder order) {
+        return order != null && Integer.valueOf(1).equals(order.getOrderType());
     }
 
     @Override
@@ -458,8 +473,10 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
                 ? callbackResult.getGmtPayment() : LocalDateTime.now());
         omsOrderMapper.updateOrderById(updateOrder);
 
-        // 支付成功后标记秒杀已购买
-        markSeckillPurchased(order.getId(), order.getUserId());
+        // 支付成功后标记秒杀已购买（仅秒杀订单 —— order_type=1）
+        if (isSeckillOrder(order)) {
+            markSeckillPurchased(order.getId(), order.getUserId());
+        }
 
         // 4.更新支付流水
         if (record == null) {

@@ -114,6 +114,9 @@ public class SeckillServiceImpl implements ISeckillService {
                 convertSeckillOrderToOrder(seckillOrderAddDTO);
         // 经过转换得到了普通订单对象orderAddDTO,但是还没有给userId赋值
         orderAddDTO.setUserId(userId);
+        // 标记为秒杀订单(order_type=1)，order 层据此区分秒杀/普通订单
+        // （支付后 reseckill 标记、取消后清秒杀锁仅对秒杀单执行 —— TODO #14）
+        orderAddDTO.setOrderType(1);
         // dubbo调用生成订单的方法 + MQ发送（统一try-catch保护，MQ不可用时补偿Redis）
         OrderAddVO orderAddVO;
         try {

@@ -110,6 +110,11 @@ public class OmsOrder implements Serializable {
     private Integer paymentType;
 
     /**
+     * 订单类型，0=普通订单，1=秒杀订单（TODO #14 第2层/#3 场次/#11 超时关单 依赖）
+     */
+    private Integer orderType;
+
+    /**
      * 状态，0=未支付，1=已关闭（超时未支付），2=已取消，3=已支付，4=已签收，5=已拒收，6=退款处理中，7=已退款
      */
     private Integer state;
