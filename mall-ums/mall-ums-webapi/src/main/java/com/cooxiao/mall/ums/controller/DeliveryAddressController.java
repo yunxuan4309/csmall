@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * <p>
@@ -54,7 +55,7 @@ public class DeliveryAddressController {
     @ApiOperation(value="新增用户邮寄地址")
     @PostMapping("/add")
     @PreAuthorize("hasRole('user')")
-    public JsonResult addAddress(@RequestBody DeliveryAddressAddDTO deliveryAddressAddDTO){
+    public JsonResult addAddress(@Validated @RequestBody DeliveryAddressAddDTO deliveryAddressAddDTO){
         deliveryAddressService.addAddress(deliveryAddressAddDTO);
         return JsonResult.ok();
     }
@@ -64,7 +65,7 @@ public class DeliveryAddressController {
     @ApiOperation(value="对已有地址进行编辑")
     @PostMapping("/edit")
     @PreAuthorize("hasRole('user')")
-    public JsonResult editAddress(@RequestBody DeliveryAddressEditDTO deliveryAddressEditDTO){
+    public JsonResult editAddress(@Validated @RequestBody DeliveryAddressEditDTO deliveryAddressEditDTO){
         deliveryAddressService.editAddress(deliveryAddressEditDTO);
         return JsonResult.ok();
     }

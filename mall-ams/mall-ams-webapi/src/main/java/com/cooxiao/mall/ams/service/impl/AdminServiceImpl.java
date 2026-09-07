@@ -77,8 +77,19 @@ public class AdminServiceImpl implements IAdminService {
     public void updateAdmin(AdminUpdateDTO adminUpdateDTO) {
         Admin admin=new Admin();
         BeanUtils.copyProperties(adminUpdateDTO,admin);
-        checkPassword(adminUpdateDTO.getPassword(),adminUpdateDTO.getPasswordAct());
-        admin.setPassword(passwordEncoder.encode(admin.getPassword()));
+        // 密码是可选字段：成对且非空才加密更新（XML 动态更新 password!=null 才更新）。
+        // 修复原实现"无条件 encode(null)"导致不传密码更新管理员时 500 的 bug。
+        String password = adminUpdateDTO.getPassword();
+        String passwordAct = adminUpdateDTO.getPasswordAct();
+        boolean hasPassword = !StringUtils.isEmpty(password);
+        boolean hasPasswordAct = !StringUtils.isEmpty(passwordAct);
+        if (hasPassword != hasPasswordAct) {
+            throw new CoolSharkException("密码与确认密码必须成对填写！", 400);
+        }
+        if (hasPassword) {
+            checkPassword(password, passwordAct);
+            admin.setPassword(passwordEncoder.encode(password));
+        }
         adminMapper.updateAdmin(admin);
     }
 

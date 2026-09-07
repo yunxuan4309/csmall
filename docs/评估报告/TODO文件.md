@@ -535,7 +535,14 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 ### 23. 【校验】漏触发接口补 @Validated ✅ 部分完成（2026-09-07，仅 doRegister）
 
 > ✅ **2026-09-07 实施修正**：代码复核发现原审计描述与事实**部分不符**——5 个接口里只有 `UserController.doRegister` 的 DTO（UserRegistryDTO）**真有校验规则但没触发**（@RequestBody 前漏 `@Valid`），属真实 bug，**已修复**（补 `@Valid`，遵循项目惯例与同文件 renewPassword 一致）。
-> ⚠️ **其余 4 个是"DTO 无规则"而非"规则没触发"**：`DeliveryAddressAddDTO`/`DeliveryAddressEditDTO`/`AdminUpdateDTO` 均**无任何校验注解**（AdminUpdateDTO 的 import 都被注释）→ 补 @Valid/@Validated 是空转。**已决定本次不补规则**（需先设计字段校验规则，属新功能非修 bug，后续如需再做）。
+> ✅ **2026-09-07 第二批补充实施（B/C 类 5 个 DTO 补规则）**：
+> - `DeliveryAddressAddDTO`：联系人/省市区名/详细地址 @NotBlank，手机/固话/地区码有则验格式；**"手机/固话二选一"在 Service 层兜底**（DTO 无法表达 or）
+> - `DeliveryAddressEditDTO`：仅 id @NotNull（编辑走动态更新，允许部分修改），其余有则验格式
+> - `AdminUpdateDTO`：仅 id @NotNull，其余有则验格式；顺带修复 `AdminServiceImpl.updateAdmin` **无条件 encode(null) → 不传密码更新即 500** 的 bug（改为密码成对且非空才加密）
+> - `SeckillSpuAddDTO`/`SeckillSkuAddDTO`：全必填(@NotNull/@DecimalMin/@Min)（秒杀管理接口直插 Mapper，无 Service 校验层）
+> - Controller 触发注解：`DeliveryAddressController.addAddress/editAddress`、`AdminController.updateAdmin` 补 @Validated（ums/ams）
+> - 已编译验证（mall-ums/mall-ams/mall-seckill + mall-pojo）
+> ⚠️ **延伸发现（同批治理项，未做）**：`AdminController.addAdmin` 是 **GET + DTO 绑定**（非 @RequestBody），其 `AdminAddDTO` 校验注解也全部被注释——不在本次 @RequestBody 范围，需另行治理。
 > 回归说明：doRegister 补 @Valid 后，传非法值（用户名/邮箱/手机号格式错误）将触发 400（由 mall-common 全局异常处理器统一返回），已编译验证。
 
 > **2026-08-28 新增（源自 06-安全设计 Q6 审计）**：全项目审计 39 个 @RequestBody 接口，**5 个漏了 @Validated 触发开关**（规则在 DTO 但没触发 = 校验静默失效）：`UserController.doRegister`（**注册最严重**——UserRegistryDTO 的 @NotNull/@Pattern 全失效，非法数据可入库）、`DeliveryAddressController.addAddress/editAddress`（地址增改）、`AdminController.updateAdmin`（管理员更新）。`PaymentCallbackController.wechatNotify`（String body）无需 DTO 校验，可豁免。

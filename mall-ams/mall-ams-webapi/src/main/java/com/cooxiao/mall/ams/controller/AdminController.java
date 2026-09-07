@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.annotation.Validated;
 
 
 /**
@@ -74,7 +75,7 @@ public class AdminController {
     @ApiOperation(value="编辑后台用户")
     @PostMapping("/update")
     @PreAuthorize("hasAuthority('/ams/admin/update')")
-    public JsonResult updateAdmin(@RequestBody AdminUpdateDTO adminUpdateDTO){
+    public JsonResult updateAdmin(@Validated @RequestBody AdminUpdateDTO adminUpdateDTO){
         adminService.updateAdmin(adminUpdateDTO);
         return JsonResult.ok();
     }

@@ -62,6 +62,15 @@ public class DeliveryAddressServiceImpl implements IDeliveryAddressService {
 
     @Override
     public void addAddress(DeliveryAddressAddDTO deliveryAddressAddDTO) {
+        // 业务校验：手机号/固定电话至少填一个（DTO 注解无法表达"二选一"，在此兜底）
+        boolean hasMobile = deliveryAddressAddDTO.getMobilePhone() != null
+                && !deliveryAddressAddDTO.getMobilePhone().isBlank();
+        boolean hasTelephone = deliveryAddressAddDTO.getTelephone() != null
+                && !deliveryAddressAddDTO.getTelephone().isBlank();
+        if (!hasMobile && !hasTelephone) {
+            throw new CoolSharkServiceException(
+                    ResponseCode.BAD_REQUEST, "新增地址失败，手机号与固定电话至少填写一个！");
+        }
         //转化数据
         Long userId = getUserId();
         DeliveryAddress deliveryAddress=new DeliveryAddress();
@@ -82,6 +91,18 @@ public class DeliveryAddressServiceImpl implements IDeliveryAddressService {
 
     @Override
     public void editAddress(DeliveryAddressEditDTO deliveryAddressEditDTO) {
+        // 编辑为动态更新：不强制手机/固话二选一（可能只改地址不碰联系方式），
+        // 但若传了任一为空字符串则视为非法
+        if (deliveryAddressEditDTO.getMobilePhone() != null
+                && deliveryAddressEditDTO.getMobilePhone().isBlank()) {
+            throw new CoolSharkServiceException(
+                    ResponseCode.BAD_REQUEST, "编辑地址失败，联系电话不能为空字符串！");
+        }
+        if (deliveryAddressEditDTO.getTelephone() != null
+                && deliveryAddressEditDTO.getTelephone().isBlank()) {
+            throw new CoolSharkServiceException(
+                    ResponseCode.BAD_REQUEST, "编辑地址失败，固定电话不能为空字符串！");
+        }
         //转化
         DeliveryAddress deliveryAddress=new DeliveryAddress();
         BeanUtils.copyProperties(deliveryAddressEditDTO,deliveryAddress);

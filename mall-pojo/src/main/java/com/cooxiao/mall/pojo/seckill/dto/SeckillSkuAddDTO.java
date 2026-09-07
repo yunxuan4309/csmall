@@ -4,6 +4,10 @@ import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
 
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+
 import java.io.Serializable;
 import java.math.BigDecimal;
 
@@ -12,18 +16,27 @@ import java.math.BigDecimal;
 public class SeckillSkuAddDTO implements Serializable {
     private static final long serialVersionUID = 1L;
 
+    private static final String MESSAGE_PREFIX = "新增秒杀SKU失败，";
+
     @ApiModelProperty(value = "商品SKU id", required = true, example = "1")
+    @NotNull(message = MESSAGE_PREFIX + "请提供商品SKU id！")
     private Long skuId;
 
     @ApiModelProperty(value = "秒杀SPU id(seckill_spu表的主键id)", required = true, example = "1")
+    @NotNull(message = MESSAGE_PREFIX + "请提供秒杀SPU id！")
     private Long spuId;
 
     @ApiModelProperty(value = "秒杀库存", required = true, example = "50")
+    @NotNull(message = MESSAGE_PREFIX + "请填写秒杀库存！")
+    @Min(value = 1, message = MESSAGE_PREFIX + "秒杀库存必须大于 0！")
     private Integer seckillStock;
 
     @ApiModelProperty(value = "秒杀价格", required = true, example = "6999.00")
+    @NotNull(message = MESSAGE_PREFIX + "请填写秒杀价格！")
+    @DecimalMin(value = "0.01", message = MESSAGE_PREFIX + "秒杀价格必须大于 0！")
     private BigDecimal seckillPrice;
 
     @ApiModelProperty(value = "限购数量,默认1", example = "1")
+    @Min(value = 1, message = MESSAGE_PREFIX + "限购数量必须大于等于 1！")
     private Integer seckillLimit;
 }
