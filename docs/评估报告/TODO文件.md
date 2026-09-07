@@ -300,9 +300,9 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 
 当前 `simulated: true`（模拟支付）。待支付宝沙箱修复或商户签约后改为 `false`。
 
-### 6. 【演示】JMeter + Sentinel + SkyWalking 联合压测
+### 6. 【演示】JMeter + Sentinel + SkyWalking 联合压测 ⏸️ 已归档（2026-09-07）
 
-面试演示用，文档已写好（`秒杀压测演示指南.md`），待录制。
+> 原用途为面试演示/简历视频。**2026-09-07 决定暂不录制**（简历已改用 HTML 新版），方案文档 `秒杀压测演示指南.md`/`秒杀服务器压测方案.md`/`演示视频讲解提纲.md` 已移入 `docs/归档/`；工具脚本保留 `deploy/jmeter/` 备日后复用。若将来录制新视频，先看归档文档。
 
 ### 7. HTTPS/SSL 配置 ⏸️
 
