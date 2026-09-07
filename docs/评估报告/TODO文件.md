@@ -142,7 +142,7 @@
 
 > ✅ **2026-09-07 已修复**：① 全 21 容器 mem_limit（docker update + compose 持久化）② Nacos 堆 512m ③ Sentinel -Xmx256m ④ Swap 2G（/swapfile + fstab）。实测 available 2.0G→3.9G。
 
-> **2026-08-21 确认**：服务器 available 仅 2.1G、无 Swap、**全部 21 个容器 `mem_limit=0`**（任何进程失控可直接吃满宿主 → OOM 杀服务，历史杀过 ES）。8-04 已做过一轮 JVM 调优（`docs/JVM调优方案.md`），本轮为增量优化。
+> **2026-08-21 确认**：服务器 available 仅 2.1G、无 Swap、**全部 21 个容器 `mem_limit=0`**（任何进程失控可直接吃满宿主 → OOM 杀服务，历史杀过 ES）。8-04 已做过一轮 JVM 调优（`docs/评估报告/JVM调优方案.md`），本轮为增量优化。
 
 **四项优化**（按收益排序）：
 1. **全容器加 mem_limit**（安全网）：11 微服务 768m~1g、es/oap 1.5g、其余 256m~512m；`docker update --memory` **零重启即时生效** + compose 持久化
