@@ -79,3 +79,14 @@ logging:
     com.cooxiao.mall: info
     # 需要调试时可将具体包改为debug,如:
     # com.cooxiao.mall.seckill.service: debug
+# 秒杀库存对账任务（TODO #14-P1）两层调度配置
+seckill:
+  reconcile:
+    # 运行期轻量纠偏：每 5 分钟；|diff|>=2 直接修，|diff|==1 连续同向差满 3 次才修（容错瞬时差）
+    online-fixed-delay: 300000
+    online-threshold: 2
+    online-consecutive: 3
+    # 凌晨全量校准：每日 03:30（低峰无并发，|diff|>=1 即修 + 补建缺失 key）
+    daily-cron: "0 30 3 * * ?"
+    # 连续计数的 Redis key 生命周期（分钟）
+    counter-ttl-minutes: 30
