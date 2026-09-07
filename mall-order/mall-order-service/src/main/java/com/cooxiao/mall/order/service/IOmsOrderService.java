@@ -63,6 +63,13 @@ public interface IOmsOrderService{
     void deleteOrder(Long orderId);
 
     /**
+     * 按订单编号查询订单状态（供秒杀消费者判断"是否已付款" —— TODO #14 P0 第3层）
+     * @param orderSn 订单编号（order.sn）
+     * @return 订单状态：0=未支付 3=已支付；订单不存在返回 null
+     */
+    Integer getOrderStateBySn(String orderSn);
+
+    /**
      * 按日期范围查询每日销售额
      */
     List<Map<String, Object>> getSalesBetweenDates(String startDate, String endDate);

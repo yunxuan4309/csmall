@@ -1,5 +1,6 @@
 package com.cooxiao.mall.seckill.consumer;
 
+import com.cooxiao.mall.order.service.IOmsOrderService;
 import com.cooxiao.mall.pojo.seckill.model.SeckillSku;
 import com.cooxiao.mall.pojo.seckill.model.Success;
 import com.cooxiao.mall.product.service.seckill.IForSeckillSpuService;
@@ -17,25 +18,44 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Map;
+
 /**
- * @author=java.cooxiao.com QQ:25380243
- * @since=2024/10/10
+ * 秒杀成功记录落库消费者（TODO #14 P0 第3层：落库失败不静默）
+ *
+ * 语义：本消息代表"Redis 已放行、订单已创建"的秒杀成交。
+ * 若 DB 秒杀库存扣减失败（rows==0），不能像以前那样 basicAck 静默吞掉——
+ * 用户可能已付款但 success 记录缺失 = 订单悬挂无痕。改造为：
+ *   ① 失败留痕（ERROR 日志含 skuId/orderSn/quantity）
+ *   ② 已付款告警（Dubbo 查订单状态，已支付则 ERROR 告警需人工介入）
+ *   ③ 限次重试（x-death 头计数，最多 MAX_REQUEUE 次；瞬时故障有重试机会，
+ *      耗尽后 requeue=false 丢弃并留痕——与 OrderQueueConsumer 同款方案）
  */
 @Component
 @RabbitListener(queues = RabbitMqComponentConfiguration.SECKILL_QUEUE)
 @Slf4j
 public class SeckillQueueConsumer {
+
+    /** 最大 requeue 次数（不含首次投递）。达上限后 requeue=false 丢弃留痕 */
+    private static final int MAX_REQUEUE = 3;
+
     @Autowired
     private SeckillSkuMapper seckillSkuMapper;
     @Autowired
     private SuccessMapper successMapper;
     @DubboReference
     private IForSeckillSpuService dubboSeckillSpuService;
+    @DubboReference
+    private IOmsOrderService dubboOrderService;
 
     @RabbitHandler
     @Transactional
     public void process(Success success, Channel channel,
-                        @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag){
+                        @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag,
+                        @Header(name = "x-death", required = false) List<Map<String, Object>> xDeath) {
+        // 统计已 requeue 次数（RabbitMQ 在 requeue 后自动附加 x-death 头）
+        int requeueCount = countRequeue(xDeath);
         try {
             // 兼容旧消息：如果id为null，手动生成雪花算法ID
             if(success.getId() == null){
@@ -45,9 +65,26 @@ public class SeckillQueueConsumer {
             int rows = seckillSkuMapper.updateReduceStockBySkuId(
                     success.getSkuId(),success.getQuantity());
             if(rows == 0){
-                log.warn("库存不足,扣减失败,skuId:{},订单号:{}",
-                        success.getSkuId(), success.getOrderSn());
-                channel.basicAck(deliveryTag, false);
+                // ① 失败留痕（不再静默 basicAck）
+                log.error("【秒杀落库留痕】DB库存扣减失败, skuId={}, 订单号={}, quantity={}, requeue {}/{}",
+                        success.getSkuId(), success.getOrderSn(), success.getQuantity(),
+                        requeueCount, MAX_REQUEUE);
+                // ② 已付款告警：查订单状态，已支付(3)则必须人工介入
+                try {
+                    Integer state = dubboOrderService.getOrderStateBySn(success.getOrderSn());
+                    if (state != null && state == 3) {
+                        log.error("【秒杀落库告警】⚠️ 已付款订单落库失败，需人工介入！订单号={}, skuId={}, quantity={}",
+                                success.getOrderSn(), success.getSkuId(), success.getQuantity());
+                    } else {
+                        log.warn("秒杀订单未支付或不存在(状态={})，扣减失败可后续重试或放弃，订单号={}",
+                                state, success.getOrderSn());
+                    }
+                } catch (Exception e) {
+                    log.warn("查询秒杀订单状态失败(可能订单模块未就绪)，订单号={}: {}",
+                            success.getOrderSn(), e.getMessage());
+                }
+                // ③ 限次重试：未达上限 requeue=true（瞬时故障有机会）；达上限 requeue=false 丢弃留痕
+                channel.basicNack(deliveryTag, false, requeueCount < MAX_REQUEUE);
                 return;
             }
             // 新增success到数据库里
@@ -68,7 +105,30 @@ public class SeckillQueueConsumer {
             log.error("秒杀成功记录处理异常,订单号:{},异常信息:{}",
                     success.getOrderSn(), e.getMessage());
             // 抛出异常让@Transactional回滚事务,确保库存扣减也被撤销
+            // （异常路径保持原语义：回滚 + 由监听容器/重试机制处理，不做 manual nack，
+            //   避免与 Spring retry 双重重试 —— TODO #36 存疑点）
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * 从 x-death 头统计该消息已被 requeue 的次数。
+     * RabbitMQ 在 basicNack(requeue=true) 后重新投递时，header 会带 x-death，
+     * 其中 reason=requeued 的 count 即重试次数。
+     */
+    private int countRequeue(List<Map<String, Object>> xDeath) {
+        if (xDeath == null || xDeath.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (Map<String, Object> death : xDeath) {
+            if (death != null && "requeued".equals(death.get("reason"))) {
+                Object c = death.get("count");
+                if (c instanceof Number) {
+                    count = Math.max(count, ((Number) c).intValue());
+                }
+            }
+        }
+        return count;
     }
 }

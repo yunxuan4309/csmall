@@ -400,6 +400,15 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
     }
 
     @Override
+    public Integer getOrderStateBySn(String orderSn) {
+        if (orderSn == null || orderSn.isBlank()) {
+            return null;
+        }
+        OmsOrder order = omsOrderMapper.selectOrderBySn(orderSn);
+        return order == null ? null : order.getState();
+    }
+
+    @Override
     public List<Map<String, Object>> getSalesBetweenDates(String startDate, String endDate) {
         return omsOrderMapper.selectSalesByDate(startDate, endDate);
     }
