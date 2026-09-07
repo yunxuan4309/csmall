@@ -49,6 +49,9 @@ public class OmsOrderController {
     @SentinelResource(value = "新增订单",
             blockHandlerClass = OrderBlockHandler.class, blockHandler = "addOrderBlock")
     public JsonResult<OrderAddVO> addOrder(@Validated @RequestBody OrderAddDTO orderAddDTO){
+        // HTTP 普通下单入口强制普通订单类型：orderType 只能由秒杀服务(Dubbo)置 1，
+        // 防止前端伪造 orderType=1 被误当秒杀单处理（支付后误写 reseckill 标记等）
+        orderAddDTO.setOrderType(0);
         OrderAddVO orderAddVO=omsOrderService.addOrder(orderAddDTO);
         return JsonResult.ok(orderAddVO);
     }
