@@ -1,7 +1,7 @@
 # 阿里云 ECS 云服务器情况
 
 > 创建日期：2026-07-29
-> 最后更新：2026-08-03
+> 最后更新：2026-08-22（到期时间更新：已按月续费至 2026-12；Sentinel 端口勘误 8090→8858）
 > 用途：记录本次部署的阿里云 ECS 服务器全部配置信息
 
 ---
@@ -24,8 +24,8 @@
 | 公网带宽 | 5 Mbps 固定带宽 |
 | 登录用户 | ecs-user（推荐）/ root |
 | 登录方式 | 自定义密码 |
-| 付费类型 | 包年包月（1 个月） |
-| 到期时间 | 2026-08-29 23:59:59 |
+| 付费类型 | 包年包月（每月续费一次） |
+| 到期时间 | ~~2026-08-29~~ → 按月续费中（已续费至 2026-12，2026-08-22 确认） |
 | 域名 | 无（ICP 备案需购买≥3个月） |
 
 ---
@@ -108,7 +108,7 @@
 
 ## 四、Docker 容器清单（实际运行状态，共 21 个容器）
 
-### 4.1 中间件（10 个）
+### 4.1 中间件（7 个基础，另有 SkyWalking OAP/UI 见 4.4）
 
 | 服务 | 容器名 | 镜像 | 端口映射 | 账号/密码 | 健康检查 |
 |------|--------|------|---------|-----------|---------|
@@ -118,7 +118,7 @@
 | RabbitMQ 4 | csmall-rabbitmq | rabbitmq:4-management-alpine | 5672,15672 | guest/guest | ✅ rabbitmqctl status |
 | Elasticsearch 8.6 | csmall-es | elasticsearch:8.6.0 | 9200,9300 | 无密码 | ✅ cluster health |
 | Seata 2.1.0 | csmall-seata | apache/seata-server:2.1.0 | 8091,7091 | seata/seata | ✅ wget console |
-| Sentinel 1.8.6 | csmall-sentinel | bladex/sentinel-dashboard:1.8.6 | 8090→8080 | sentinel/sentinel | ❌ 无 |
+| Sentinel 1.8.6 | csmall-sentinel | bladex/sentinel-dashboard:1.8.6 | 8090→8858 | sentinel/sentinel | ❌ 无 |
 
 > **注意**：Seata 使用 `apache/seata-server`（非 `seataio/seata-server`），后者在国内镜像源不可用。
 
