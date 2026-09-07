@@ -1,7 +1,7 @@
 # CoolShark 项目待办事项
 
 > **创建日期**: 2026-05-13
-> **最后更新**: 2026-09-07（✅ **第一批已全部完成**：JWT 随机化 #25 + 内存优化 R7 + MySQL 加固 #24 + Redis 加固 R1~R4 + Dockerfile 清理 #38，2026-09-07 维护窗口执行完毕并移入文末"已完成"表。路线图第二批顺延为当前主攻。原 #1~#41 全部保留在正文，供逐条评估）
+> **最后更新**: 2026-09-07（✅ **第一批已全部完成**：JWT 随机化 #25 + 内存优化 R7 + MySQL 加固 #24 + Redis 加固 R1~R4 + Dockerfile 清理 #38，2026-09-07 维护窗口执行完毕并移入文末"已完成"表。路线图第二批顺延为当前主攻（#8/#23/#36 已完成）；正文 #42 后新增 #43 低优先级整洁项。原 #1~#41 全部保留在正文，供逐条评估）
 > **关联文档**: [[服务器巡检与待修复问题清单-2026-08-04]]、[[JVM调优方案]]、[[阿里云ECS服务器情况]]、[[Redis配置加固与哨兵模式方案]]、[[服务器内存优化方案]]、[[连接池统一HikariCP方案]]、[[Python模拟数据与AI并发测试方案]]、[[集群化与配置中心迁移方案]]、[[Sentinel能力补充计划]]、[[Redis主从切换防数据问题方案]]、[[TraceId链路日志规范方案]]、[[认证安全企业级升级方案]]
 
 ---
@@ -861,6 +861,23 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 **诚实边界（面试别吹过头）**：2 台小机器 = 演示级 HA（防单机宕机，不防地域灾难）；只集群 Redis+秒杀，其他 19 容器仍是 compose 单实例——话术："选依赖最广的中间件+并发最高的业务验证机制，不是全量迁移"。
 
 **面试价值**：跨机 Redis 真 HA（物理隔离 ≠ 单机哨兵）+ 秒杀多实例真实负载均衡/故障剔除/定时任务分布式锁——TODO #9/#4/#15 从"单机演示"升级为"跨机真实集群"。
+
+---
+
+### 43. 【整洁】合并重复的 BindException 全局异常处理器（2026-09-07 记录，低优先级）
+
+> **2026-09-07 记录（源自 #23 校验审计）**：项目存在**两个 @RestControllerAdvice 都声明了逻辑相同的 `BindException` handler**：
+> - `GlobalControllerExceptionHandler`（mall-common/.../exception/handler/）
+> - `BindExceptionHandler`（mall-common/.../validation/handler/）
+>
+> **冗余但不冲突**：Spring 对跨 advice 的同异常声明按注册顺序取第一个匹配，不 Ambiguous（生产旧 jar 双 advice 共存运行多时无歧义日志实证）。
+>
+> **合并方案（低优先级，整洁项）**：
+> 1. 把 `BindExceptionHandler.handleBindException` 并入 `GlobalControllerExceptionHandler`（逻辑已相同，保留一份即可）
+> 2. 删除旧 advice `BindExceptionHandler.java`
+> 3. 回归：表单绑定（@ModelAttribute）/ @RequestBody 校验失败仍返回 400
+>
+> **面试价值**：能讲"我在校验审计中发现两个全局 advice 冗余声明同一异常 handler——跨 advice 不冲突（按序取一），但整洁上应合并"，展示对 Spring 异常解析机制的准确认知。
 
 ---
 
