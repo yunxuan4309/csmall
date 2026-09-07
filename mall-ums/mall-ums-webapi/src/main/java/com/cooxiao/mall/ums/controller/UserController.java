@@ -54,7 +54,7 @@ public class UserController {
     @ApiOperation(value="注册用户")
     @PostMapping("/register")
     @PreAuthorize("permitAll()")
-    public JsonResult doRegister(@RequestBody UserRegistryDTO userRegistyDTO){
+    public JsonResult doRegister(@Valid @RequestBody UserRegistryDTO userRegistyDTO){
         User user = userService.doRegister(userRegistyDTO);
         return JsonResult.ok(new RegisterUserVO(user.getId(), user.getUsername(), user.getNickname()));
     }

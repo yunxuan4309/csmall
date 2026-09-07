@@ -8,7 +8,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -20,6 +21,12 @@ import java.util.concurrent.TimeUnit;
 public class TokenBudgetService {
 
     private static final String KEY_PREFIX = "ai:daily_cost:";
+
+    /**
+     * 预算按北京时间结算（容器 JVM 默认 UTC，若用 LocalDate.now() 会导致
+     * 每日预算在北京时间 08:00 重置而非零点 —— TODO #8）
+     */
+    private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
@@ -51,19 +58,19 @@ public class TokenBudgetService {
     public void record(double amount) {
         String key = buildKey();
         Double newValue = stringRedisTemplate.opsForValue().increment(key, amount);
-        // 设置 TTL 到次日凌晨，避免 key 永远不删除
+        // 设置 TTL 到次日北京时间零点，避免 key 永远不删除
         stringRedisTemplate.expire(key, getSecondsUntilMidnight(), TimeUnit.SECONDS);
         log.debug("AI 费用累计：{} 元（今日累计：{} 元）", String.format("%.4f", amount),
                 String.format("%.4f", newValue != null ? newValue : 0));
     }
 
     private String buildKey() {
-        return KEY_PREFIX + LocalDate.now();
+        return KEY_PREFIX + LocalDate.now(ZONE);
     }
 
     private long getSecondsUntilMidnight() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime midnight = now.toLocalDate().plusDays(1).atStartOfDay();
+        ZonedDateTime now = ZonedDateTime.now(ZONE);
+        ZonedDateTime midnight = now.toLocalDate().plusDays(1).atStartOfDay(ZONE);
         return Duration.between(now, midnight).getSeconds();
     }
 }

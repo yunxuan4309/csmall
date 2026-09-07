@@ -28,11 +28,11 @@
 | 顺序 | 编号 | 事项 | 为什么这批 |
 |------|------|------|-----------|
 | 1 | **#33** | 双索引数据不一致 | 实测 ai=20 > search=18，**普通搜索查不到 2 条新商品 = 用户可见 bug**（不是技术债） |
-| 2 | **#8** | AI 预算按北京时间结算 | 唯一已确认的线上代码 bug（预算 8:00 重置），改动 ~10 行 |
-| 3 | **#36** | DLX 死信 + OrderQueueConsumer requeue 修复 | 实测 basicNack(requeue=true) = 毒消息无限重试挂单 |
+| 2 | **#8** ✅ | AI 预算按北京时间结算 | ✅ 已修复（2026-09-07，TokenBudgetService 时区） |
+| 3 | **#36** 🟡 | DLX 死信 + OrderQueueConsumer requeue 修复 | ✅ requeue 限次已修（x-death 3 次）；DLX 待做 |
 | 4 | **#13** | Nacos 开启认证 | 实测无 token 读配置 200，内网失陷可注册假服务（服务伪装） |
 | 5 | **#29** | 数据库定期备份 | 实测无任何 mysqldump；数据是"命"，备份是运维底线 |
-| 6 | **#23** | 漏触发接口补 @Validated | 注册/地址/管理员更新校验静默失效（非法数据可入库） |
+| 6 | **#23** ✅ | 漏触发接口补 @Validated | ✅ doRegister 已修（DTO 真规则）；其余 4 个 DTO 无规则另议 |
 | 7 | **#5** | Sentinel 能力补齐 | 3 接口规则空转 + 热点限流——面试价值最高 |
 | 8 | **#2 + #34** | AI 接口限流 + 并发闸门 | AI 慢请求占线程 + 外部 LLM 配额，上生产前必修（当前 0 调用可缓） |
 
@@ -313,7 +313,8 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 ```
 
 > 🔥 已升入**第二批 #2**：唯一线上代码 bug，改动 ~10 行
-### 8. 【AI 预算】每日预算按北京时间结算
+> ✅ **2026-09-07 已修复**：TokenBudgetService 改用 `ZoneId.of("Asia/Shanghai")`（buildKey + getSecondsUntilMidnight 两处），已编译验证。预算现于北京时间零点重置。
+### 8. 【AI 预算】每日预算按北京时间结算 ✅ 已完成（2026-09-07）
 
 > **2026-08-15 新增**：`TokenBudgetService` 用 JVM 默认时区（服务器容器为 UTC）计算 `ai:daily_cost:<日期>` key 和 TTL，导致**每日预算在北京时间早上 8:00 重置**，而非零点。
 
@@ -530,17 +531,21 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
 **面试价值**：能讲清"CORS 是浏览器机制，生产收敛到网关、dev 直连才需要服务端 CORS"
 
-> 🟡 **第二批 #6**
-### 23. 【校验】漏触发接口补 @Validated（2026-08-28 审计，待实施）
+> 🟡 **第二批 #6**（✅ doRegister 已修，2026-09-07）
+### 23. 【校验】漏触发接口补 @Validated ✅ 部分完成（2026-09-07，仅 doRegister）
+
+> ✅ **2026-09-07 实施修正**：代码复核发现原审计描述与事实**部分不符**——5 个接口里只有 `UserController.doRegister` 的 DTO（UserRegistryDTO）**真有校验规则但没触发**（@RequestBody 前漏 `@Valid`），属真实 bug，**已修复**（补 `@Valid`，遵循项目惯例与同文件 renewPassword 一致）。
+> ⚠️ **其余 4 个是"DTO 无规则"而非"规则没触发"**：`DeliveryAddressAddDTO`/`DeliveryAddressEditDTO`/`AdminUpdateDTO` 均**无任何校验注解**（AdminUpdateDTO 的 import 都被注释）→ 补 @Valid/@Validated 是空转。**已决定本次不补规则**（需先设计字段校验规则，属新功能非修 bug，后续如需再做）。
+> 回归说明：doRegister 补 @Valid 后，传非法值（用户名/邮箱/手机号格式错误）将触发 400（由 mall-common 全局异常处理器统一返回），已编译验证。
 
 > **2026-08-28 新增（源自 06-安全设计 Q6 审计）**：全项目审计 39 个 @RequestBody 接口，**5 个漏了 @Validated 触发开关**（规则在 DTO 但没触发 = 校验静默失效）：`UserController.doRegister`（**注册最严重**——UserRegistryDTO 的 @NotNull/@Pattern 全失效，非法数据可入库）、`DeliveryAddressController.addAddress/editAddress`（地址增改）、`AdminController.updateAdmin`（管理员更新）。`PaymentCallbackController.wechatNotify`（String body）无需 DTO 校验，可豁免。
 
 **方案（P1）**：
-1. 5 个接口（注册/地址增改/管理员更新）方法参数补 `@Validated`（注册最优先）
-2. 回归：传非法值断言返回 400（注册接口重点验证用户名/邮箱/手机号格式）
+1. 5 个接口（注册/地址增改/管理员更新）方法参数补 `@Validated`（注册最优先）——✅ doRegister 已完成；其余 4 个 DTO 无规则，需先补规则
+2. 回归：传非法值断言返回 400（注册接口重点验证用户名/邮箱/手机号格式）——待服务器回归
 3. 可选：AOP 统一给 @RequestBody 加校验，从根上消灭漏触发
 
-**面试价值**：能讲"注解校验会静默失效（规则与触发分离），我审计出 5 个漏触发接口"的审计能力
+**面试价值**：能讲"注解校验会静默失效（规则与触发分离），我审计出 5 个漏触发接口"——**实施中进一步发现 4 个是 DTO 本身无规则（比漏触发更早的问题），修正了原审计结论**
 
 ### 24. 【安全】MySQL 密码强化 + 端口 127.0.0.1 绑定 + 容器非 root ✅ 已完成（2026-09-07，前两项）
 
@@ -723,8 +728,9 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
 ---
 
+> ✅ **2026-09-07 第一步已完成（requeue 修复）**：OrderQueueConsumer 失败处理从 `basicNack(requeue=true)` 无限重试改为 **x-death 限次重试（最多 3 次）**，达上限 requeue=false 丢弃留痕——消除毒消息无限重试挂单。DLX 死信队列仍待实施（本条目剩余部分）。
 > 🟡 **第二批 #3**
-### 36. 【MQ】死信队列 DLX 评估 + 订单消费者 requeue 修复（2026-09-03 记录，待实施）
+### 36. 【MQ】死信队列 DLX 评估 + 订单消费者 requeue 修复（部分完成 2026-09-07）
 
 > **2026-09-03 新增（源自 10 Q8 讨论）**：项目 MQ 可靠性"有重试没死信"——企业级五环里缺死信队列 + 可观测。
 
