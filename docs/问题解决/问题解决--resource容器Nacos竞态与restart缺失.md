@@ -105,6 +105,6 @@ curl -s "http://localhost:8848/nacos/v1/ns/instance/list?serviceName=mall-resour
 
 ## 七、关联文档
 
-- `docs/阿里云ECS服务器情况.md` — 2026-08-03 修复记录（含当前已知问题更新）
+- `docs/运维/阿里云ECS服务器情况.md` — 2026-08-03 修复记录（含当前已知问题更新）
 - `问题解决--SkyWalking部署与兼容性修复.md` — 整栈部署背景（Alpine→Debian、Metaspace、启动变慢）
 - `问题解决--AI导购模块部署.md` — Nacos 双注册 / Dubbo 端口问题（同类 Nacos 注册问题）

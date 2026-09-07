@@ -298,4 +298,4 @@ docker exec csmall-redis-sentinel-1 redis-cli -p 26379 SENTINEL replicas mymaste
 
 ---
 
-**关联文档**：`docs/评估报告/TODO文件.md`（R1~R4 条目 + 学习计划 #9）、`docs/阿里云ECS服务器情况.md`、`docs/项目上下文文档.md`
+**关联文档**：`docs/评估报告/TODO文件.md`（R1~R4 条目 + 学习计划 #9）、`docs/运维/阿里云ECS服务器情况.md`、`docs/项目上下文文档.md`

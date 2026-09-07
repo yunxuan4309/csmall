@@ -225,4 +225,4 @@ HTTPServer(("127.0.0.1", 9999), Handler).serve_forever()
 ---
 
 **关联文档**：`docs/评估报告/TODO文件.md`（R7 内存优化 / 秒杀管理 TODO）、
-`docs/归档/秒杀压测演示指南.md`（JMeter 压测，已归档）、`docs/阿里云ECS服务器情况.md`
+`docs/归档/秒杀压测演示指南.md`（JMeter 压测，已归档）、`docs/运维/阿里云ECS服务器情况.md`
