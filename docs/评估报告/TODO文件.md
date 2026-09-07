@@ -535,15 +535,17 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 ### 23. 【校验】漏触发接口补 @Validated ✅ 部分完成（2026-09-07，仅 doRegister）
 
 > ✅ **2026-09-07 实施修正**：代码复核发现原审计描述与事实**部分不符**——5 个接口里只有 `UserController.doRegister` 的 DTO（UserRegistryDTO）**真有校验规则但没触发**（@RequestBody 前漏 `@Valid`），属真实 bug，**已修复**（补 `@Valid`，遵循项目惯例与同文件 renewPassword 一致）。
-> ✅ **2026-09-07 第二批补充实施（B/C 类 5 个 DTO 补规则）**：
+> ✅ **2026-09-07 第二批补充实施（B/C 类 5 个 DTO 补规则 + 全局异常补全）**：
 > - `DeliveryAddressAddDTO`：联系人/省市区名/详细地址 @NotBlank，手机/固话/地区码有则验格式；**"手机/固话二选一"在 Service 层兜底**（DTO 无法表达 or）
 > - `DeliveryAddressEditDTO`：仅 id @NotNull（编辑走动态更新，允许部分修改），其余有则验格式
 > - `AdminUpdateDTO`：仅 id @NotNull，其余有则验格式；顺带修复 `AdminServiceImpl.updateAdmin` **无条件 encode(null) → 不传密码更新即 500** 的 bug（改为密码成对且非空才加密）
 > - `SeckillSpuAddDTO`/`SeckillSkuAddDTO`：全必填(@NotNull/@DecimalMin/@Min)（秒杀管理接口直插 Mapper，无 Service 校验层）
-> - Controller 触发注解：`DeliveryAddressController.addAddress/editAddress`、`AdminController.updateAdmin` 补 @Validated（ums/ams）
-> - 已编译验证（mall-ums/mall-ams/mall-seckill + mall-pojo）
-> ⚠️ **延伸发现（同批治理项，未做）**：`AdminController.addAdmin` 是 **GET + DTO 绑定**（非 @RequestBody），其 `AdminAddDTO` 校验注解也全部被注释——不在本次 @RequestBody 范围，需另行治理。
-> 回归说明：doRegister 补 @Valid 后，传非法值（用户名/邮箱/手机号格式错误）将触发 400（由 mall-common 全局异常处理器统一返回），已编译验证。
+> - `AdminAddDTO`：恢复校验（username/password/phone/email @NotBlank/@Pattern，原 4 处 @NotNull 被注释）；addAdmin 补类级+参数级 @Validated（GET 绑定 DTO 需参数级触发）
+> - **⭐ 全局异常处理器补全**：`mall-common GlobalControllerExceptionHandler` 缺 `MethodArgumentNotValidException`/`ConstraintViolationException` handler → 校验失败落 Throwable 返回 500 而非 400，已补两个 handler（这是校验"真生效"的关键一环）
+> - Controller 触发注解：`DeliveryAddressController.addAddress/editAddress`、`AdminController.updateAdmin/addAdmin` 补 @Validated（ums/ams）
+> - 已编译验证（mall-common/mall-pojo/mall-ums/mall-ams/mall-seckill）
+> ⚠️ **延伸发现（已核实非线上风险）**：前端 `admin.js`（REST 风格 add/update/delete）是**废弃残留无人引用**，真接口在 `sso.js`+AdminController；AdminAddDTO 后端接口暂无前端页面接入。
+> 回归说明：doRegister 补 @Valid 后，传非法值将触发 400（依赖新增的 MethodArgumentNotValidException handler），已编译验证。
 
 > **2026-08-28 新增（源自 06-安全设计 Q6 审计）**：全项目审计 39 个 @RequestBody 接口，**5 个漏了 @Validated 触发开关**（规则在 DTO 但没触发 = 校验静默失效）：`UserController.doRegister`（**注册最严重**——UserRegistryDTO 的 @NotNull/@Pattern 全失效，非法数据可入库）、`DeliveryAddressController.addAddress/editAddress`（地址增改）、`AdminController.updateAdmin`（管理员更新）。`PaymentCallbackController.wechatNotify`（String body）无需 DTO 校验，可豁免。
 

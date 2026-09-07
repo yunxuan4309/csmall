@@ -34,13 +34,14 @@ import org.springframework.validation.annotation.Validated;
 @RequestMapping("/ams/admin")
 @Api(tags = "后台用户模块")
 @Slf4j
+@Validated
 public class AdminController {
     @Autowired
     private IAdminService adminService;
     @ApiOperation(value="新增后台账号")
     @GetMapping("/save")
     @PreAuthorize("hasAuthority('/ams/admin/update')")
-    public JsonResult addAdmin(AdminAddDTO adminDTO){
+    public JsonResult addAdmin(@Validated AdminAddDTO adminDTO){
         adminService.addAdmin(adminDTO);
         return JsonResult.ok();
     }
