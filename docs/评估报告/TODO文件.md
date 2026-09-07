@@ -31,7 +31,7 @@
 | 2 | **#8** ✅ | AI 预算按北京时间结算 | ✅ 已修复（2026-09-07，TokenBudgetService 时区） |
 | 3 | **#36** ✅ | DLX 死信 + OrderQueueConsumer requeue 修复 | ✅ 已完成（x-death 限次重试 + 订单队列 DLX + OrderDlxConsumer）；秒杀消费者静默丢弃见 #14 |
 | 4 | **#13** | Nacos 开启认证 | 实测无 token 读配置 200，内网失陷可注册假服务（服务伪装） |
-| 5 | **#14** 🟡 | Redis 主从切换防数据（五层） | ✅ P0 落库失败不静默已修（2026-09-07）+ order_type 治本完成（本地实测验证）；⛔ P0 付款前查库存评估后放弃（语义缺陷见 #14 正文）；P1/P2 归第三批 |
+| 5 | **#14** 🟡 | Redis 主从切换防数据（五层） | ✅ P0 落库失败不静默已修（2026-09-07）+ order_type 治本完成（本地实测验证）+ 方案Y 支付前校验本单成交（success落库）完成；⛔ P0 付款前查库存原方案放弃（语义缺陷见 #14 正文，已用方案Y替代）；P1/P2 归第三批 |
 | 6 | **#29** | 数据库定期备份 | 实测无任何 mysqldump；数据是"命"，备份是运维底线 |
 | 7 | **#23** ✅ | 漏触发接口补 @Validated | ✅ doRegister 已修（DTO 真规则）；其余 4 个 DTO 无规则另议 |
 | 8 | **#5** | Sentinel 能力补齐 | 3 接口规则空转 + 热点限流——面试价值最高 |
@@ -429,6 +429,7 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 > ✅ **2026-09-07 完成**：
 > - **P0 落库失败不静默（第3层）✅**：SeckillQueueConsumer 库存不足从 basicAck 静默丢弃改为三兜底——失败留痕 + 已付款告警（新增 IOmsOrderService.getOrderStateBySn Dubbo 查询）+ x-death 限次重试（与 #36 同款）
 > - **订单 order_type 标识（治本前置）✅**：oms_order 加 order_type 列（Flyway V6），秒杀入口置 1、普通入口强制 0（防伪造）；markSeckillPurchased/clearSeckillOrdered 仅秒杀单执行（修复"普通订单被误当秒杀单写 reseckill 标记"的潜在 bug）；本地普通购买实测验证守卫生效
+> - **✅ P0 方案Y 支付前校验本单成交状态（success 落库）**：P0"付款前查库存"原方案放弃（语义缺陷见下）后，用**查询本单是否已写入 success 表**替代实现——秒杀单（orderType=1）支付前经新 Dubbo `IForOrderSeckillRecordService.isSeckillSuccessRecorded(orderSn)` 校验本单是否已成功落库，未落库则拦截支付（防"Redis 预扣放行但 DB 扣减失败 rows==0"的用户付了钱没货）；查本单而非剩余库存，不误拦已成交最后一件；Dubbo 异常保守放行。本地秒杀→支付全链路实测通过（order_type=1、state=3 已支付、success 有记录）
 > - **P2 配置层**：随 R2 主从哨兵一起（#9，第三批）
 > - **P1 对账任务**：待做
 > - **🔧 秒杀 SPU VO 缓存一致性 bug（2026-09-07 本地实测发现并修复）**：`getSeckillSpu`（详情页）先读 Redis 缓存 `mall:seckill:spu:vo:{pmsSpuId}`，该 VO 在**改秒杀时间窗口**后不失效（TTL 约 2h）→ 详情页读到**旧窗口**误显示"秒杀已结束"，而**列表页** `listSeckillSpus` 直接查 DB（显示进行中），两页不一致。已修：`SeckillManageController` 新增/删除秒杀 SPU 时 `redisTemplate.delete(该 VO key)` 主动失效（`evictSeckillSpuVoCache`）。**注意局限**：仅"经管理端接口改窗口"会触发失效；若直接改 DB 表（如本次本地演示），仍会命中旧缓存直到 TTL 到期——根治需在 `getSeckillSpu` 读缓存时校验窗口/或改时区/缓存双写，待后续评估。
@@ -436,7 +437,7 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 > **2026-08-26 新增**：Redis 主从复制异步 → 主挂瞬间丢最后几笔写（库存 DECR/购买标记/幂等锁可能丢）。代码层无法 100% 消灭（本质），目标是"让丢失无害化"。
 
 **五层方案（按优先级）**：
-- 🔴 **P0 付款前校验 DB 库存**：⛔ **评估后放弃（2026-09-07）**——见下方分析结论；原方案"支付时查 seckill_stock 剩余库存"有语义缺陷
+- 🔴 **P0 付款前校验 DB 库存**：⛔ 原方案"支付时查 seckill_stock 剩余库存"**评估后放弃（2026-09-07）**——语义缺陷见下方分析结论。**已用"方案Y"替代实现：付款前校验本单是否已写入 success 表**（✅ 已完成，见上方完成列表）
 - 🔴 **P0 落库失败不静默**：✅ 已完成（2026-09-07，SeckillQueueConsumer 三兜底）
 - 🟠 **P1 对账任务**：定时 Redis vs DB 比对，以 DB 为准自动修正漂移 + 预热校验（待做）
 - 🟡 **P2 配置层**：min-replicas-to-write 1（随 R2 主从哨兵一起，#9）
