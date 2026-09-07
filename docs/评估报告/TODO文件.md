@@ -1,8 +1,8 @@
 # CoolShark 项目待办事项
 
 > **创建日期**: 2026-05-13
-> **最后更新**: 2026-09-07（✅ **第一批已全部完成**：JWT 随机化 #25 + 内存优化 R7 + MySQL 加固 #24 + Redis 加固 R1~R4 + Dockerfile 清理 #38，2026-09-07 维护窗口执行完毕并移入文末"已完成"表。路线图第二批顺延为当前主攻（#8/#23/#36 已完成，#14 补入第二批）；正文 #42 后新增 #43 低优先级整洁项。原 #1~#41 全部保留在正文，供逐条评估）
-> **关联文档**: [[服务器巡检与待修复问题清单-2026-08-04]]、[[JVM调优方案]]、[[阿里云ECS服务器情况]]、[[Redis配置加固与哨兵模式方案]]、[[服务器内存优化方案]]、[[连接池统一HikariCP方案]]、[[Python模拟数据与AI并发测试方案]]、[[集群化与配置中心迁移方案]]、[[Sentinel能力补充计划]]、[[Redis主从切换防数据问题方案]]、[[TraceId链路日志规范方案]]、[[认证安全企业级升级方案]]
+> **最后更新**: 2026-09-07（**完成拆分**：所有已完成任务迁至 [[TODO已完成]]——含第一批全部/历史归档/第二批 #8/#36/#14 的 P0+P1。本文件只保留**未完成/部分完成/暂缓/评估**项。第二批仍主攻，当前未完成：#33/#13/#29/#5/#2+#34、#14 余 P2）
+> **关联文档**: [[TODO已完成]]（已完成归档）、[[服务器巡检与待修复问题清单-2026-08-04]]、[[JVM调优方案]]、[[阿里云ECS服务器情况]]、[[Redis配置加固与哨兵模式方案]]、[[服务器内存优化方案]]、[[连接池统一HikariCP方案]]、[[Python模拟数据与AI并发测试方案]]、[[集群化与配置中心迁移方案]]、[[Sentinel能力补充计划]]、[[Redis主从切换防数据问题方案]]、[[TraceId链路日志规范方案]]、[[认证安全企业级升级方案]]
 
 ---
 
@@ -11,27 +11,19 @@
 > **用法**：明天起从头逐条评估/实现时，按下面三个批次推进；每条详细方案见正文对应编号（编号未变）。
 > **原则**：第一批解决"出事会真出事"的（安全洞/资源红线）；第二批解决"用户可见 bug + 面试/演示价值"；第三批是"企业级展望"，演示项目可后置。
 
-### ✅ 第一批：安全 + 资源止血（2026-09-07 已全部完成）
+### ✅ 第一批：安全 + 资源止血（2026-09-07 已全部完成，明细已迁 [[TODO已完成]]）
 
-| 顺序 | 编号 | 事项 | 完成情况 |
-|------|------|------|---------|
-| 1 | **#25** | JWT_SECRET 生产随机化 | ✅ 完成（.env 换 64 字符随机密钥，11 容器 env 一致，认证链路回归通过）|
-| 2 | **R7** | 内存优化（mem_limit+Nacos降堆+Swap） | ✅ 完成（mem_limit 全 21 容器 + Nacos 512m + Sentinel 限堆 + Swap 2G；available 2.0G→3.9G）|
-| 3 | **#24** | MySQL 强密码 + 端口 127.0.0.1 | ✅ 完成（43 位强密码 ALTER USER 双 host，3306 收窄）|
-| 4 | **R1+R2+R3+R4** | Redis 加固（密码/AOF/内存上限/conf） | ✅ 完成（requirepass + AOF + maxmemory 256mb volatile-lru，6379 收窄）|
-| 5 | **#38** | Dockerfile 双份清理 | ✅ 完成（11 份残留 Dockerfile 已 git rm）|
-
-> 📌 明细与实战经验（Redis RDB→AOF 迁移丢数据、gateway 启动竞态、conf 属主权限）见 [[TODO第一批实现与原理]] §九；轮换操作见 [[运维手册--密钥密码轮换]]。**下一批主攻 = 🟡 第二批（下方）**。
+> 第一批全部 5 项（#25 / R7 / #24 / R1~R4 / #38）已完成，明细与实战经验已迁 [[TODO已完成]] §一/§二/§四。**下一批主攻 = 🔥 第二批（下方）**。
 
 ### 🔥 第二批：正确性 + 面试/演示价值（当前主攻，有时间就做，优先级从高到低）
 
 | 顺序 | 编号 | 事项 | 为什么这批 |
 |------|------|------|-----------|
 | 1 | **#33** | 双索引数据不一致 | 实测 ai=20 > search=18，**普通搜索查不到 2 条新商品 = 用户可见 bug**（不是技术债） |
-| 2 | **#8** ✅ | AI 预算按北京时间结算 | ✅ 已修复（2026-09-07，TokenBudgetService 时区） |
-| 3 | **#36** ✅ | DLX 死信 + OrderQueueConsumer requeue 修复 | ✅ 已完成（x-death 限次重试 + 订单队列 DLX + OrderDlxConsumer）；秒杀消费者静默丢弃见 #14 |
+| 2 | **#8** ✅ | AI 预算按北京时间结算 | ✅ 已修复（2026-09-07，TokenBudgetService 时区）→ 见 [[TODO已完成]] |
+| 3 | **#36** ✅ | DLX 死信 + OrderQueueConsumer requeue 修复 | ✅ 已完成（x-death 限次重试 + 订单队列 DLX + OrderDlxConsumer）；秒杀消费者静默丢弃见 #14 → 见 [[TODO已完成]] |
 | 4 | **#13** | Nacos 开启认证 | 实测无 token 读配置 200，内网失陷可注册假服务（服务伪装） |
-| 5 | **#14** 🟡 | Redis 主从切换防数据（五层） | ✅ P0 落库失败不静默已修（2026-09-07）+ order_type 治本完成（本地实测验证）+ 方案Y 支付前校验本单成交（success落库）完成；⛔ P0 付款前查库存原方案放弃（语义缺陷见 #14 正文，已用方案Y替代）；P1/P2 归第三批 |
+| 5 | **#14** 🟡 | Redis 主从切换防数据（五层） | ✅ P0 三层（落库不静默+order_type治本+方案Y）与 P1 对账已完成 → 见 [[TODO已完成]] §六；⛔ P0 付款前查库存原方案放弃（语义缺陷见 #14 正文，已用方案Y替代）；只余 P2 配置层（随 #9） |
 | 6 | **#29** | 数据库定期备份 | 实测无任何 mysqldump；数据是"命"，备份是运维底线 |
 | 7 | **#23** ✅ | 漏触发接口补 @Validated | ✅ doRegister 已修（DTO 真规则）；其余 4 个 DTO 无规则另议 |
 | 8 | **#5** | Sentinel 能力补齐 | 3 接口规则空转 + 热点限流——面试价值最高 |
@@ -42,7 +34,7 @@
 | 编号 | 事项 | 定位 |
 |------|------|------|
 | #4 | 秒杀集群化 + 配置中心（单机 2 实例演示级） | 面试高价值，需先做 R7 腾内存 |
-| #14-P1 | Redis 主从防数据 - P1 对账任务（Redis vs DB 定时比对修正漂移 + 预热校验） | #14 收尾，P0 已完成，P1 独立成条防遗漏；📋 方案已定稿见 [[秒杀对账任务实现方案]] |
+| #14-P1 | Redis 主从防数据 - P1 对账任务 | ✅ 已完成（2026-09-07，运行期轻量+凌晨全量，以 DB 为准）→ 见 [[TODO已完成]] §六 |
 | #14-P2 | Redis 主从防数据 - P2 配置层（min-replicas-to-write 1，随 #9 主从哨兵） | 搭 #9 的车，避免遗漏 |
 | #9 | Redis 主从 + 哨兵实验 | 学习 HA，方案已定稿 |
 | #15 | K8s 实操（k3s） | 学习用，需评估新服务器（见 TODO 顶部咨询结论） |
@@ -69,57 +61,6 @@
 
 > **背景**：2026-08-21 对生产服务器（8.156.77.197）做 Redis 专项巡检 + 配置事实核查。以下问题全部经服务器实测确认（docker inspect / redis-cli CONFIG GET / 与本地 `deploy/docker/docker-compose.yml` 比对）。**当前为演示项目，暂不修复**，待有空时按方案处理。
 
-### R1. 【Redis】无密码认证 + 密码链路三处脱节 ✅ 已完成（2026-09-07）
-
-> ✅ **2026-09-07 已修复**：requirepass 开启 + 11 微服务注入 `SPRING_DATA_REDIS_PASSWORD`，端口收窄 127.0.0.1。执行明细见 [[TODO第一批实现与原理]]。
-
-**现状（已核实）**：
-- Redis 服务端 `requirepass` 为空 —— 容器以裸 `redis-server` 启动，无任何参数、无配置文件
-- `docker-compose.yml` 中 redis 服务**无 environment 段**，`.env` 的 `REDIS_PASSWORD`（实测值为空）从未传给 Redis 容器
-- 11 个微服务容器只注入 `SPRING_DATA_REDIS_HOST=redis`，**均未注入 `SPRING_DATA_REDIS_PASSWORD`**
-- 各模块 `application-prod.yml` 写 `password: ${REDIS_PASSWORD:}` → 永远回退空
-
-**影响**：Docker 网络内任意容器可无密码读写 Redis；若 6379 被安全组误开放则公网裸奔（当前安全组仅开 22/80，暂未暴露，但纵深防御为零）。
-
-**解决方案**（开认证必须"服务端 + 11 个微服务"同步切换，任一中间态都会导致 Redis 不可用）：
-1. `.env` 设置强密码：`REDIS_PASSWORD=<强随机值>`
-2. compose redis 服务加 `environment: REDIS_PASSWORD: ${REDIS_PASSWORD}`，并用挂载的 redis.conf 或 `command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]` 启用认证
-3. 11 个微服务 environment 全部补 `SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}`
-4. 验证：`docker exec csmall-redis redis-cli -a <密码> ping` → PONG；无密码连接应被拒绝
-5. 可选加固：端口映射改 `127.0.0.1:6379:6379`，避免宿主机网卡直接监听
-
-> ⚠️ 顺序坑：不能只开服务端 requirepass（微服务会全部连不上）；也不能只注入客户端密码（服务端无密码时 AUTH 报 "no password is set"）。两条变更须在同一维护窗口内完成，否则中间态全站 Redis 挂掉。
-
-📄 **完整方案（含哨兵模式，已定稿未执行）见 [[Redis配置加固与哨兵模式方案]]**
-
-### R2. 【Redis】未启用 AOF，仅 RDB 快照，重启丢数据 ✅ 已完成（2026-09-07）
-
-> ✅ **2026-09-07 已修复**：redis.conf 开启 `appendonly yes` + `appendfsync everysec`（执行中踩到 RDB→AOF 迁移丢数据坑，已解决并记录见 [[TODO第一批实现与原理]] §9.2）。
-
-**现状（已核实）**：`appendonly no`；仅 RDB 快照（`save 3600 1 300 100 60 10000`）。秒杀库存预热、购买标记（reseckill）、随机码、AI 会话上下文全部存在 Redis。
-
-**影响**：进程重启/崩溃最多丢 60s~15min 数据；购买标记（`mall:seckill:reseckill:*`）丢失 → 可能重复秒杀；库存 DECR 丢失靠 DB `seckill_stock >= quantity` 条件兜底不超卖，但预扣库存会与 DB 不一致。
-
-**解决方案**：挂载自定义 redis.conf，开启 `appendonly yes` + `appendfsync everysec`（性能与安全平衡，秒杀场景标准做法），RDB 与 AOF 并存。📄 详见 [[Redis配置加固与哨兵模式方案]] §2.1/§2.2
-
-### R3. 【Redis】无内存上限 + noeviction，内存失控风险 ✅ 已完成（2026-09-07）
-
-> ✅ **2026-09-07 已修复**：`maxmemory 256mb` + `maxmemory-policy volatile-lru`（实测生效）。
-
-**现状（已核实）**：`maxmemory 0`（无上限）、`maxmemory-policy noeviction`。
-
-**影响**：Redis 可吃满服务器 16G 内存（系统内存基线已 71%）；noeviction 在内存写满时**拒绝写入** → 秒杀随机码/库存写入直接失败，功能停摆而非降级。
-
-**解决方案**：redis.conf 设 `maxmemory 256mb` + `maxmemory-policy volatile-lru`（只淘汰带 TTL 的缓存键，保护 `mall:seckill:reseckill:*` 永久购买标记不被误淘汰）。📄 详见 [[Redis配置加固与哨兵模式方案]] §2.1
-
-### R4. 【Redis】无自定义 redis.conf，配置无法持久化 ✅ 已完成（2026-09-07）
-
-> ✅ **2026-09-07 已修复**：`/data/csmall/redis/redis-master.conf` 挂载进容器（不加 :ro），固化 R1~R3 全部配置。
-
-**现状（已核实）**：裸 `redis-server` 启动，无配置文件挂载；所有 `CONFIG SET` 调整重启即失。
-
-**解决方案**：在 `/data/csmall/redis/` 生成 `redis-master.conf` / `redis-replica.conf` 并挂载进容器，`command: ["redis-server", "/usr/local/etc/redis/redis.conf"]`，一次性固化 R1~R3 全部配置。⚠️ 挂载**不加 `:ro`**（Redis 运行时会自动 REWRITE conf 记录角色/replicaof，只读挂载会导致故障切换失败或脑裂）。📄 详见 [[Redis配置加固与哨兵模式方案]] §二/§三
-
 ### R5. 【连接池】文档称"已全面替换 HikariCP"，实际生产 6 个模块仍是 Druid 🟡
 
 **现状（已核实）**：`mall-sso`（3 个数据源）/`mall-product`/`mall-order`/`mall-seckill`/`mall-ums`/`mall-ams` 的 `application-prod.yml` 均为 `type: com.alibaba.druid.pool.DruidDataSource`，且各 webapi pom 显式引入 druid 1.2.24（`mall-ums-service`/`mall-product-service` 的 pom 反而排除 HikariCP）；仅 `mall-resource` 无 druid 依赖（用 Spring Boot 默认 HikariCP）。
@@ -140,24 +81,7 @@
 
 **解决方案**：更正 `docs/运维/阿里云ECS服务器情况.md` 为 "8090→8858（容器内 8858）"。TODO 文件下方 §中优先级#2 提到的 "Sentinel 控制台（8090 端口）" 指宿主机端口，无需改动。
 
-> ✅ **第一批 #2 已于 2026-09-07 完成**：内存止血——实测 available 2.1G 的前提，先于一切扩容
-### R7. 【内存】容器无 mem_limit + 无 Swap + Nacos/Sentinel 堆可降 ✅ 已完成（2026-09-07）
-
-> ✅ **2026-09-07 已修复**：① 全 21 容器 mem_limit（docker update + compose 持久化）② Nacos 堆 512m ③ Sentinel -Xmx256m ④ Swap 2G（/swapfile + fstab）。实测 available 2.0G→3.9G。
-
-> **2026-08-21 确认**：服务器 available 仅 2.1G、无 Swap、**全部 21 个容器 `mem_limit=0`**（任何进程失控可直接吃满宿主 → OOM 杀服务，历史杀过 ES）。8-04 已做过一轮 JVM 调优（`docs/评估报告/JVM调优方案.md`），本轮为增量优化。
-
-**四项优化**（按收益排序）：
-1. **全容器加 mem_limit**（安全网）：11 微服务 768m~1g、es/oap 1.5g、其余 256m~512m；`docker update --memory` **零重启即时生效** + compose 持久化
-2. **Nacos 堆 1g→512m**：省 ~480M（最大单点收益，standalone 注册量小，需重启 nacos）
-3. **Sentinel 加 -Xmx256m**：省 ~50-100M 并消除默认堆 ~3.5G 隐患（需重启）
-4. **Swap 2G**：防瞬时峰值 OOM 缓冲垫（需 ecs-user sudo 执行）
-
-**明确不做**：再压 product/order/seckill 堆（秒杀突发 Full GC 风险）、降 ES 堆 / MySQL buffer pool（影响性能收益小）。
-
-**执行后预估**：available 2.1G → ~2.7G，OOM 失控风险基本消除。
-
-📄 **完整方案（含执行步骤/验证/回滚）见 [[服务器内存优化方案]]**
+> ✅ **第一批 #2 已于 2026-09-07 完成**：内存止血——实测 available 2.1G 的前提，先于一切扩容（明细见 [[TODO已完成]]）
 
 ### R8. 【运维】Redis 大键定期巡检（防患于未然）🟢
 
@@ -315,21 +239,7 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
                                             卡在预算（8月29日到期）
 ```
 
-> 🔥 已升入**第二批 #2**：唯一线上代码 bug，改动 ~10 行
-> ✅ **2026-09-07 已修复**：TokenBudgetService 改用 `ZoneId.of("Asia/Shanghai")`（buildKey + getSecondsUntilMidnight 两处），已编译验证。预算现于北京时间零点重置。
-### 8. 【AI 预算】每日预算按北京时间结算 ✅ 已完成（2026-09-07）
-
-> **2026-08-15 新增**：`TokenBudgetService` 用 JVM 默认时区（服务器容器为 UTC）计算 `ai:daily_cost:<日期>` key 和 TTL，导致**每日预算在北京时间早上 8:00 重置**，而非零点。
-
-**修复方案**：`TokenBudgetService` 中改用 `ZoneId.of("Asia/Shanghai")` 计算日期（`buildKey`）和次日零点 TTL（`getSecondsUntilMidnight`），例如：
-
-```java
-private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
-// buildKey: LocalDate.now(ZONE)
-// getSecondsUntilMidnight: ZonedDateTime.now(ZONE) → 次日 atStartOfDay(ZONE)
-```
-
-**涉及文件**：`mall-ai/mall-ai-webapi/src/main/java/com/cooxiao/mall/ai/service/TokenBudgetService.java`
+> 🔥 已升入**第二批 #2**：唯一线上代码 bug，改动 ~10 行（✅ 2026-09-07 已修复，明细见 [[TODO已完成]]）
 
 ### 9. 【学习】Redis 主从 + 哨兵高可用实验
 
@@ -580,35 +490,6 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
 **面试价值**：能讲"注解校验会静默失效（规则与触发分离），我审计出 5 个漏触发接口"——**实施中进一步发现 4 个是 DTO 本身无规则（比漏触发更早的问题），修正了原审计结论**
 
-### 24. 【安全】MySQL 密码强化 + 端口 127.0.0.1 绑定 + 容器非 root ✅ 已完成（2026-09-07，前两项）
-
-> ✅ **2026-09-07**：root 强密码 + 3306 收窄 127.0.0.1 已完成（详见顶部第一批表）。第 3 项"容器非 root"（redis/nacos 用户态）暂缓，未做。
-
-> **2026-08-28 新增（06 Q10 全量安全审计实测）**：① **MySQL root 密码仅 4 位**（.env 长度实测）——太弱，内网可爆破；② **中间件端口全映射宿主机 0.0.0.0**（Redis 6379/MySQL 3306/Nacos 8848/ES 9200/Seata 8091/RabbitMQ 5672/SkyWalking 11800...）——安全组挡了公网，但宿主机网卡全监听，纵深防御为零；③ 中间件容器以 root 运行（redis/nacos/gateway，mysql 已 500 非 root）。
-
-**方案（P1）**：
-1. .env 改 MySQL root 强密码（≥16 位随机）+ compose 同步 + 应用连接串验证
-2. compose 端口映射改 `127.0.0.1:6379:6379` 等（宿主机仅本机监听，Docker 内网不受影响——服务间走容器网络）——**零功能影响、纵深防御大幅提升**
-3. 中间件容器加非 root 用户（redis/nacos 镜像支持 -u）
-
-**面试价值**：能讲"安全审计实测出 MySQL 密码太短、端口映射过宽、容器 root"的审计深度
-
-> ✅ **第一批 #1 已于 2026-09-07 完成**：生产密钥=代码默认值 → 已换 64 字符随机密钥
-### 25. 【安全】JWT_SECRET 生产随机化 ✅ 已完成（2026-09-07）
-
-> **2026-08-28 新增（06 Q10 审计实测）**：生产 .env 的 `JWT_SECRET` **和代码默认值一样**（CooxiaoMall2026Jwt...开头）——"生产用环境变量"形同虚设，**攻击者 clone 公开仓库就能伪造任意用户 JWT**。这是当前最优先的安全项。
-
-**方案（P0，改动小）**：
-1. 生成随机强密钥（≥64 字节，如 `openssl rand -base64 48`）
-2. 更新服务器 /data/csmall/.env 的 JWT_SECRET
-3. **同步更新全部 11 个服务的配置引用**（JWT_SECRET 环境变量名不变，只换值）
-4. **全站重启 + 所有用户重新登录**（旧 token 全部失效，可接受）
-5. 验证：登录/秒杀/支付全链路 + 旧 token 被拒
-
-**注意**：换密钥 = 所有已签发 token 立即失效（用户要重新登录）——选低峰期执行；顺带把密钥版本化（kid）提上 TODO #17 P1。
-
-**面试价值**：能讲"我发现生产 JWT 密钥=代码默认值（伪造 token 风险），主动换随机密钥"——最有力的安全审计案例
-
 ### 26. 【网络】容器网络隔离：应用网/数据网分网段（2026-08-28 记录，待实施）
 
 > **2026-08-28 记录（源自 07-部署运维 Q3）**：csmall-net 是**单网段大锅烩**（21 容器全挂一个 bridge 网络），无网络隔离。企业做法：**应用网/数据网分网段**——应用（gateway/front/order...）在应用网，数据库（mysql/redis/es）在数据网，**数据网只允许应用网访问** → 网络隔离 = 纵深防御（比端口映射收窄更进一步）。
@@ -761,28 +642,6 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
 ---
 
-> ✅ **2026-09-07 完成（requeue 修复 + 订单 DLX）**：① OrderQueueConsumer 失败处理从 `basicNack(requeue=true)` 无限重试改为 **x-death 限次重试（最多 3 次）**，达上限 requeue=false；② **订单队列 DLX 已实现**——order_queue 声明 dead-letter → order_ex_dlx → order_queue_dlx，新增 `OrderDlxConsumer` 死信消费者（记录原因 + ERROR 告警）。秒杀消费者"静默丢弃"（basicAck）属 #14 P0，待修后秒杀队列再决定是否接 DLX。
-> 🟡 **第二批 #3**
-### 36. 【MQ】死信队列 DLX 评估 + 订单消费者 requeue 修复 ✅ 已完成（2026-09-07）
-
-> **2026-09-03 新增（源自 10 Q8 讨论）**：项目 MQ 可靠性"有重试没死信"——企业级五环里缺死信队列 + 可观测。
-
-**现状（代码实证）**：
-- acknowledge-mode: manual + Spring listener retry（max-attempts=3 间隔 1s，prod yml）
-- 秒杀"先落库 seckill_message_retry + MessageRetryTask 每 5s 重发（retryCount<3）"（TODO #11 低配延迟队列）
-- **全项目无 x-dead-letter 配置 = 没有死信队列**——重试耗尽仍失败的消息无归宿（丢或卡）
-- ⚠️ **OrderQueueConsumer 仍是 basicNack(requeue=true)** = 毒消息无限重试挂单（与 TODO #19 关联）
-
-**方案（P2，评估 + 待实施）**：
-1. **先修订单消费者**（最小改动）：OrderQueueConsumer 失败处理改"重试有上限或 requeue=false + 记录"，消除无限重试（配合 TODO #19 价格/库存校验）
-2. **DLX 死信队列**：业务队列声明 x-dead-letter-exchange → 重试耗尽 nack requeue=false → 死信队列 → 死信消费者记录原因/告警/人工补偿
-3. 可观测：重试次数 / DLX 堆积告警（呼应 TODO #30）
-4. 与 TODO #11（延迟队列/超时关单）评估合并考虑
-
-**面试价值**：能讲"项目有重试没死信（TODO #36）+ 订单消费者 requeue 还在（TODO #19）——企业级五环：发送确认/消费重试/DLX/可观测/幂等，缺哪环我清楚"
-
----
-
 ### 37. 【数据】测试账号密码哈希验证清理（liucs/wangkj + 造数规范）（2026-09-03 记录，待验证）
 
 > **2026-09-03 新增（源自 10-Q11 BCrypt 归因纠错实验）**：服务器实验证明 admin 登录失败的"跨平台 $2a/$2b"归因错误——真因是**测试数据哈希与声称密码不匹配**。实验时发现 **liucs/wangkj 用户仍存旧 `$2a$10$N.zmdr...` 哈希**（与 admin 当初失败的同一个），若其密码声称 123456 同样登录失败。
@@ -794,22 +653,6 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 4. **固化规范**：造测试数据的密码哈希必须 `bcrypt.checkpw(密码, 哈希)` 验证过再入库，禁止手工复制哈希（三用户同哈希 = 复制粘贴特征）
 
 **面试价值**：能讲"我推翻了自己文档里的错误归因（$2a 跨平台 → 哈希与密码不匹配），并排查出同类测试数据问题（liucs/wangkj）"
-
----
-
-> ✅ **第一批 #5 已于 2026-09-07 完成**：低成本防踩坑
-### 38. 【部署】Dockerfile 双份不一致：模块目录残留 Alpine 旧版 ✅ 已完成（2026-09-07）
-
-> **2026-09-03 新增（源自容器化部署企业级评估）**：项目存在**两份 Dockerfile**——compose 实际构建用 `deploy/docker/dockerfiles/mall-*.Dockerfile`（11 份，`FROM eclipse-temurin:21-jre` Debian 系 + 完整 JVM 参数 + SW agent，**已修复版**）；但**各模块目录下残留 11 份过期版**（`mall-sso/Dockerfile`、`mall-seckill/Dockerfile` 等，全部 `FROM eclipse-temurin:21-jre-alpine` + 无 JVM 参数 + 无 agent，**Alpine 事故旧版未删**）。
-
-**风险**：任何人（包括未来的自己）照着模块目录 Dockerfile 手动 build → **重新踩 Q12 的坑**（Alpine musl 与 MD5 不兼容，全服务崩溃）；且缺 MaxMetaspaceSize/SW agent 参数 = 运行时行为与生产不一致。
-
-**方案（低成本，建议尽快）**：
-1. **删除模块目录 11 份过期 Dockerfile**（推荐——单一事实源 = `deploy/docker/dockerfiles/`，compose 已指向它）
-2. 或保留但加注释头"⚠️ 生产勿用，以 deploy/docker/dockerfiles/ 为准"（防误用）
-3. 验证：`docker compose config` 确认全部服务 dockerfile 指向 deploy 版
-
-**面试价值**：能主动讲"我发现项目 Dockerfile 双份不一致（模块目录残留 Alpine 旧版），清理统一到单一事实源"——运维洁癖 + 防坑意识
 
 ---
 
@@ -904,40 +747,10 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
 ---
 
-## 已完成（最近追加：2026-09-07 第一批）
+## ✅ 已完成归档
 
-| # | 事项 | 完成日期 | 备注 |
-|----|------|---------|------|
-| 18 | **#25 JWT_SECRET 生产随机化** | 2026-09-07 | .env 换 64 字符随机密钥，11 容器 env 一致，admin 登录/验签/伪造拒绝全链路回归通过（执行前=代码默认值=最严重安全洞）|
-| 19 | **R7 内存优化** | 2026-09-07 | mem_limit 全 21 容器 + Nacos 堆 512m + Sentinel -Xmx256m + Swap 2G；available 2.0G→3.9G |
-| 20 | **#24 MySQL 强密码 + 端口收窄** | 2026-09-07 | root 43 位强密码（ALTER USER 双 host：localhost + %）；3306 收窄 127.0.0.1 |
-| 21 | **R1~R4 Redis 加固** | 2026-09-07 | requirepass + AOF everysec + maxmemory 256mb volatile-lru + 自定义 conf 挂载；6379 收窄 127.0.0.1。踩坑记录见 [[TODO第一批实现与原理]] §9.2/9.3/9.4 |
-| 22 | **#38 Dockerfile 双份清理** | 2026-09-07 | 11 份模块目录残留 Dockerfile 已 git rm，单一事实源 = deploy/docker/dockerfiles/ |
-
-> 📄 第一批完整原理/执行/踩坑文档：[[TODO第一批实现与原理]]；轮换操作手册：[[运维手册--密钥密码轮换]]
-
-### 第一批之前（2026-08-04 归档）
-
-| # | 事项 | 完成日期 | 备注 |
-|----|------|---------|------|
-| 1 | **ES 集群 Red 修复** | 2026-08-04 | 根因: IK 分词器丢失。安装 IK → 重试分片 → 副本清零 → cluster green |
-| 2 | **JVM 内存调优** | 2026-08-04 | Seata 2G→512M, OAP 1G→512M, 11微服务加 DirectMemory/CodeCache 限制。系统内存 93%→71% |
-| 3 | **硬编码 URL → 服务层拼接** | 2026-05 | `ImageUrlPrefixHelper` 实现，DB 存相对路径 |
-| 4 | **AI 导购商品变更自动同步** | 2026-07 | Dubbo `ISpuSyncService` → mall-product 增改商品自动同步 ES |
-| 5 | **AI 导购第四阶段：智能搜索增强** | 2026-07 | `/ai/search`(AI重排序) + `/ai/search/suggest`(自动补全) + `/ai/product/{id}/related`(相关推荐) 三个接口全部实现 |
-| 6 | **SkyWalking 全链路追踪** | 2026-07-31 | Docker 部署: 所有 11 个微服务 + OAP + UI 全部接入 |
-| 7 | **支付模块：支付宝沙箱 + 模拟支付** | 2026-07 | 策略模式 + 签名验签 + 流水记录 + 模拟开关 |
-| 8 | **调试接口清理** | — | `/admin/sso/debug` 和 `/admin/sso/hash` 已在代码中移除 |
-| 9 | **企业级升级 P0-P2** | 2026-07 | 代码规范 + 幂等 + Docker + Sentinel + MQ + 日志 + SkyWalking + CI/CD |
-| 10 | **企业级商品管理基础 CRUD** | 2026-08-04 | 属性模板 + SKU管理(含图片) + 换模板保护 + 多mapper修复 |
-| 11 | **docs/ 文档整理** | 2026-08-04 | 25个"问题解决--"移入子文件夹; 3份覆盖文档删除; init-database.bat移到根目录 |
-| 12 | **服务器权限收紧** | 2026-08-03 | ai-claude 独立账号 + sudoers 白名单 |
-| 13 | **IK 分词器持久化** | 2026-08-05 | es-plugins 目录挂载到容器, config 字典已持久化 |
-| 14 | **RabbitMQ 健康检查超时** | 2026-08-05 | timeout 5s→10s, 当前 healthy |
-| 15 | **ES 搜索数据同步** | 2026-08-05 | 新增 /search/sync 端点, 18 条商品入库 |
-| 16 | **AI 导购 Embedding 向量检索** | 2026-07 | `SiliconFlowEmbeddingClient` + `vectorSearch()` cosineSimilarity 完整实现, test 环境已启用 |
-| 17 | **秒杀 RabbitMQ 降级方案** | 2026-08 | `seckill_message_retry` 表 + `MessageRetryTask` 每5秒重试 + SeckillServiceImpl 写入, Flyway V5 |
+> **已完成（第一批 + 历史 + 第二批 #8/#36 + #14 P0/P1）已整体迁至 [[TODO已完成]]**（含第一批明细表、第一批之前的历史归档、及所有正文标"✅ 已完成"的条目）。本文件只保留未完成 / 部分完成 / 暂缓 / 评估项。
 
 ---
 
-**维护提示**: 新增待办时按优先级放入对应区块（🔴高/🟡中/🟢绿），完成后移入本表末尾。
+**维护提示**: 新增待办时按优先级放入对应区块（🔴高/🟡中/🟢绿），完成后移入 [[TODO已完成]] 末尾。
