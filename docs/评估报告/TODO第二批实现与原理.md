@@ -14,7 +14,7 @@
 | 1 | **#33** | 双索引数据不一致 | 架构债（用户可见 bug 已不成立，见 §五 复核） | ✅ **A2 落地 + 部署 + 服务器验证通过**（统一索引 + mall-search 只读降级层；AI 索引 19 条） |
 | 2 | **#8** | AI 预算按北京时间结算 | 唯一线上代码 bug | ✅ **已完成 + 已部署**（~10 行，TokenBudgetService 时区） |
 | 3 | **#36** | DLX 死信 + requeue 修复 | MQ 可靠性 | ✅ **已完成 + 已部署**（requeue 限 3 次 + 订单 DLX + OrderDlxConsumer） |
-| 4 | **#13** | Nacos 开启认证 | 安全 | ⏳ 待做（需维护窗口原子切换） |
+| 4 | **#13** | Nacos 开启认证 | 安全 | ✅ **已完成 + 已部署**（2026-09-08：JWT 认证 + 11 服务全客户端同步 + nacos 数据卷修复；实测 403/真 JWT/注册正常；见 §七·七） |
 | 5 | **#14** | Redis 主从切换防数据 | 消费者可靠性 + Redis 一致性 | ✅ **P0+P1 已完成 + 已部署**（第3层落库失败不静默 + order_type 治本 + 方案Y + 对账任务）；P2 归第三批（#9） |
 | 6 | **#29** | 数据库定期备份 | 运维底线 | ⏳ 待做（需 ecs-user 配 cron） |
 | 7 | **#23** | 漏触发接口补 @Validated | 校验静默失效 | ✅ **已完成 + 已部署**（含审计修正 + 全局异常处理器补全） |
@@ -695,9 +695,53 @@ AiController (@SentinelResource QPS 限流 + 频控)
 
 ---
 
+## 七·七、#13 Nacos 认证（已完成并部署：JWT 登录鉴权 + 全客户端同步 + 数据卷坑）
+
+### 7.7.1 认证原理（⭐ 面试可深讲）
+
+**身份模型三角色**：
+```
+Nacos Server: ① NACOS_AUTH_ENABLE=true 开鉴权 ② NACOS_AUTH_TOKEN=JWT签名密钥 ③ 用户表(nacos/<密码>)
+客户端/控制台: username+password → 登录换 accessToken(JWT) → 后续请求带 token
+服务端节点间:  NACOS_AUTH_IDENTITY_KEY/VALUE(内部暗号,防节点伪造)
+```
+
+**流程**：
+1. **登录换 token**：`POST /nacos/v1/auth/login` → 服务端校验用户表 → 用 NACOS_AUTH_TOKEN 签 JWT(HS256)返回 `{accessToken, tokenTtl=18000s, globalAdmin}`
+2. **请求带 token**：客户端把 accessToken 加到请求(URL 参数/HTTP 头)→ 服务端用同一 TOKEN 验签 → 解析用户名 → 查权限 → 失败返 **403**
+3. **无状态**:不开 session,靠 JWT 验签(与项目自身 JWT 认证同思想)
+
+**2.4+ 关键差异**:不再内置默认密码——首次开鉴权后需 `POST /nacos/v1/auth/users/admin -d password=xxx` 初始化管理员,之后客户端用 `nacos/<新密码>` 登录。实测未初始化前登录返回 `AUTH_DISABLED`(认证没开时的假响应)。
+
+### 7.7.2 三类客户端的登录透传
+
+| 客户端 | 底层登录方式 | 配置字段(已验证 SCA 2023.0.1.2 类支持) |
+|---|---|---|
+| Spring Cloud discovery | NacosDiscoveryProperties → SDK 自动登录 | `spring.cloud.nacos.discovery.username/password` |
+| Dubbo registry | RegistryConfig → NacosRegistryFactory | `dubbo.registry.username/password` |
+| Sentinel datasource | NacosDataSourceFactoryBean | `spring.cloud.sentinel.datasource.{flow,degrade}.nacos.username/password` |
+| Seata | file 模式不连 Nacos | 豁免 |
+
+**全量同步原子性**:认证一开,所有连 Nacos 组件必须同时带账号——任一漏配 = 该服务连不上直接启动失败。本次改 20+ 文件(11 discovery + 8 Dubbo + 4 Sentinel),逐一反编译确认字段存在,零试错。
+
+### 7.7.3 部署踩坑（⭐ 最值得讲的两个）
+
+| # | 坑 | 现象 → 根因 → 解法 |
+|---|---|---|
+| ① | **compose `${VAR:}` 空默认值语法错** | `docker compose up` 报 `invalid interpolation format` → 新版 compose 不支持 `${VAR:}`(空默认),要求 `${VAR:-}` 或无默认 `${VAR}` → 改 `${NACOS_AUTH_TOKEN}`(无默认,缺 .env 值时报错提醒) |
+| ② | **nacos 无数据卷 → 重建丢配置** | 重建 nacos 后 derby 数据全丢(6 条 Sentinel 规则 dataId 变 not exist;derby seg0 时间戳=重建时刻)→ **不是客户端覆盖坑**(那是 datasource 拉空清本地),而是**服务端数据卷未持久化**:nacos 是唯一没挂 volumes 的中间件(mysql/redis/es 都有 `xxx_data:/data`),derby 存在容器可写层,`docker compose up --build` recreate 即丢 → 补 `nacos_data:/home/nacos/data` 卷 + 从仓库 JSON 重建规则 |
+
+**为什么规则能秒级恢复**(印证"配置入库"决策):6 条 dataId 的 JSON 全在 `deploy/docker/sentinel/`,curl content 重建 2 分钟;Sentinel datasource listener 自动热更新(服务无需重启,14:13:55 notify-ok 实证)。
+
+### 7.7.4 面试话术
+
+**主线**："#13 我给 Nacos 开了认证。Nacos 用 JWT 做无状态鉴权：客户端 username/password 登录换 accessToken,后续请求带 token,服务端用 NACOS_AUTH_TOKEN 验签——和我项目自己的 JWT 认证同思想。2.4+ 有个变化：不再内置默认密码,开鉴权后必须先初始化管理员。**难点是客户端全量同步**——认证一开,所有连 Nacos 的组件必须同时配账号：Spring Cloud discovery、Dubbo registry、Sentinel datasource 三类客户端,字段名不同但我逐一反编译确认支持;Seata 是 file 模式不连 Nacos 豁免。任一漏配 = 该服务直接起不来,所以这是原子变更。部署时踩了两个坑：一是新版 compose 不支持 `${VAR:}` 空默认写法,二是发现 **nacos 是唯一没挂数据卷的中间件**——重建容器 derby 配置全丢。这个坑验证了'配置入库'的价值：6 条规则从仓库 JSON 两分钟重建,Sentinel listener 自动热更新,服务都不用重启。"
+
+---
+
 ## 八、第二批通用面试话术（贯穿主线）
 
-**主线叙事**："第二批我按'收益/成本/独立性'排序做了代码批：#8 修了 AI 预算 8:00 重置的时区 bug（10 行）；#23 做了一轮校验审计——过程中修正了原审计'漏触发 vs 没规则'的混淆，补了 5 个 DTO 规则 + 类级/参数级 @Validated，还发现并补全了全局异常处理器对 MethodArgumentNotValidException 的缺失（否则校验失败会返回 500 而不是 400）；#36 把订单消费者的无限 requeue 改成 x-death 限次重试，并补了 DLX 死信链路——期间踩了 RabbitMQ 队列参数不可变（406 PRECONDITION_FAILED）的坑；#14 处理 Redis 与 DB 库存一致性——推翻了自己第一版'付款前查库存'方案（语义缺陷），改为方案Y查'本单成交'，补 order_type 治本，第3层改静默丢弃为三兜底，最后落地 P1 对账任务（运行期轻量 + 凌晨全量）；#5 审计发现 Sentinel 规则实际全空、秒杀限流失效，统一到 Nacos 管理并修复 transport 懒加载。这些线都踩了认知坑：时区不能依赖环境、DTO 校验有表达边界（or/跨字段）、自定义容器工厂会绕过 Spring retry、MQ 队列声明是一次性的、'查剩余库存'不可区分本单归属、规则权威源只能有一个、transport 懒加载≠规则不生效。"
+**主线叙事**："第二批我按'收益/成本/独立性'排序做了代码批：#8 修了 AI 预算 8:00 重置的时区 bug（10 行）；#23 做了一轮校验审计——修正了原审计'漏触发 vs 没规则'的混淆，补 DTO 规则 + 全局异常处理器；#36 把订单消费者的无限 requeue 改成 x-death 限次重试 + DLX 死信；#14 处理 Redis 与 DB 库存一致性——推翻'付款前查库存'改方案Y查'本单成交'，补 order_type，落 P1 对账；#5 审计发现 Sentinel 规则全空、秒杀限流失效，统一 Nacos 管理 + eager 修 transport 懒加载；#2+#34 给 AI 做三层防护（QPS 限流 + Semaphore 并发闸门 + 频控），核心是闸门挂 LLM 调用汇聚点；#13 给 Nacos 开 JWT 认证 + 全客户端同步，过程中发现 nacos 没挂数据卷重建丢配置的隐患并修复。这些线都踩了认知坑：时区不能依赖环境、DTO 校验有表达边界、自定义容器工厂绕过 Spring retry、MQ 队列声明一次性、'查剩余库存'不可区分本单归属、规则权威源只能有一个、transport 懒加载≠规则不生效、compose `${VAR:}` 空默认语法、中间件必须挂数据卷。"
 
 **被追问"为什么不等公司方案"时**：个人项目我是 owner，但每个决策对齐企业做法（DLX/发送确认/kid 轮换/审计先行/对账分层），说明知道生产标准与当前取舍。
 
