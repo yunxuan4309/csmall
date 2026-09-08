@@ -19,7 +19,7 @@
 | 6 | **#29** | 数据库定期备份 | 运维底线 | ⏳ 待做（需 ecs-user 配 cron） |
 | 7 | **#23** | 漏触发接口补 @Validated | 校验静默失效 | ✅ **已完成 + 已部署**（含审计修正 + 全局异常处理器补全） |
 | 8 | **#5** | Sentinel 能力补齐 | 面试价值 | ✅ **P0 已完成 + 已部署**（2026-09-08 晚：统一 Nacos 管理 + eager 修复懒加载，实测 429 生效）；P1 热点/P2 集群待做（见 §六） |
-| 9 | **#2+#34** | AI 接口限流 + 并发闸门 | AI 承载 | 🟡 **代码批完成待部署**（2026-09-08：Sentinel 3 组规则 + Semaphore 并发闸门=20 + 每用户频控；见 §七·六） |
+| 9 | **#2+#34** | AI 接口限流 + 并发闸门 | AI 承载 | ✅ **已完成 + 已部署**（2026-09-08：Sentinel 3 组规则 + Semaphore 并发闸门=20 + 每用户频控；实测 30 并发 → 10×200+20×429 无 500；见 §七·六） |
 
 **执行顺序**：代码批（#8→#23→#36→#14→#33 全部完成）✅ → **部署服务器（2026-09-08 已完成）** ✅ → **#5 P0（2026-09-08 晚完成并部署）** ✅ → 剩余待做 #13/#29（运维批）→ #2+#34（设计批）。第一批已证明"先本地改 → 编译验证 → 维护窗口部署"的节奏有效。
 
@@ -635,7 +635,7 @@ Dubbo 消费者按**接口**引用(`providers:com.cooxiao.mall.product.*` 接口
 
 ---
 
-## 七·六、#2+#34 AI 限流 + 并发闸门（代码批完成：Sentinel 3 组规则 + Semaphore 闸门 + 每用户频控）
+## 七·六、#2+#34 AI 限流 + 并发闸门（已完成并部署：Sentinel 3 组规则 + Semaphore 闸门 + 每用户频控）
 
 ### 7.6.1 问题本质：AI 高并发 ≠ 秒杀高并发（⭐ 面试核心认知）
 
@@ -672,6 +672,20 @@ AiController (@SentinelResource QPS 限流 + 频控)
              ├→ service 内 try-catch → 既有降级（Search→纯ES"已按关键词排序" / Ask→busy VO / SSE→error事件）
              └→ Controller 直抛 → AiBusyExceptionAdvice → 429 JSON
 ```
+
+### 7.6.3.5 部署实测与两坑（2026-09-08 服务器验证）
+
+**实测结果**：
+- 30 并发 `/ai/search` → **10×200 + 20×429**（ai-reason QPS=10 精确生效，无 500）
+- 单用户连打 15 次 /ai/ask → **全 429** + 日志 `【AI每用户频控】userId=1 已调用 15 次/60s，超限 10 次`
+- 单次调用正常（state=200）
+
+**部署踩两坑（⭐ 面试可讲）**：
+
+| # | 坑 | 现象 → 根因 → 解法 |
+|---|---|---|
+| ① | **pom 缺 sentinel-datasource-nacos** | 启动崩 `ClassNotFoundException: NacosDataSource` → yml 配了 Nacos datasource 但 mall-ai pom 只加了 starter（order/sso 在 #5 加过，mall-ai 遗漏）→ 补依赖。教训：**新增 datasource 配置必须同步加依赖**，缺了启动即崩（非运行时） |
+| ② | **blockHandler 签名缺原参数** | 首测 30 并发出现 **20×500**（应 429）→ blockHandler 只写 `(BlockException e)`，Sentinel 反射要求 = **原方法全部参数 + BlockException**（与 order/seckill 写法一致），找不到匹配 → FlowException 落全局 Throwable → 500 → 每接口专属签名（`searchBlock(SearchDTO, BlockException)`）+ 泛型 busyResult。教训：**Sentinel blockHandler 不是"任意签名 + BlockException"就行，必须精确匹配原方法参数**；500 而非 429 是"blockHandler 没接住"的典型信号 |
 
 ### 7.6.4 面试话术
 
