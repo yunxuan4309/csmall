@@ -46,6 +46,7 @@
 | #30 | Prometheus + 告警 | 根治静默故障 |
 | #16/#22/#26 | TraceId 落日志 / CORS 收敛 / 网络隔离 | 企业级细节 |
 | #35 | 统一 Jackson（替换 fastjson） | 安全 + 规范 |
+| **#45** | **统一 Dubbo 应用名规范**（front/search/ams 仍撞名但无 provider） | 规范项：3 模块 `dubbo.application.name` = spring 名，但**不暴露 @DubboService**（无 20880 实例，lb:// 实测安全）→ 本次不改（避免回归面）；统一为 `*-dubbo` 后缀防未来加 provider 时踩坑 |
 
 ### ⏸️ 明确暂缓/仅评估（不实现，面试讲认知即可）
 
@@ -200,19 +201,23 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 
 ---
 
-### 6. 【网关】mall-product Dubbo 应用名撞名 → lb:// 混入 Dubbo 实例（2026-08-28 评估，待实施）
+### 6. 【网关】Dubbo 应用名撞名 → lb:// 混入 Dubbo 实例 ✅ 已修复（2026-09-08 全项目排查）
 
+> ✅ **2026-09-08 完成（从 mall-product 扩展为全项目排查 + 3 模块修复）**：
+> - **触发**：生产实测 bug——用户"商品列表→秒杀→商品列表→秒杀"第二次进秒杀报 **500**，gateway 日志 `invalid version format: UNSUPPORTED` + `R:172.18.0.20:20880` = lb://mall-seckill 轮询打到 Dubbo 端口（第一次 HTTP 成功、第二次 Dubbo 失败 = 轮询交替）
+> - **排查方法**：gateway `lb://` 路由 × Nacos 实例列表 × `@DubboService` 扫描三向对照，揪出所有"暴露 Dubbo + 撞名"的模块
+> - **修复**：3 模块 dubbo 应用名分离（prod+test 对齐）：
+>   - `mall-seckill`: `mall-seckill` → `mall-seckill-dubbo`（本次 500 根因）
+>   - `mall-ums`: `mall-ums` → `mall-ums-dubbo`（UserServiceImpl 暴露 Dubbo，潜伏隐患）
+>   - `mall-product`: `mall-product` → `mall-product-dubbo`（原 #6 主角，曾用直连 9010 规避）
+> - **无需改**：mall-ai/order 本就是 `*-dubbo`；mall-front/search/ams **撞名但无 @DubboService**（不注册 20880，Nacos 实测仅 HTTP 实例，lb:// 安全）→ 统一规范放 TODO #45（第三批）
+> - **验证**：Nacos `mall-seckill`/`mall-ums`/`mall-product` 服务名下只剩 HTTP 实例，20880 移入 `*-dubbo` 名下；Dubbo 消费者按接口引用不受影响
+>
 > **2026-08-28 新增（Nacos 实例列表实测确认）**：`mall-product` 服务下有 **2 个实例** = `172.18.0.19:20880`（Dubbo provider，`protocol=dubbo`）+ `172.18.0.19:9010`（Spring Cloud HTTP）→ 网关 `lb://mall-product` 轮询**一半请求打到 Dubbo 端口**（非 HTTP 协议）报错。这是 prod pms 路由直连 `http://mall-product:9010` 的**真实原因**（配置注释："直连 HTTP 端口，避免 Nacos 混入 Dubbo 20880"）。
 
-**根因**：`mall-product` 的 `dubbo.application.name` 与 `spring.application.name` 都叫 `mall-product`（**撞名**）→ Dubbo 3.x 应用级注册把 20880 实例混进同一服务名。对比 `mall-order`：dubbo 应用名 `mall-order-dubbo`（分开）→ "mall-order" 服务下只有 HTTP 实例，lb:// 安全。
+**根因**：`dubbo.application.name` 与 `spring.application.name` 撞名 → Dubbo 3.x 应用级注册把 20880 实例混进同一服务名。对比 `mall-order`：dubbo 应用名 `mall-order-dubbo`（分开）→ "mall-order" 服务下只有 HTTP 实例，lb:// 安全。
 
-**方案（待实施，改动小风险低）**：
-1. 改 `mall-product-webapi` 的 application-{prod,test,dev}.yml：`dubbo.application.name: mall-product` → `mall-product-dubbo`（三环境对齐）
-2. 验证 Nacos：`curl "http://localhost:8848/nacos/v1/ns/instance/list?serviceName=mall-product"` → 应只剩 9010 实例
-3. 可选：网关 pms 路由改回 `lb://mall-product`（去掉直连特例，统一风格）
-4. 回归：后台商品管理（/pms/**）+ 前台商品 Dubbo 链路（消费者按**接口**引用，不受应用名影响；`providers:com.cooxiao.mall.product.*` 接口级注册不随应用名变）
-
-**影响**：改后 lb:// 恢复可用；风险低（仅注册名变更）；不做也不影响现状（直连可用），只是路由风格不统一 + 多副本时会踩坑。
+**后续（可选）**：gateway pms 路由可改回 `lb://mall-product`（去掉直连特例，统一风格）——product 改名后已无 Dubbo 混入，直连 9010 仍可用不必急改。
 
 ---
 
@@ -770,6 +775,18 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 4. 验证：本地 `embedding-enabled: true` 向量检索正常（/ai/syncAll 能向量化）
 
 > **教训**：API key 绝不硬编码进 yml/代码；test 环境也要用占位符 + 环境变量注入。已改占位符见 commit c0d7209。
+
+---
+
+### 45. 【规范】统一 Dubbo 应用名（front/search/ams 撞名但无 provider，2026-09-08 记录，第三批）
+
+> **2026-09-08 记录（源自 #6 全项目排查）**：修复 seckill/ums/product 撞名时，发现 **mall-front / mall-search / mall-ams** 的 `dubbo.application.name` 与 `spring.application.name` 相同（撞名），但三者**均无 @DubboService 暴露**（不注册 20880 provider 实例）→ Nacos 实测仅 HTTP 实例、gateway `lb://` 安全，**无实际风险，本次不改**（避免无谓回归面）。
+
+**统一规范（第三批，未来顺手做）**：三个模块 dubbo 名加 `-dubbo` 后缀（prod/test 对齐），与 order/ai/seckill/ums/product 一致——**防未来给这些模块加 Dubbo provider 时重新踩 #6 坑**（加 provider 瞬间 20880 混入现有服务名，lb:// 立刻 500）。
+
+**涉及文件**：mall-front-webapi / mall-search-webapi / mall-ams-webapi 的 application-{prod,test}.yml（各 2 处 dubbo.application.name）。
+
+**面试价值**：能讲"我排查 #6 时发现 3 个模块撞名但无 provider——当时没风险所以没动，但记了规范项防未来加 provider 时踩坑"，展示"按风险分级处理 + 前瞻性记录"。
 
 ---
 

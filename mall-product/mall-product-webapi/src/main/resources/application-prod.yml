@@ -38,7 +38,10 @@ spring:
 
 dubbo:
   application:
-    name: mall-product
+    # ⚠️ 不能与 spring.application.name(mall-product)撞名：Dubbo 3.x 应用级注册会把 20880 混进
+    # mall-product 服务名（历史：gateway 曾因 lb://mall-product 轮询打到 Dubbo 端口，改直连 9010 规避）
+    # → 本修复根治撞名（TODO #6，2026-09-08），改名后 gateway 可改回 lb://mall-product
+    name: mall-product-dubbo
   protocol:
     port: -1
     name: dubbo

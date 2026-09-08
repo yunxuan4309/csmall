@@ -54,7 +54,8 @@ spring:
 
 dubbo:
   application:
-    name: mall-seckill
+    # 与 prod 对齐：避免与 spring.application.name 撞名导致 lb:// 混入 Dubbo 实例（TODO #6）
+    name: mall-seckill-dubbo
   protocol:
     port: -1
     name: dubbo

@@ -31,7 +31,8 @@ spring:
       password:
 dubbo:
   application:
-    name: mall-ums
+    # 与 prod 对齐：避免与 spring.application.name 撞名导致 lb:// 混入 Dubbo 实例（TODO #6）
+    name: mall-ums-dubbo
   protocol:
     port: -1
     name: dubbo

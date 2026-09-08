@@ -74,7 +74,10 @@ spring:
 
 dubbo:
   application:
-    name: mall-seckill
+    # ⚠️ 不能与 spring.application.name(mall-seckill)撞名：否则 Dubbo 3.x 应用级注册
+    # 会把 20880 实例混进 mall-seckill 服务名 → gateway lb://mall-seckill 轮询一半打到 Dubbo 端口
+    # → 500 invalid version format: UNSUPPORTED（与 mall-product 同类问题，TODO #6，2026-09-08 修复）
+    name: mall-seckill-dubbo
   protocol:
     port: -1
     name: dubbo

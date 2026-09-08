@@ -598,6 +598,43 @@ Web 前端：正常走 /ai/search → AI 失败/超时 → fallback 调 /search
 
 ---
 
+## 七·五、突发小插曲：秒杀页二次进入 500（Dubbo 应用名撞名，TODO #6 全项目修复）
+
+> **2026-09-08 晚，部署 #5 后用户实测发现**：商品列表 → 秒杀 → 商品列表 → 秒杀，**第二次进秒杀报 500**（浏览器先 404 后 500，`seckill/spu/list` 持续失败）。属于第二批部署后的**回归/隐藏 bug 排查**，快速定位并修复。
+
+### 现象与排查链
+
+| 步骤 | 证据 | 结论 |
+|---|---|---|
+| ① 看 seckill 日志 | 无 ERROR、无业务异常 | 不是应用层代码问题 |
+| ② 看 gateway 日志 | **`500 Server Error for HTTP GET /seckill/spu/list` + `java.lang.IllegalArgumentException: invalid version format: UNSUPPORTED` + `R:172.18.0.20:20880`** | gateway 把请求转发到了 **Dubbo 端口 20880**(非 HTTP 协议) |
+| ③ 查 Nacos 实例 | `mall-seckill` 服务下有 **2 实例: 10007(HTTP) + 20880(Dubbo)** | gateway `lb://mall-seckill` 轮询,一半请求打到 Dubbo 端口 |
+| ④ 对照代码 | seckill `dubbo.application.name` = `mall-seckill` = spring 名(**撞名**);order 用 `mall-order-dubbo`(分开,安全) | **根因 = TODO #6 同类问题,发生在 mall-seckill** |
+
+**"第一次成功、第二次 500"的机理**：gateway 的 `lb://` 是**轮询负载均衡**——第 1 次请求路由到 10007(HTTP 成功),第 2 次轮到 20880(Dubbo,非 HTTP 协议握手失败 → 500)。不是"第二次才出问题",是**交替命中**时用户恰好观察到失败。
+
+### 全项目排查(不止修一个)
+
+gateway `lb://` 路由 × Nacos 实例列表 × `@DubboService` 扫描三向对照,揪出全部"暴露 Dubbo + 撞名"模块:
+
+| 模块 | 撞名? | 暴露 @DubboService? | 处理 |
+|---|---|---|---|
+| mall-seckill | ⚠️ | ✅ (ForOrderSeckillRecord) | ✅ 改 `mall-seckill-dubbo` |
+| mall-ums | ⚠️ | ✅ (UserServiceImpl) | ✅ 改 `mall-ums-dubbo`(潜伏隐患,一并修) |
+| mall-product | ⚠️ | ✅ (7 个 service) | ✅ 改 `mall-product-dubbo`(原 #6 主角,曾用直连 9010 规避) |
+| mall-ai / mall-order | 已分开 | ✅ | 不用动(本就是 `*-dubbo`) |
+| mall-front/search/ams | ⚠️ | ❌ **无 provider** | **不用改**(不注册 20880,Nacos 实测仅 HTTP 实例,lb:// 安全)→ 统一规范入 TODO #45(第三批) |
+
+### 为什么改注册名不影响调用方(关键认知)
+
+Dubbo 消费者按**接口**引用(`providers:com.cooxiao.mall.product.*` 接口级注册),**不依赖应用名**——order/ai 早就是 `*-dubbo` 独立名且全链路正常,是现成验证。改名只影响 Nacos 里"服务名 → 实例"的组织:HTTP 实例留在 spring 名下(供 gateway lb://),Dubbo 20880 移到 `*-dubbo` 名下(供接口级消费发现)。
+
+### 面试话术
+
+"部署后用户反馈秒杀页第二次进入 500——排查 gateway 日志发现 `invalid version format: UNSUPPORTED` 且目标是 **20880 端口**,立刻明白是 `lb://` 轮询把请求打到了 Dubbo 端口。根因是 **Dubbo 应用名与 Spring 应用名撞名**,Dubbo 3.x 应用级注册把 20880 混进服务名。我做的不只是修 seckill,而是**全项目排查**:gateway lb:// 路由 × Nacos 实例 × @DubboService 三向对照,发现 ums 也撞名且有 provider(潜伏隐患)一并修,product 是历史遗留(曾用直连规避)也根治;front/search/ams 虽撞名但无 provider 不构成风险,记为规范项防未来踩坑。这个排查思路——'不只是修当前故障,而是按故障模式全量清查'——比单点修复更有价值。"
+
+---
+
 ## 八、第二批通用面试话术（贯穿主线）
 
 **主线叙事**："第二批我按'收益/成本/独立性'排序做了代码批：#8 修了 AI 预算 8:00 重置的时区 bug（10 行）；#23 做了一轮校验审计——过程中修正了原审计'漏触发 vs 没规则'的混淆，补了 5 个 DTO 规则 + 类级/参数级 @Validated，还发现并补全了全局异常处理器对 MethodArgumentNotValidException 的缺失（否则校验失败会返回 500 而不是 400）；#36 把订单消费者的无限 requeue 改成 x-death 限次重试，并补了 DLX 死信链路——期间踩了 RabbitMQ 队列参数不可变（406 PRECONDITION_FAILED）的坑；#14 处理 Redis 与 DB 库存一致性——推翻了自己第一版'付款前查库存'方案（语义缺陷），改为方案Y查'本单成交'，补 order_type 治本，第3层改静默丢弃为三兜底，最后落地 P1 对账任务（运行期轻量 + 凌晨全量）；#5 审计发现 Sentinel 规则实际全空、秒杀限流失效，统一到 Nacos 管理并修复 transport 懒加载。这些线都踩了认知坑：时区不能依赖环境、DTO 校验有表达边界（or/跨字段）、自定义容器工厂会绕过 Spring retry、MQ 队列声明是一次性的、'查剩余库存'不可区分本单归属、规则权威源只能有一个、transport 懒加载≠规则不生效。"
