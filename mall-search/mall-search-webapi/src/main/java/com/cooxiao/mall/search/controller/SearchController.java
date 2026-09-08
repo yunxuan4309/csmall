@@ -1,77 +1,46 @@
 package com.cooxiao.mall.search.controller;
 
-import com.cooxiao.mall.common.restful.JsonPage;
 import com.cooxiao.mall.common.restful.JsonResult;
-import com.cooxiao.mall.pojo.search.entity.SpuEntity;
-import com.cooxiao.mall.pojo.search.entity.SpuForElastic;
+import com.cooxiao.mall.pojo.ai.vo.SearchResultVO;
 import com.cooxiao.mall.search.service.ISearchService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiImplicitParam;
 import io.swagger.annotations.ApiImplicitParams;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * @author=java.cooxiao.com QQ:25380243
- * @since=2024/9/26
+ * 普通搜索控制器（TODO #33 方案 A2 改造后）
+ *
+ * <p>mall-search 定位 = <b>只读统一索引的普通搜索降级层</b>：
+ * <ul>
+ *   <li>GET /search —— 普通关键词召回（纯 ES multi_match，零 AI/LLM 依赖，毫秒级）</li>
+ *   <li>已移除：/search/sync（不再自建索引，无需手动全量同步）、/search/byLogstash（死代码）</li>
+ *   <li>返回结构与 /ai/search 同构（SearchResultVO），前端 fallback 零适配</li>
+ * </ul>
  */
 @RestController
 @RequestMapping("/search")
-@Api(tags = "搜索模块")
+@Api(tags = "搜索模块（普通搜索降级层）")
 public class SearchController {
-    //通过手写代码查询es
+
     @Autowired
-    @Qualifier("searchServiceImpl")
     private ISearchService searchService;
 
-    //通过logstash查询es数据
-    @Autowired
-    @Qualifier("searchRemoteServiceImpl")
-    private ISearchService searchRemoteServiceImpl;
-
-    //以下是查询将数据库的手动存入es中;
-    // 当前方法注解@GetMapping后面什么都不写
-    // 表示当前方法使用类上的路径做url
-    // localhost:10008/search
-
     @GetMapping()
-    @ApiOperation("根据用户输入的关键字分页查询商品信息:手动查询ES")
+    @ApiOperation("普通关键词搜索：只读统一索引，纯 ES 召回（AI 搜索的进程级降级通道）")
     @ApiImplicitParams({
-            @ApiImplicitParam(value = "搜索关键字",name="keyword",example = "手机"),
-            @ApiImplicitParam(value = "页码",name="page",example = "1"),
-            @ApiImplicitParam(value = "每页条数",name="pageSize",example = "2")
+            @ApiImplicitParam(value = "搜索关键词", name = "keyword", example = "手机"),
+            @ApiImplicitParam(value = "页码", name = "page", example = "1"),
+            @ApiImplicitParam(value = "每页条数", name = "pageSize", example = "10")
     })
-    public JsonResult<JsonPage<SpuForElastic>> searchByKeyword(
-            String keyword,Integer page,Integer pageSize){
-        JsonPage<SpuForElastic> jsonPage=
-                searchService.search(keyword, page, pageSize);
-        return JsonResult.ok(jsonPage);
-    }
-
-    @GetMapping("/sync")
-    @ApiOperation("从数据库同步全部商品到 ES")
-    public JsonResult<String> syncAll() {
-        searchService.loadSpuByPage();
-        return JsonResult.ok("同步完成");
-    }
-
-    //以下是查询数据中的数据,通过logStash存入es中
-    @GetMapping("/byLogstash")
-    @ApiOperation("根据用户输入的关键字分页查询商品信息:logstash查询ES")
-    @ApiImplicitParams({
-            @ApiImplicitParam(value = "搜索关键字",name="keyword",example = "手机"),
-            @ApiImplicitParam(value = "页码",name="page",example = "1"),
-            @ApiImplicitParam(value = "每页条数",name="pageSize",example = "2")
-    })
-    public JsonResult<JsonPage<SpuEntity>> searchByKeywordByLogStash(
-            String keyword,Integer page,Integer pageSize){
-        JsonPage<SpuEntity> jsonPage=
-                searchRemoteServiceImpl.searchByLogStash(keyword, page, pageSize);
-        return JsonResult.ok(jsonPage);
+    public JsonResult<SearchResultVO> searchByKeyword(
+            String keyword, Integer page, Integer pageSize) {
+        SearchResultVO result = searchService.search(keyword, page, pageSize);
+        return JsonResult.ok(result);
     }
 
 }

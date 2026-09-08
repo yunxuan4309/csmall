@@ -14,13 +14,19 @@ seata:
 
 cooxiao:
   ai:
-    api-key: ${AI_API_KEY:sk-placeholder}
+    # API Key 兼容两个环境变量名：生产 .env 用 AI_API_KEY；本地系统/用户变量用 DEEPSEEK_API_KEY。
+    # 嵌套占位符：AI_API_KEY 优先，其次 DEEPSEEK_API_KEY，都缺才回退占位符（启动即暴露配置问题）。
+    # ⚠️ Spring Boot 不自动读取 .env 文件——本地开发请在 IDE Run Configuration 注入环境变量，
+    #    或用系统/用户环境变量（本机用户级已有 DEEPSEEK_API_KEY）。踩坑记录见 TODO 第二批 §5.4.5。
+    api-key: ${AI_API_KEY:${DEEPSEEK_API_KEY:sk-placeholder}}
     base-url: ${AI_API_BASE_URL:https://api.deepseek.com}
     chat-model: deepseek-v4-flash
     compare-model: deepseek-v4-flash
     temperature: 0.7
     max-tokens: 2000
-    timeout: 15000
+    # LLM HTTP 调用超时：deepseek-v4-flash 是 reasoning 模型（先思考后回答），
+    # 意图提取/AI 重排等完整生成常需 15-30s，15s 会导致 AI 重排 Read timed out 频繁降级
+    timeout: 60000
     # Embedding 向量检索（硅基流动 BGE-M3，免费）
     embedding-enabled: false
     embedding-api-key: ${EMBEDDING_API_KEY:sk-placeholder}

@@ -60,8 +60,8 @@ public class ResourceWebSecurityConfiguration {
                         "/swagger-resources/**",
                         "/v2/api-docs/**",
                         "/v3/api-docs/**",
-                        "/doc.html",
-                        "/search/sync").permitAll()
+                        "/doc.html").permitAll()
+                // /search（普通搜索）需要登录——与 /ai/search 鉴权一致（TODO #33 方案 A2：前端 fallback 带 token 可访问）
                 .anyRequest().authenticated()
         );
         http.exceptionHandling(exception -> exception

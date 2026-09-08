@@ -96,9 +96,18 @@ public class SearchServiceImpl {
             String candidateText = buildCandidateList(candidates);
             String prompt = String.format(SEARCH_PROMPT, keyword, candidates.size(),
                     RERANK_RESULT, candidateText);
-            String aiResponse = aiClient.chat(
-                    "你是专业的电商导购，以JSON格式回复。", prompt);
-            JSONObject aiJson = JSON.parseObject(aiResponse);
+            // jsonMode=true：约束 deepseek-v4-flash（reasoning 模型）输出纯 JSON，
+            // 与意图提取（extractSearchIntent）同款——否则模型自由发挥返回非 JSON，parseObject 得 null
+            String aiResponse = aiClient.chatWithModel(
+                    "你是专业的电商导购，只输出 JSON 不要其他内容。", prompt, aiProperties.getChatModel(), true);
+            // 清理 AI 可能输出的 markdown 包裹（```json ... ```）
+            if (aiResponse != null) {
+                aiResponse = aiResponse.trim();
+                if (aiResponse.startsWith("```")) {
+                    aiResponse = aiResponse.replaceAll("```json?", "").replace("```", "").trim();
+                }
+            }
+            JSONObject aiJson = aiResponse == null || aiResponse.isBlank() ? null : JSON.parseObject(aiResponse);
             rankedIds = aiJson.getJSONArray("rankedIds")
                     .stream().map(o -> ((Number) o).longValue()).toList();
             explanation = aiJson.getString("explanation");

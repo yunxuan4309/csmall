@@ -16,11 +16,8 @@
             <artifactId>mall-search-service</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>com.cooxiao.mall</groupId>
-            <artifactId>mall-product-service</artifactId>
-            <version>${project.version}</version>
-        </dependency>
+        <!-- 注：mall-product-service 依赖已移除（TODO #33 方案 A2：mall-search 改为只读统一索引，
+             不再经 Dubbo 拉取商品做自建索引同步）-->
         <!-- Spring Boot Web：WEB应用 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -43,12 +43,20 @@ public class VectorSyncServiceImpl {
 
     /**
      * 全量同步所有商品到 ES
+     * 1. 从 DB 拉取全量"有效"SPU（checked=1 && published=1 && deleted=0，由 product 侧 getSpuByPage 过滤）
+     * 2. 批量 upsert 到 ES
+     * 3. 末尾清理：ES 中已存在、但 DB 已下架/删除/失效的文档（防止残留可被搜到）
      */
     public int syncAll() {
         List<Spu> allSpus = getAllSpus();
 
         if (allSpus.isEmpty()) {
-            log.warn("没有找到任何商品数据");
+            // 边界：DB 无有效商品时不清空逻辑也应走——ES 可能残留已失效文档，统一交给 cleanupInvalidDocs 清洗
+            log.warn("DB 无有效商品，跳过 upsert，仅执行索引清理");
+            int cleaned = cleanupInvalidDocs(allSpus);
+            if (cleaned > 0) {
+                log.warn("全量同步末尾清理：从 ES 删除 {} 个已失效商品文档", cleaned);
+            }
             return 0;
         }
 
@@ -90,16 +98,49 @@ public class VectorSyncServiceImpl {
         }
 
         log.info("商品同步完成，共 {} 条", synced);
+        // 4. 末尾清理：删除索引中 DB 已失效的文档（TODO #33：只 upsert 不 delete 的残留修正）
+        int cleaned = cleanupInvalidDocs(allSpus);
+        if (cleaned > 0) {
+            log.warn("全量同步末尾清理：从 ES 删除 {} 个已失效商品文档", cleaned);
+        }
         return synced;
     }
 
     /**
-     * 同步指定 SPU
+     * 同步指定 SPU（TODO #33 同步模型补全）
+     * 以 DB 业务状态为准：仅 checked=1 && published=1 && deleted=0 的 SPU 写入 ES；
+     * 其余（未审核/已下架/已删除/不存在）一律从 ES 删除——保证"索引里能搜到的都是有效在售商品"
      */
     public void syncSpu(Long spuId) {
-        SpuStandardVO spu = spuService.getSpuById(spuId);
+        if (spuId == null) {
+            log.warn("syncSpu 收到空 spuId，忽略");
+            return;
+        }
+        SpuStandardVO spu;
+        try {
+            spu = spuService.getSpuById(spuId);
+        } catch (Exception e) {
+            // 仅当"业务确认不存在"（NOT_FOUND）才从 ES 删除兜底；
+            // Dubbo 网络超时/序列化等基础设施异常保守放行（不误删正常商品，留待下次同步或全量清洗）
+            if (isNotFound(e)) {
+                log.warn("SPU {} 业务确认不存在，从 ES 删除兜底: {}", spuId, e.getMessage());
+                deleteSpu(spuId);
+            } else {
+                log.warn("SPU {} 查询异常（疑似基础设施故障），保守放行不删除: {}", spuId, e.getMessage());
+            }
+            return;
+        }
         if (spu == null) {
-            log.warn("SPU {} 不存在", spuId);
+            log.warn("SPU {} 不存在，从 ES 删除兜底", spuId);
+            deleteSpu(spuId);
+            return;
+        }
+
+        // 状态校验：不满足"已审核 + 已上架 + 未删除"则从 ES 删除（防下架/未审核商品被搜到）
+        if (!isSearchable(spu)) {
+            log.info("SPU {} 状态不可搜索(checked={}, published={}, deleted={})，从 ES 删除",
+                    spuId, spu.getChecked(), spu.getPublished(), spu.getDeleted());
+            deleteSpu(spuId);
             return;
         }
 
@@ -115,6 +156,91 @@ public class VectorSyncServiceImpl {
             log.info("SPU {} 同步完成", spuId);
         } catch (Exception e) {
             log.error("SPU {} 同步失败", spuId, e);
+        }
+    }
+
+    /**
+     * 从 ES 删除指定 SPU 文档（幂等：不存在也返回成功）
+     */
+    public void deleteSpu(Long spuId) {
+        if (spuId == null) {
+            return;
+        }
+        try {
+            esClient.delete(d -> d
+                    .index(INDEX_NAME)
+                    .id(String.valueOf(spuId)));
+            log.info("SPU {} 已从 ES 删除", spuId);
+        } catch (Exception e) {
+            log.warn("SPU {} 从 ES 删除失败（可能是 404 不存在，幂等无碍）: {}", spuId, e.getMessage());
+        }
+    }
+
+    // ========== 状态判定与清理 ==========
+
+    private boolean isSearchable(SpuStandardVO spu) {
+        return Integer.valueOf(1).equals(spu.getChecked())
+                && Integer.valueOf(1).equals(spu.getPublished())
+                && !Integer.valueOf(1).equals(spu.getDeleted());
+    }
+
+    /**
+     * 识别"业务确认不存在"异常（NOT_FOUND），用于区分：SPU 真不存在（可删） vs 基础设施故障（Dubbo 超时等，不删）
+     * Dubbo 跨服务异常可能被包装多层（RpcException → cause），需遍历 cause 链
+     */
+    private boolean isNotFound(Throwable t) {
+        Throwable cur = t;
+        while (cur != null) {
+            if (cur instanceof com.cooxiao.mall.common.exception.CoolSharkServiceException cse
+                    && cse.getResponseCode() != null
+                    && com.cooxiao.mall.common.restful.ResponseCode.NOT_FOUND == cse.getResponseCode()) {
+                return true;
+            }
+            cur = cur.getCause();
+        }
+        return false;
+    }
+
+    /**
+     * 清理 ES 中 DB 已失效的文档：拉取 ES 现有全部 id，与本次全量同步的有效 id 集合比对，删差集
+     * （兜底：即使某次增量同步漏了 delete，全量同步也能把残留洗掉）
+     */
+    @SuppressWarnings("unchecked")
+    private int cleanupInvalidDocs(List<Spu> validSpus) {
+        try {
+            java.util.Set<String> validIds = new java.util.HashSet<>();
+            for (Spu spu : validSpus) {
+                validIds.add(String.valueOf(spu.getId()));
+            }
+
+            // 用 scroll/search 拉 ES 现有全部 id（商品量小，单次 size 足够）
+            co.elastic.clients.elasticsearch.core.SearchResponse<Map> resp = esClient.search(s -> s
+                            .index(INDEX_NAME)
+                            .size(1000)
+                            .query(q -> q.matchAll(m -> m))
+                            .source(sr -> sr.filter(f -> f.includes("spuId"))),
+                    Map.class);
+
+            int deleted = 0;
+            for (co.elastic.clients.elasticsearch.core.search.Hit<Map> hit : resp.hits().hits()) {
+                String docId = hit.id();
+                if (docId == null) {
+                    continue;
+                }
+                // 索引文档 _id = spuId 字符串；若不在本次有效集合中则删除
+                if (!validIds.contains(docId)) {
+                    try {
+                        deleteSpu(Long.parseLong(docId));
+                        deleted++;
+                    } catch (NumberFormatException nfe) {
+                        log.warn("跳过非数字文档 id: {}", docId);
+                    }
+                }
+            }
+            return deleted;
+        } catch (Exception e) {
+            log.warn("全量同步末尾清理失败（不影响主流程）: {}", e.getMessage());
+            return 0;
         }
     }
 

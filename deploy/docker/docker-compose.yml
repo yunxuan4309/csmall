@@ -322,6 +322,8 @@ services:
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       JWT_SECRET: ${JWT_SECRET}
+      # TODO #33 A2：普通搜索返回图片需拼接完整 URL（与 mall-ai/product/resource 对齐）
+      CUSTOM_FILE_UPLOAD_RESOURCE_HOST: http://8.156.77.197/
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
     mem_limit: 768m
     depends_on:

@@ -9,6 +9,11 @@ my:
   server:
     addr: ${ALIYUN_SERVER_IP:127.0.0.1}
 
+# 图片资源访问前缀（TODO #33 方案 A2：普通搜索返回与 AI 同构的 SearchResultVO，需拼接完整图片 URL）
+custom:
+  file-upload:
+    resource-host: ${RESOURCE_HOST:http://8.156.77.197/}
+
 # 优雅关闭：收到 SIGTERM 后等待在途请求处理完毕再退出（配合 systemd TimeoutStopSec=30）
 server:
   shutdown: graceful

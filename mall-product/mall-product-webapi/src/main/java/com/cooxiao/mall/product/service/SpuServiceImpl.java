@@ -190,6 +190,10 @@ public class SpuServiceImpl implements ISpuService {
         if (rows != 1) {
             throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "审核失败，服务器忙，请稍后再次尝试！");
         }
+
+        // TODO #33：审核通过后同步 ES（provider 端按 checked/published/deleted 决定 upsert/delete；
+        // 仅当商品同时满足"已审核+已上架+未删除"才会真正写入索引）
+        notifySpuSync(id);
     }
 
     @Override
@@ -202,6 +206,9 @@ public class SpuServiceImpl implements ISpuService {
         if (rows != 1) {
             throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "删除失败，服务器忙，请稍后再次尝试！");
         }
+
+        // TODO #33：删除（逻辑删）后同步 ES —— provider 端检测 deleted=1 会删除索引文档，防止已删商品可被搜到
+        notifySpuSync(id);
     }
 
     @Override
@@ -213,6 +220,21 @@ public class SpuServiceImpl implements ISpuService {
         int rows = spuMapper.updatePublishedById(id, published);
         if (rows != 1) {
             throw new CoolSharkServiceException(ResponseCode.INTERNAL_SERVER_ERROR, "更新上架状态失败，服务器忙，请稍后再次尝试！");
+        }
+
+        // TODO #33：上架/下架后同步 ES（provider 端按最新 published 决定 upsert/delete）
+        notifySpuSync(id);
+    }
+
+    /**
+     * 通知 mall-ai 同步单个 SPU 到 ES（TODO #33）
+     * Dubbo 调用失败不影响主流程（同步是旁路，不阻断业务）；provider 端按 DB 最新业务状态决策 upsert or delete
+     */
+    private void notifySpuSync(Long id) {
+        try {
+            spuSyncService.syncSpu(id);
+        } catch (Exception e) {
+            log.warn("通知 mall-ai 同步 SPU 失败: spuId={}", id, e);
         }
     }
 
