@@ -16,6 +16,16 @@ spring:
         port: 8880
         dashboard: 127.0.0.1:8090
       eager: true
+      # TODO #5：本地环境同样从 Nacos 拉 flow 规则（与生产同构；本地 Nacos 需先建 dataId，
+      # 规则 JSON 见仓库 deploy/docker/sentinel/。adminLogin 无 degrade，故只配 flow）
+      datasource:
+        flow:
+          nacos:
+            server-addr: ${my.server.addr}:8848
+            data-id: mall-sso-flow-rules
+            group-id: SENTINEL_GROUP
+            data-type: json
+            rule-type: flow
   jackson:
     default-property-inclusion: always
   datasource:

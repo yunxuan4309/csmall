@@ -156,6 +156,11 @@
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
         </dependency>
+        <!-- Sentinel 规则持久化到 Nacos（TODO #5：flow + degrade 规则统一 Nacos 管理） -->
+        <dependency>
+            <groupId>com.alibaba.csp</groupId>
+            <artifactId>sentinel-datasource-nacos</artifactId>
+        </dependency>
         <!-- RabbitMQ：消息队列，异步削峰 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

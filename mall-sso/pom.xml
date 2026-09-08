@@ -135,6 +135,11 @@
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
         </dependency>
+        <!-- Sentinel 规则持久化到 Nacos（TODO #5：flow + degrade 规则统一 Nacos 管理） -->
+        <dependency>
+            <groupId>com.alibaba.csp</groupId>
+            <artifactId>sentinel-datasource-nacos</artifactId>
+        </dependency>
         <!-- 添加 Jakarta Servlet API -->
         <dependency>
             <groupId>jakarta.servlet</groupId>

@@ -31,6 +31,9 @@ spring:
       discovery:
         server-addr: ${my.server.addr}:8848
     sentinel:
+      # eager=true: transport(CommandCenter)启动时即初始化并向 Dashboard 注册，
+      # 否则懒加载——无流量时 Dashboard 查不到规则/监控（#5 部署实测发现）
+      eager: true
       transport:
         port: 8870
         dashboard: ${my.server.addr}:8858

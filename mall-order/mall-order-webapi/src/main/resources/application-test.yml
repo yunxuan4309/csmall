@@ -29,6 +29,23 @@ spring:
         port: 8872
         dashboard: 127.0.0.1:8090
       eager: true
+      # TODO #5：本地环境同样从 Nacos 拉规则（与生产同构；本地 Nacos 需先建 dataId，
+      # 规则 JSON 见仓库 deploy/docker/sentinel/。未建时 datasource 拉空→本地无规则，注解空转无害）
+      datasource:
+        flow:
+          nacos:
+            server-addr: ${my.server.addr}:8848
+            data-id: mall-order-flow-rules
+            group-id: SENTINEL_GROUP
+            data-type: json
+            rule-type: flow
+        degrade:
+          nacos:
+            server-addr: ${my.server.addr}:8848
+            data-id: mall-order-degrade-rules
+            group-id: SENTINEL_GROUP
+            data-type: json
+            rule-type: degrade
   rabbitmq:
     host: ${my.server.addr}
     port: 5672

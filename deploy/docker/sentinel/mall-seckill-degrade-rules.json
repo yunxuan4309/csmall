@@ -1,0 +1,11 @@
+[
+  {
+    "resource": "秒杀订单提交",
+    "grade": 0,
+    "count": 2000,
+    "timeWindow": 10,
+    "minRequestAmount": 5,
+    "statIntervalMs": 1000,
+    "slowRatioThreshold": 0.5
+  }
+]

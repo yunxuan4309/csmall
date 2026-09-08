@@ -22,6 +22,8 @@ spring:
       discovery:
         server-addr: ${my.server.addr}:8848
     sentinel:
+      # eager=true: transport 启动即初始化(本地 Dashboard 可见,与 prod 对齐)
+      eager: true
       transport:
         port: 8870
         dashboard: 127.0.0.1:8090

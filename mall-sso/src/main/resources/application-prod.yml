@@ -20,6 +20,27 @@ spring:
     nacos:
       discovery:
         server-addr: ${my.server.addr}:8848
+    # TODO #5：Sentinel 规则统一 Nacos 管理（flow + degrade）。
+    # ⚠️ 机制认知：配了 Nacos datasource 后权威源=Nacos（整体替换非叠加）——
+    #   Nacos 配置为空会擦除本地代码规则，故 dataId 必须在 Nacos 持久存在
+    #   （规则 JSON 事实来源：仓库 deploy/docker/sentinel/，部署清单含建规则步骤）。
+    sentinel:
+      # eager=true: transport(CommandCenter)启动时即初始化并向 Dashboard 注册，
+      # 否则懒加载——无流量时 Dashboard 查不到规则/监控（#5 部署实测发现）
+      eager: true
+      transport:
+        port: 8880
+        dashboard: ${my.server.addr}:8858
+      # 仅 flow 规则（adminLogin 限流防爆破）。不配 degrade datasource：
+      # 登录失败属业务异常，配异常比例熔断会误伤；慢调用熔断也非登录场景刚需。
+      datasource:
+        flow:
+          nacos:
+            server-addr: ${my.server.addr}:8848
+            data-id: mall-sso-flow-rules
+            group-id: SENTINEL_GROUP
+            data-type: json
+            rule-type: flow
   jackson:
     default-property-inclusion: non_null
   datasource:
