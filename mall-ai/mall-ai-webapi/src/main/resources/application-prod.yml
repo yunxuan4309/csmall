@@ -12,6 +12,21 @@ spring:
     nacos:
       discovery:
         server-addr: http://${my.server.addr}:8848
+    # TODO #2+#34：/ai/** QPS 限流（ai-chat=5 / ai-reason=10 / ai-light=30），规则统一 Nacos 管理。
+    # eager=true 让 transport 启动即初始化（否则懒加载，无流量时 Dashboard 查不到，见 #5 踩坑）
+    sentinel:
+      eager: true
+      transport:
+        port: 8876
+        dashboard: sentinel:8858
+      datasource:
+        flow:
+          nacos:
+            server-addr: ${my.server.addr}:8848
+            data-id: mall-ai-flow-rules
+            group-id: SENTINEL_GROUP
+            data-type: json
+            rule-type: flow
   elasticsearch:
     uris: http://${my.server.addr}:9200
   data:

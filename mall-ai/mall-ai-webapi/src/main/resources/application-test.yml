@@ -14,6 +14,15 @@ spring:
         port: 8876
         dashboard: 127.0.0.1:8090
       eager: true
+      # TODO #2+#34：本地与生产同构，从本地 Nacos 拉 /ai/** 限流规则（mall-ai-flow-rules）
+      datasource:
+        flow:
+          nacos:
+            server-addr: ${my.server.addr}:8848
+            data-id: mall-ai-flow-rules
+            group-id: SENTINEL_GROUP
+            data-type: json
+            rule-type: flow
   elasticsearch:
     uris: http://${my.server.addr}:9200
   data:

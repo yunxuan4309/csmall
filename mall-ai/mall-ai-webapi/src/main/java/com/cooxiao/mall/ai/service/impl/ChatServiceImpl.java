@@ -53,6 +53,7 @@ public class ChatServiceImpl {
     @Autowired private SearchPipeline searchPipeline;
     @Autowired private AiClient aiClient;
     @Autowired private AiProperties aiProperties;
+    @Autowired private com.cooxiao.mall.ai.config.AiConcurrencyGuard aiConcurrencyGuard;
 
     /** 创建新会话 */
     public ChatResultVO createSession(Long userId) {
@@ -338,6 +339,19 @@ public class ChatServiceImpl {
 
     /** 通过 SSE 流式调用 DeepSeek API */
     private void streamDeepSeek(List<Map<String, String>> messages,
+                                java.util.function.Consumer<String> onChunk) throws Exception {
+        // 并发闸门（TODO #2+#34）：SSE 流式是"最长寿"的 LLM 调用（秒级~十几秒），
+        // 不设闸门时少量并发 SSE 即可占满线程/打满外部 API 配额。闸门满抛 AiBusyException
+        // → sendStream 的 catch 发 error 事件（降级而非挂死）。
+        aiConcurrencyGuard.acquire("stream");
+        try {
+            doStreamDeepSeek(messages, onChunk);
+        } finally {
+            aiConcurrencyGuard.release();
+        }
+    }
+
+    private void doStreamDeepSeek(List<Map<String, String>> messages,
                                 java.util.function.Consumer<String> onChunk) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) URI
                 .create(aiProperties.getBaseUrl() + "/v1/chat/completions")

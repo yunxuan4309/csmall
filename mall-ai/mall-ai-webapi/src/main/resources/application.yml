@@ -45,6 +45,14 @@ cooxiao:
     daily-budget: 2.0
     chat-input-price-per-million: 1.0
     chat-output-price-per-million: 2.0
+    # ===== 高并发防护（TODO #2+#34）=====
+    # 并发闸门：同时进行的 LLM 调用上限（含 chat/chatWithModel/embed + SSE 流式）
+    concurrent-max: 20
+    # 闸门满时不等待直接失败（慢请求等待无意义，降级更优）
+    concurrent-wait-ms: 0
+    # 每用户频控：60s 窗口最大请求数（防单用户刷爆预算/打满闸门）
+    user-rate-limit-enabled: true
+    user-rate-limit: 10
 
 knife4j:
   enable: true

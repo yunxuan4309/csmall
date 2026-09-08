@@ -1,5 +1,8 @@
 package com.cooxiao.mall.ai.controller;
 
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
+import com.cooxiao.mall.ai.config.AiUserRateLimiter;
 import com.cooxiao.mall.ai.service.impl.ChatServiceImpl;
 import com.cooxiao.mall.ai.service.impl.ProductCompareServiceImpl;
 import com.cooxiao.mall.ai.service.impl.RagServiceImpl;
@@ -7,6 +10,7 @@ import com.cooxiao.mall.ai.service.impl.SearchServiceImpl;
 import com.cooxiao.mall.ai.service.impl.VectorSyncServiceImpl;
 import com.cooxiao.mall.common.domain.CsmallAuthenticationInfo;
 import com.cooxiao.mall.common.restful.JsonResult;
+import com.cooxiao.mall.common.restful.ResponseCode;
 import com.cooxiao.mall.pojo.ai.dto.AskDTO;
 import com.cooxiao.mall.pojo.ai.dto.ChatSendDTO;
 import com.cooxiao.mall.pojo.ai.dto.ProductCompareDTO;
@@ -36,6 +40,11 @@ import java.util.List;
 @Api(tags = "AI 智能导购")
 public class AiController {
 
+    /** Sentinel 资源名（与 Nacos mall-ai-flow-rules 规则精确匹配，TODO #2+#34） */
+    static final String RES_CHAT = "ai-chat";      // 流式/同步对话（重,LLM）
+    static final String RES_REASON = "ai-reason";  // 搜索重排/问答/对比（中,LLM+ES）
+    static final String RES_LIGHT = "ai-light";    // 补全/相关推荐（轻,纯ES无LLM）
+
     @Autowired
     private ProductCompareServiceImpl compareService;
 
@@ -51,11 +60,16 @@ public class AiController {
     @Autowired
     private SearchServiceImpl searchService;
 
+    @Autowired
+    private AiUserRateLimiter userRateLimiter;
+
     // ========== Phase 4: AI 搜索增强 ==========
 
     @PostMapping("/search")
     @ApiOperation("AI 语义搜索 — ES 召回 Top-15 → AI 按意图重排序 → 返回 Top-5 + 解释")
+    @SentinelResource(value = "ai-reason", blockHandler = "reasonBlock")
     public JsonResult<SearchResultVO> search(@Valid @RequestBody SearchDTO dto) {
+        userRateLimiter.checkRate(getCurrentUserId(), "search");
         SearchResultVO result = searchService.search(
                 dto.getKeyword(), dto.getPage(), dto.getPageSize());
         return JsonResult.ok(result);
@@ -63,6 +77,7 @@ public class AiController {
 
     @GetMapping("/search/suggest")
     @ApiOperation("搜索自动补全 — 输入部分文字实时返回补全建议")
+    @SentinelResource(value = "ai-light", blockHandler = "lightBlock")
     public JsonResult<SuggestVO> suggest(@RequestParam String keyword) {
         SuggestVO result = searchService.suggest(keyword);
         return JsonResult.ok(result);
@@ -70,6 +85,7 @@ public class AiController {
 
     @GetMapping("/product/{spuId}/related")
     @ApiOperation("相关商品推荐 — 基于 ES more_like_this，返回与当前商品相似的商品")
+    @SentinelResource(value = "ai-light", blockHandler = "lightBlock")
     public JsonResult<List<RelatedProductVO>> getRelated(@PathVariable Long spuId) {
         List<RelatedProductVO> result = searchService.getRelated(spuId);
         return JsonResult.ok(result);
@@ -79,14 +95,18 @@ public class AiController {
 
     @PostMapping("/compare")
     @ApiOperation("AI 商品对比 — 选择多个商品后，AI 自动生成结构化对比结果")
+    @SentinelResource(value = "ai-reason", blockHandler = "reasonBlock")
     public JsonResult<CompareResultVO> compareProducts(
             @Valid @RequestBody ProductCompareDTO dto) {
+        userRateLimiter.checkRate(getCurrentUserId(), "compare");
         return compareService.compare(dto.getSpuIds(), dto.getDimensions());
     }
 
     @PostMapping("/ask")
     @ApiOperation("RAG 智能问答 — 用自然语言提问，AI 基于商品数据生成回答")
+    @SentinelResource(value = "ai-reason", blockHandler = "reasonBlock")
     public JsonResult<AskResultVO> ask(@Valid @RequestBody AskDTO dto) {
+        userRateLimiter.checkRate(getCurrentUserId(), "ask");
         AskResultVO result = ragService.ask(dto.getQuestion(), dto.getTopK());
         return JsonResult.ok(result);
     }
@@ -102,7 +122,9 @@ public class AiController {
 
     @PostMapping("/chat/send")
     @ApiOperation("发送消息给 AI 导购（多轮对话，带上下文记忆）")
+    @SentinelResource(value = "ai-chat", blockHandler = "chatBlock")
     public JsonResult<ChatResultVO> sendMessage(@Valid @RequestBody ChatSendDTO dto) {
+        userRateLimiter.checkRate(getCurrentUserId(), "chat");
         ChatResultVO result = chatService.send(getCurrentUserId(),
                 dto.getSessionId(), dto.getMessage());
         return JsonResult.ok(result);
@@ -111,8 +133,10 @@ public class AiController {
     @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173", "http://8.156.77.197"})
     @PostMapping("/chat/stream")
     @ApiOperation("流式发送消息给 AI 导购（逐字输出 + 商品卡片）")
+    @SentinelResource(value = "ai-chat", blockHandler = "chatStreamBlock")
     public ResponseEntity<StreamingResponseBody> streamMessage(@Valid @RequestBody ChatSendDTO dto) {
         Long userId = getCurrentUserId();
+        userRateLimiter.checkRate(userId, "chat-stream");
         StreamingResponseBody body = outputStream -> {
             // 直接写 OutputStream（绕过 PrintWriter 和 Tomcat buffer）
             chatService.sendStream(userId, dto.getSessionId(), dto.getMessage(), outputStream);
@@ -128,14 +152,17 @@ public class AiController {
     @CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173", "http://8.156.77.197"})
     @PostMapping(value = "/chat/stream-sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @ApiOperation("流式发送消息给 AI 导购（SseEmitter 兼容）")
+    @SentinelResource(value = "ai-chat", blockHandler = "chatStreamSseBlock")
     public org.springframework.web.servlet.mvc.method.annotation.SseEmitter streamMessageLegacy(
             @Valid @RequestBody ChatSendDTO dto) {
+        userRateLimiter.checkRate(getCurrentUserId(), "chat-stream-sse");
         return chatService.sendStreamLegacy(getCurrentUserId(),
                 dto.getSessionId(), dto.getMessage());
     }
 
     @GetMapping("/chat/history")
     @ApiOperation("获取对话历史")
+    @SentinelResource(value = "ai-light", blockHandler = "lightBlock")
     public JsonResult<ChatHistoryVO> getHistory(@RequestParam String sessionId) {
         ChatHistoryVO result = chatService.getHistory(sessionId);
         return JsonResult.ok(result);
@@ -155,6 +182,62 @@ public class AiController {
     public JsonResult<String> syncSpu(@PathVariable Long spuId) {
         vectorSyncService.syncSpu(spuId);
         return JsonResult.ok("SPU " + spuId + " 同步完成");
+    }
+
+    // ========== Sentinel blockHandler（TODO #2：限流触发 → 429，非 500） ==========
+
+    /** ai-chat（对话）被限流 */
+    public JsonResult<Void> chatBlock(BlockException e) {
+        return JsonResult.failed(ResponseCode.TOO_MANY_REQUESTS, "AI 对话请求过于频繁，请稍后再试");
+    }
+
+    /**
+     * /ai/chat/stream 被限流：返回"繁忙"的 SSE 流（前端按 error 事件处理，与正常 error 分支一致）
+     * blockHandler 签名必须与原方法一致（ResponseEntity + 参数 + BlockException）
+     */
+    public ResponseEntity<StreamingResponseBody> chatStreamBlock(ChatSendDTO dto, BlockException e) {
+        StreamingResponseBody body = outputStream -> {
+            try {
+                String sse = "event: error\ndata: AI 服务繁忙，请稍后再试。\n\n"
+                        + "event: done\ndata: \n\n";
+                outputStream.write(sse.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                outputStream.flush();
+            } catch (Exception ignored) {
+            } finally {
+                try { outputStream.close(); } catch (Exception ignored) {}
+            }
+        };
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_EVENT_STREAM)
+                .header("Cache-Control", "no-cache")
+                .body(body);
+    }
+
+    /** /ai/chat/stream-sse（SseEmitter）被限流：发 error 事件后 complete */
+    public org.springframework.web.servlet.mvc.method.annotation.SseEmitter chatStreamSseBlock(
+            ChatSendDTO dto, BlockException e) {
+        org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter =
+                new org.springframework.web.servlet.mvc.method.annotation.SseEmitter();
+        try {
+            emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.event()
+                    .name("error").data("AI 服务繁忙，请稍后再试。"));
+            emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.event()
+                    .name("done").data(""));
+            emitter.complete();
+        } catch (Exception ignored) {
+            emitter.completeWithError(ignored);
+        }
+        return emitter;
+    }
+
+    /** ai-reason（搜索/问答/对比）被限流 */
+    public JsonResult<Void> reasonBlock(BlockException e) {
+        return JsonResult.failed(ResponseCode.TOO_MANY_REQUESTS, "AI 服务繁忙，请稍后再试");
+    }
+
+    /** ai-light（补全/推荐/历史）被限流 */
+    public JsonResult<Void> lightBlock(BlockException e) {
+        return JsonResult.failed(ResponseCode.TOO_MANY_REQUESTS, "请求过于频繁，请稍后再试");
     }
 
     /** 从 SecurityContext 获取当前登录用户 ID */

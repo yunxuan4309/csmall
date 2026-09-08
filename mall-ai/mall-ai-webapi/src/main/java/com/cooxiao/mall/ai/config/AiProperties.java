@@ -66,4 +66,28 @@ public class AiProperties {
 
     /** sync 接口是否加入白名单（开发环境建议开启，生产环境建议关闭） */
     private boolean syncWhitelisted = false;
+
+    // ========== 高并发防护（TODO #2+#34） ==========
+
+    /**
+     * 并发闸门：同时进行的 LLM 调用数上限。
+     * LLM 调用是"少量慢请求"——不设闸门时少量并发即可占满 Tomcat 线程池，拖垮其他接口。
+     * 超出时 tryAcquire 失败 → 走各 service 既有降级路径（纯 ES 结果/error 事件），非 500。
+     */
+    private int concurrentMax = 20;
+
+    /**
+     * 并发闸门等待超时（毫秒）。0 = 不等待直接失败（推荐，慢请求等待无意义，降级更优）。
+     */
+    private int concurrentWaitMs = 0;
+
+    /**
+     * 每用户频控开关：同用户 60 秒内最多调用次数（防单用户刷爆预算/打满闸门）。
+     */
+    private boolean userRateLimitEnabled = true;
+
+    /**
+     * 每用户频控：60 秒窗口内最大请求数。
+     */
+    private int userRateLimit = 10;
 }

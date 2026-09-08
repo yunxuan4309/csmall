@@ -3,6 +3,7 @@ package com.cooxiao.mall.ai.client;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.cooxiao.mall.ai.config.AiConcurrencyGuard;
 import com.cooxiao.mall.ai.config.AiProperties;
 import com.cooxiao.mall.ai.service.TokenBudgetService;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,9 @@ import java.util.Map;
  * DeepSeek API 客户端实现
  * <p>
  * API 文档：https://platform.deepseek.com/api-docs
+ * <p>
+ * 并发控制（TODO #2+#34）：所有同步 LLM 调用在进入真实 HTTP 前经过 {@link AiConcurrencyGuard}
+ * 并发闸门——闸门满抛 AiBusyException → 调用方走既有降级路径（纯 ES 结果），而非无限排队占线程。
  */
 @Slf4j
 @Component
@@ -36,6 +40,9 @@ public class DeepSeekAiClient implements AiClient {
 
     @Autowired
     private TokenBudgetService tokenBudgetService;
+
+    @Autowired
+    private AiConcurrencyGuard concurrencyGuard;
 
     // ========== Chat API ==========
 
@@ -81,33 +88,39 @@ public class DeepSeekAiClient implements AiClient {
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
         log.debug("Calling DeepSeek Chat API, model={}, jsonMode={}", model, jsonMode);
 
-        ResponseEntity<String> response = restTemplate.postForEntity(
-                aiProperties.getBaseUrl() + "/v1/chat/completions",
-                request,
-                String.class);
+        // 并发闸门：意图提取/重排等 JSON 结构化任务也是真实 LLM 调用，受同一闸门保护
+        concurrencyGuard.acquire("chat:" + model);
+        try {
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                    aiProperties.getBaseUrl() + "/v1/chat/completions",
+                    request,
+                    String.class);
 
-        JSONObject json = JSON.parseObject(response.getBody());
+            JSONObject json = JSON.parseObject(response.getBody());
 
-        // 记录 token 费用
-        JSONObject usage = json.getJSONObject("usage");
-        if (usage != null) {
-            int promptTokens = usage.getIntValue("prompt_tokens");
-            int completionTokens = usage.getIntValue("completion_tokens");
-            double inputCost = aiProperties.getChatInputPricePerMillion() * promptTokens / 1_000_000;
-            double outputCost = aiProperties.getChatOutputPricePerMillion() * completionTokens / 1_000_000;
-            tokenBudgetService.record(inputCost + outputCost);
+            // 记录 token 费用
+            JSONObject usage = json.getJSONObject("usage");
+            if (usage != null) {
+                int promptTokens = usage.getIntValue("prompt_tokens");
+                int completionTokens = usage.getIntValue("completion_tokens");
+                double inputCost = aiProperties.getChatInputPricePerMillion() * promptTokens / 1_000_000;
+                double outputCost = aiProperties.getChatOutputPricePerMillion() * completionTokens / 1_000_000;
+                tokenBudgetService.record(inputCost + outputCost);
+            }
+
+            String content = json.getJSONArray("choices")
+                    .getJSONObject(0)
+                    .getJSONObject("message")
+                    .getString("content");
+            if (content == null || content.isBlank()) {
+                // reasoning 模型思考过长可能把 max_tokens 吃满，content 为空 → 调用方解析 null
+                log.warn("DeepSeek 响应 content 为空（model={}, jsonMode={}, 可能 reasoning 耗尽 max_tokens={}），usage={}",
+                        model, jsonMode, aiProperties.getMaxTokens(), usage);
+            }
+            return content;
+        } finally {
+            concurrencyGuard.release();
         }
-
-        String content = json.getJSONArray("choices")
-                .getJSONObject(0)
-                .getJSONObject("message")
-                .getString("content");
-        if (content == null || content.isBlank()) {
-            // reasoning 模型思考过长可能把 max_tokens 吃满，content 为空 → 调用方解析 null
-            log.warn("DeepSeek 响应 content 为空（model={}, jsonMode={}, 可能 reasoning 耗尽 max_tokens={}），usage={}",
-                    model, jsonMode, aiProperties.getMaxTokens(), usage);
-        }
-        return content;
     }
 
     private String doChat(HttpHeaders headers, List<Map<String, String>> messages) {
@@ -122,27 +135,33 @@ public class DeepSeekAiClient implements AiClient {
 
         log.debug("Calling DeepSeek Chat API, model={}", aiProperties.getChatModel());
 
-        ResponseEntity<String> response = restTemplate.postForEntity(
-                aiProperties.getBaseUrl() + "/v1/chat/completions",
-                request,
-                String.class);
+        // 并发闸门：多轮对话同步回复也是真实 LLM 调用
+        concurrencyGuard.acquire("chat");
+        try {
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                    aiProperties.getBaseUrl() + "/v1/chat/completions",
+                    request,
+                    String.class);
 
-        JSONObject json = JSON.parseObject(response.getBody());
+            JSONObject json = JSON.parseObject(response.getBody());
 
-        // 记录 token 费用
-        JSONObject usage = json.getJSONObject("usage");
-        if (usage != null) {
-            int promptTokens = usage.getIntValue("prompt_tokens");
-            int completionTokens = usage.getIntValue("completion_tokens");
-            double promptCost = aiProperties.getChatInputPricePerMillion() * promptTokens / 1_000_000;
-            double completionCost = aiProperties.getChatOutputPricePerMillion() * completionTokens / 1_000_000;
-            tokenBudgetService.record(promptCost + completionCost);
+            // 记录 token 费用
+            JSONObject usage = json.getJSONObject("usage");
+            if (usage != null) {
+                int promptTokens = usage.getIntValue("prompt_tokens");
+                int completionTokens = usage.getIntValue("completion_tokens");
+                double promptCost = aiProperties.getChatInputPricePerMillion() * promptTokens / 1_000_000;
+                double completionCost = aiProperties.getChatOutputPricePerMillion() * completionTokens / 1_000_000;
+                tokenBudgetService.record(promptCost + completionCost);
+            }
+
+            return json.getJSONArray("choices")
+                    .getJSONObject(0)
+                    .getJSONObject("message")
+                    .getString("content");
+        } finally {
+            concurrencyGuard.release();
         }
-
-        return json.getJSONArray("choices")
-                .getJSONObject(0)
-                .getJSONObject("message")
-                .getString("content");
     }
 
     /**
@@ -191,22 +210,28 @@ public class DeepSeekAiClient implements AiClient {
         log.debug("Calling DeepSeek Embedding API, model={}, batchSize={}",
                 aiProperties.getEmbeddingModel(), inputs.size());
 
-        ResponseEntity<String> response = restTemplate.postForEntity(
-                aiProperties.getBaseUrl() + "/v1/embeddings",
-                request,
-                String.class);
+        // 并发闸门：embedding 也是外部 API 调用，与 chat 共享闸门（启动全量向量化受并发 20 约束）
+        concurrencyGuard.acquire("embed");
+        try {
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                    aiProperties.getBaseUrl() + "/v1/embeddings",
+                    request,
+                    String.class);
 
-        JSONObject json = JSON.parseObject(response.getBody());
+            JSONObject json = JSON.parseObject(response.getBody());
 
-        // 记录 token 费用
-        JSONObject usage = json.getJSONObject("usage");
-        if (usage != null) {
-            int promptTokens = usage.getIntValue("prompt_tokens");
-            double cost = aiProperties.getEmbeddingPricePerMillion() * promptTokens / 1_000_000;
-            tokenBudgetService.record(cost);
+            // 记录 token 费用
+            JSONObject usage = json.getJSONObject("usage");
+            if (usage != null) {
+                int promptTokens = usage.getIntValue("prompt_tokens");
+                double cost = aiProperties.getEmbeddingPricePerMillion() * promptTokens / 1_000_000;
+                tokenBudgetService.record(cost);
+            }
+
+            return json;
+        } finally {
+            concurrencyGuard.release();
         }
-
-        return json;
     }
 
     // ========== Common ==========
