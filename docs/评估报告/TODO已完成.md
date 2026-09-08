@@ -18,7 +18,7 @@
 
 > 📌 明细与实战经验（Redis RDB→AOF 迁移丢数据、gateway 启动竞态、conf 属主权限）见 [[TODO第一批实现与原理]] §九；轮换操作见 [[运维手册--密钥密码轮换]]。
 
-**第二批已完成项**（2026-09-08：#8/#36/#23/#14 P0+P1/#33/#5——**代码批全部完成并已全量部署服务器**）：
+**第二批已完成项**（2026-09-08：#8/#36/#23/#14 P0+P1/#33/#5/#2+#34——**第二批全部代码项完成并已全量部署服务器**）：
 
 | 编号 | 事项 | 完成情况 |
 |------|------|---------|
@@ -28,6 +28,7 @@
 | **#23** | 漏触发接口补 @Validated | ✅ 完成 + **已部署**（DTO 补规则 + 全局异常处理器补全 + admin.js 废弃标注）|
 | **#14** | Redis 主从切换防数据 P0+P1 | ✅ 完成 + **已部署**（P0 三层 + order_type 治本(Flyway V6) + 方案Y + P1 对账任务，见 §六）|
 | **#5** | Sentinel 能力补齐 P0 | ✅ 完成 + **已部署**（2026-09-08：统一 Nacos 管理 flow+degrade；order/sso 加 datasource；秒杀代码规则改"宕机兜底"；规则 JSON 入库 `deploy/docker/sentinel/`；sso 补 dashboard env；`eager:true` 修复 transport 懒加载。服务器实测 30 并发 adminLogin → 20×429 限流生效，Dashboard 三应用可见规则。P1 热点/P2 集群未做）。明细见 [[Sentinel部署执行清单-2026-09-08]]、[[TODO文件]] #5 |
+| **#2+#34** | AI 接口限流 + 并发闸门 | ✅ 完成 + **已部署**（2026-09-08：Sentinel 3 组规则 ai-chat=5/ai-reason=10/ai-light=30 + Semaphore 并发闸门=20 挂 LLM 调用汇聚点 + 每用户频控 60s/10；AiBusyException 降级闭环=繁忙永不 500。服务器实测 30 并发 /ai/search → 10×200+20×429 无 500、频控 15 连打全 429。部署两坑已修：pom 缺 datasource-nacos + blockHandler 签名。问答缓存/多实例未做）。明细见 §七·六、[[AI限流与并发闸门-部署执行清单-2026-09-08]] |
 
 > 📌 **部署回填（2026-09-08 维护窗口执行完毕，服务器实测）**：11 个微服务 jar 全量重建替换（11:25~12:59，旧 jar 备份 `/data/csmall/jars/backup-20260908/`）+ Flyway V6 自动执行成功（oms_order 已加 `order_type` 列默认 0，flyway success=1）+ ES 索引清理（删空索引 `cool_shark_mall_index` + 旧 `cool_shark_mall_index2`，AI 索引 `/ai/syncAll` 重建后 **19 条**）+ 前端 dist 更新 + 21 容器全 Up。**部署中修复 mall-ai 既有 bug**：AI 重排偶发降级/超时，真因 = reasoning 模型过度思考致 content 截断（JSON 任务改用 `deepseek-chat`、SSE 对话保留 `v4-flash`），详见 [[TODO第二批实现与原理]] §5.4.5 边界表 #21。
 
@@ -260,3 +261,25 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 - transport 端口 8880/8872/8870 均可达（dashboard 视角 `getRules?type=flow` 拉到真实规则）；Dashboard 左侧可见 mall-sso/mall-order/mall-seckill 三应用
 
 > 📄 完整执行清单与验证见 [[Sentinel部署执行清单-2026-09-08]]；原方案与 P1/P2 见 [[Sentinel能力补充计划]]。
+
+---
+
+## 八、#2+#34 AI 限流 + 并发闸门（2026-09-08 完成并部署）
+
+> **说明**：问答 Redis 缓存（#34 层 3）、多实例扩容（层 6，随 #4）未做，属后续可选。
+
+**三层防护**：
+- **① Sentinel 入口 QPS 限流（#2）**：3 组资源 ai-chat=5（流式/同步对话）/ ai-reason=10（搜索/问答/对比）/ ai-light=30（补全/推荐/历史）；Nacos mall-ai-flow-rules 统一管理；AiController @SentinelResource + 每接口专属 blockHandler（返回 429 / SSE error）
+- **② 并发闸门（#34 核心）**：AiConcurrencyGuard Semaphore=20，挂**所有真实 LLM 调用汇聚点**（DeepSeekAiClient.chat/chatWithModel/doChat/embed + ChatServiceImpl.streamDeepSeek）——按请求限流 ≠ 按 LLM 调用限流（一次 /ai/search 内部调 2 次 LLM），闸门统计外部 API 真实并发占用；满抛 AiBusyException → 服务内既有降级路径（Search 纯 ES/Ask busy VO/SSE error）= **繁忙永不 500**
+- **③ 每用户频控**：AiUserRateLimiter Redis INCR+TTL 60s 窗口，10 次/分，防单用户刷爆预算
+
+**服务器实测（2026-09-08）**：
+- 30 并发 `/ai/search` → **10×200 + 20×429**（ai-reason QPS=10 精确生效，无 500）
+- 单用户连打 15 次 /ai/ask → **全 429** + 日志 `【AI每用户频控】userId=1 已调用 15 次/60s，超限 10 次`
+- 单次调用正常（state=200）
+
+**部署踩两坑（已修复提交 bddb590）**：
+1. mall-ai pom **缺 `sentinel-datasource-nacos`**（yml 配了 datasource 但漏依赖，order/sso 在 #5 加过）→ 启动 `ClassNotFoundException: NacosDataSource` → 补依赖
+2. **blockHandler 签名缺原方法参数**（只写 `(BlockException e)`）→ Sentinel 反射要求 = 原方法全部参数 + BlockException → 找不到匹配 → FlowException 落全局 500 → 改每接口专属签名 + 泛型 busyResult
+
+> 📄 完整设计原理 + 面试话术见 [[TODO第二批实现与原理]] §七·六；执行清单见 [[AI限流与并发闸门-部署执行清单-2026-09-08]]。
