@@ -47,6 +47,7 @@
 | #16/#22/#26 | TraceId 落日志 / CORS 收敛 / 网络隔离 | 企业级细节 |
 | #35 | 统一 Jackson（替换 fastjson） | 安全 + 规范 |
 | **#45** | **统一 Dubbo 应用名规范**（front/search/ams 仍撞名但无 provider） | 规范项：3 模块 `dubbo.application.name` = spring 名，但**不暴露 @DubboService**（无 20880 实例，lb:// 实测安全）→ 本次不改（避免回归面）；统一为 `*-dubbo` 后缀防未来加 provider 时踩坑 |
+| **#46** | **nacos 数据卷挂载重启**（2026-09-08 记录，低优先） | 运维项：compose 已加 `nacos_data:/home/nacos/data` 卷（本地已提交），但**服务器 nacos 容器仍是无卷状态**（derby 582M 在容器可写层，重建即丢）。待执行：备份 derby → `docker volume create nacos_data` → 临时容器中转拷数据 → 重建 nacos 挂卷 → 验证认证/规则/登录仍在。执行指令在对话记录（或按 #13 部署清单 §补充）。⚠️ **下次任何动 nacos 的操作前必须优先做这个** |
 
 ### ⏸️ 明确暂缓/仅评估（不实现，面试讲认知即可）
 
