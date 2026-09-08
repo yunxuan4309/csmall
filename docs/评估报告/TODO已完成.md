@@ -285,3 +285,59 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 2. **blockHandler 签名缺原方法参数**（只写 `(BlockException e)`）→ Sentinel 反射要求 = 原方法全部参数 + BlockException → 找不到匹配 → FlowException 落全局 500 → 改每接口专属签名 + 泛型 busyResult
 
 > 📄 完整设计原理 + 面试话术见 [[TODO第二批实现与原理]] §七·六；执行清单见 [[AI限流与并发闸门-部署执行清单-2026-09-08]]。
+
+---
+
+## 九、#33 搜索双索引统一（A2：统一索引 + mall-search 只读降级层，2026-09-08 完成并部署）
+
+**问题重述**：mall-search 与 mall-ai 各维护一个 ES 索引 + 各一套同步链路 → 数据漂移（实测 AI 20 vs search 18 条，且都残留已下架商品）。
+
+**复核修正**（2026-09-08 三重实证推翻"用户可见 bug"原判断）：① Web 前端早已 100% 走 AI 搜索（search.js 无 /search 调用）；② mall-search 零真实流量（nginx 24h 0 请求）；③ mall-search 是孤立遗留（零反向依赖、无 Dubbo provider）。**真实问题 = 同步模型缺陷**：只 upsert 不 delete、删除/下架/审核不触发同步、写入不过滤业务状态 → 已下架商品残留在索引。
+
+**方案 A2 落地**（三方讨论选定）：统一单一索引 `cool_shark_mall_ai` + mall-search 改造为**只读普通搜索降级层**（纯 ES multi_match，无写链路=无漂移）+ 前端 fallback（AI 确定性故障 → /search）。
+
+**服务器验证**：AI 索引 `/ai/syncAll` 重建后 19 条（剔除下架 18）；删空索引 `cool_shark_mall_index` + 旧 `cool_shark_mall_index2`；普通搜索 /search 返回正常、图片 URL 完整（resource-host）。部署中修复 mall-ai reasoning 模型 JSON 截断 bug（JSON 任务换 deepseek-chat）。
+
+> 📄 完整评估（A1/A2 决策树）+ 实施细节 + 面试话术见 [[TODO第二批实现与原理]] §五、[[搜索双索引统一与一致性评估]]。
+
+---
+
+## 十、#23 校验漏触发修复（DTO 补规则 + 全局异常补全，2026-09-08 完成并部署）
+
+**审计修正**：原 TODO 称"5 个接口漏触发 @Validated"——逐 DTO 核查发现三类：
+| 类 | 接口 | 真相 | 处理 |
+|---|---|---|---|
+| A 真 bug | doRegister | DTO 有规则但漏 @Valid | ✅ 补 @Valid |
+| B 无规则 | add/edit 地址、updateAdmin | DTO 根本没规则（非漏触发） | ✅ 补规则 + 触发 |
+| C 注解空转 | addSeckillSpu/Sku | 有触发但 DTO 无规则 | ✅ 补规则 |
+| D 正常 | 31 接口 | 触发+规则都有 | ✅ 复核 |
+
+**⭐ 连带关键发现**：全局异常处理器缺 `MethodArgumentNotValidException`/`ConstraintViolationException` handler → 校验失败落 Throwable 返回 **500 而非 400**——补 @Valid 只是第一步，异常处理不补全校验仍"假生效"。已补两个 handler（mall-common）。
+
+**规则设计要点**：编辑类 DTO（updateAdmin/editAddress）只强制 id @NotNull（MyBatis-Plus 动态 SQL 允许部分更新）；"手机/固话二选一"DTO 无法表达 → Service 层兜底。
+
+> 📄 完整审计 + 治理清单（39 接口 5 类）+ 面试话术见 [[TODO第二批实现与原理]] §二。
+
+---
+
+## 十一、#13 Nacos 认证（2026-09-08 完成并部署）
+
+**方案 A 落地**：NACOS_AUTH_ENABLE + 随机 TOKEN（Base64 48字符）/IDENTITY + 管理员密码初始化（2.4+ 无默认密码，`POST /v1/auth/users/admin`）+ **11 服务全客户端同步**（Spring Cloud discovery 11 + Dubbo registry 8 + Sentinel datasource 4；Seata file 模式豁免）。
+
+**服务器验证**：无 token=403、登录拿真 JWT（非 AUTH_DISABLED）、全服务注册正常（HTTP 实例 + *-dubbo 20880 分离）、Sentinel 规则热更新正常。
+
+**历史隐患修复**：nacos 是唯一没挂数据卷的中间件 → 重建容器 derby 数据全丢（6 条规则 dataId 丢失实证）→ compose 补 `nacos_data:/home/nacos/data` 卷 + 仓库 JSON 重建规则（listener 热更新服务无需重启）。**待办 #46**：服务器 nacos 容器卷挂载尚未应用（下次动 nacos 前必做）。
+
+> 📄 完整原理（JWT 三角色/流程/三类客户端透传）+ 两坑 + 面试话术见 [[TODO第二批实现与原理]] §七·七；执行清单见 [[Nacos认证-部署执行清单-2026-09-08]]。
+
+---
+
+## 十二、#29 数据库定期备份（2026-09-08 完成并部署）
+
+**落地**：备份脚本 `/data/csmall/backup/backup-db.sh`（docker exec mysqldump 6 库全量 --single-transaction + gzip + 保留 7 天 + 密码从 .env 读不硬编码）+ cron `30 2 * * *` + 仓库留档 `deploy/backup-db.sh`。
+
+**实测**：49KB / 6 库 / 39 表完整性验证通过（CREATE DATABASE×6 / CREATE TABLE×39）。
+
+**待办**：恢复演练（TODO 铁律"备份没验证过=没有备份"，建议导临时库验证）。
+
+> 面试价值：能讲"备份要有恢复演练，没验证过的备份等于没有"的运维底线。

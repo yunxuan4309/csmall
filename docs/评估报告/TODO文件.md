@@ -1,42 +1,21 @@
-# CoolShark 项目待办事项
+﻿# CoolShark 项目待办事项
 
 > **创建日期**: 2026-05-13
-> **最后更新**: 2026-09-08（**第二批 #29 数据库备份完成并部署**——第二批全部完成！剩余见第三批/暂缓区；#46 nacos 卷挂载待办入第三批）
-> **关联文档**: [[TODO已完成]]（已完成归档）、[[服务器巡检与待修复问题清单-2026-08-04]]、[[JVM调优方案]]、[[阿里云ECS服务器情况]]、[[Redis配置加固与哨兵模式方案]]、[[服务器内存优化方案]]、[[连接池统一HikariCP方案]]、[[Python模拟数据与AI并发测试方案]]、[[集群化与配置中心迁移方案]]、[[Sentinel能力补充计划]]、[[Redis主从切换防数据问题方案]]、[[TraceId链路日志规范方案]]、[[认证安全企业级升级方案]]
+> **最后更新**: 2026-09-08（第二批全部完成并归档至 [[TODO已完成]]。本文件仅保留**未完成 / 暂缓 / 评估 / 第三批**事项）
+> **关联文档**: [[TODO已完成]]（已完成归档，含第一批+第二批全部明细）、[[TODO第二批实现与原理]]（原理+面试话术）、[[服务器巡检与待修复问题清单-2026-08-04]]、[[Redis配置加固与哨兵模式方案]]、[[服务器内存优化方案]]、[[集群化与配置中心迁移方案]]、[[Sentinel能力补充计划]]、[[Redis主从切换防数据问题方案]]、[[TraceId链路日志规范方案]]、[[认证安全企业级升级方案]]
 
 ---
 
-## 🎯 执行路线图（2026-09-07 重组，按"从止血到演进"排序）
+## 🎯 执行路线图
 
-> **用法**：明天起从头逐条评估/实现时，按下面三个批次推进；每条详细方案见正文对应编号（编号未变）。
-> **原则**：第一批解决"出事会真出事"的（安全洞/资源红线）；第二批解决"用户可见 bug + 面试/演示价值"；第三批是"企业级展望"，演示项目可后置。
-
-### ✅ 第一批：安全 + 资源止血（2026-09-07 已全部完成，明细已迁 [[TODO已完成]]）
-
-> 第一批全部 5 项（#25 / R7 / #24 / R1~R4 / #38）已完成，明细与实战经验已迁 [[TODO已完成]] §一/§二/§四。**下一批主攻 = 🔥 第二批（下方）**。
-
-### 🔥 第二批：正确性 + 面试/演示价值（2026-09-08：#33/#8/#36/#23/#14P0+P1/#5P0/#2+#34 全部完成并部署；仅剩运维批 #13/#29）
-
-| 顺序 | 编号 | 事项 | 状态（2026-09-08） |
-|------|------|------|-----------|
-| 1 | **#33** | 双索引数据不一致 | ✅ **A2 落地 + 部署完成 + 服务器验证通过**（统一索引 + mall-search 只读降级层 + 同步模型补全 + 前端 fallback；AI 索引 19 条无下架残留、普通搜索返回 9 条、图片 URL 完整） |
-| 2 | **#8** ✅ | AI 预算按北京时间结算 | ✅ 已完成 + **已部署**（TokenBudgetService 时区）→ 见 [[TODO已完成]] |
-| 3 | **#36** ✅ | DLX 死信 + OrderQueueConsumer requeue 修复 | ✅ 已完成 + **已部署**（x-death 限次重试 + 订单队列 DLX + OrderDlxConsumer）→ 见 [[TODO已完成]] |
-| 4 | **#13** | Nacos 开启认证 | ✅ 完成 + **已部署**（2026-09-08：认证开启 + 11 服务全客户端同步；实测 403/真 JWT/注册正常；补 nacos 数据卷防重建丢配置）→ 见 [[TODO已完成]] |
-| 5 | **#14** 🟡 | Redis 主从切换防数据（五层） | ✅ P0 三层 + P1 对账已完成 + **已部署**（含 Flyway V6 order_type）；只余 P2 配置层（随 #9） |
-| 6 | **#29** | 数据库定期备份 | ✅ 完成 + **已部署**（2026-09-08：backup-db.sh + cron 02:30 + 仓库留档;实测 6 库 39 表;恢复演练待做）→ 见 [[TODO已完成]] |
-| 7 | **#23** ✅ | 漏触发接口补 @Validated | ✅ 已完成 + **已部署**（DTO 补规则 + 全局异常补全）→ 见 [[TODO已完成]] |
-| 8 | **#5** ✅ | Sentinel 能力补齐 | ✅ **P0 完成 + 已部署**（2026-09-08：统一 Nacos 管理 flow+degrade、order/sso 加 datasource、seckill 代码规则改兜底、eager 修复 transport 懒加载、规则 JSON 入库 `deploy/docker/sentinel/`；服务器实测限流生效 30 并发 20×429）；P1 热点/P2 集群未做 → 见 [[TODO已完成]] |
-| 9 | **#2 + #34** | AI 接口限流 + 并发闸门 | ✅ **完成 + 已部署**（2026-09-08：Sentinel 3 组规则 + Semaphore 并发闸门 + 每用户频控；实测 30 并发 → 10×200+20×429、频控 15 连打全 429）→ 见 [[TODO已完成]] |
-
-> **部署状态（2026-09-08）**：✅ **第二批已全量部署上线**——11 个微服务 jar 全量重建（common/pojo 连带）+ Flyway V6 + 前端 dist + ES 索引清理全部完成，21 容器 Up、Nacos 全注册。**部署中额外发现并修复 mall-ai 既有 bug**：AI 重排偶发降级/超时，真因 = reasoning 模型过度思考致 content 截断（踩坑记录见 [[TODO第二批实现与原理]] §5.4.5 边界表 #21），解法 = JSON 任务用 `deepseek-chat`、SSE 对话保留 `v4-flash`。**第二批剩余（2026-09-08 晚）**：#5 ✅ 已完成并部署（Nacos 规则 + 3 容器重建 + 实测 429 生效）；剩余待做：#13/#29/#2+#34。
+> **已完成**：✅ 第一批（安全止血：#25/R7/#24/R1~R4/#38）与第二批（正确性+演示：#33/#8/#36/#23/#14P0+P1/#5P0/#2+#34/#13/#29 + 突发 #6）**全部完成并部署** → 明细见 [[TODO已完成]]。
+> **当前主攻**：🟢 第三批（企业级演进 + 学习，演示项目可后置，按兴趣/时间取用）；⏸️ 明确暂缓/仅评估项（不实现，面试讲认知即可）。
 
 ### 🟢 第三批：企业级演进 + 学习（演示项目可后置，按兴趣/时间取用）
 
 | 编号 | 事项 | 定位 |
 |------|------|------|
-| #4 | 秒杀集群化 + 配置中心（单机 2 实例演示级） | 面试高价值，需先做 R7 腾内存 |
-| #14-P1 | Redis 主从防数据 - P1 对账任务 | ✅ 已完成（2026-09-07，运行期轻量+凌晨全量，以 DB 为准）→ 见 [[TODO已完成]] §六 |
+| #4 | 秒杀集群化 + 配置中心（单机 2 实例演示级） | 面试高价值，需先做 R7 腾内存（R7 已完成，内存 available 3.9G） |
 | #14-P2 | Redis 主从防数据 - P2 配置层（min-replicas-to-write 1，随 #9 主从哨兵） | 搭 #9 的车，避免遗漏 |
 | #9 | Redis 主从 + 哨兵实验 | 学习 HA，方案已定稿 |
 | #15 | K8s 实操（k3s） | 学习用，需评估新服务器（见 TODO 顶部咨询结论） |
@@ -47,7 +26,7 @@
 | #16/#22/#26 | TraceId 落日志 / CORS 收敛 / 网络隔离 | 企业级细节 |
 | #35 | 统一 Jackson（替换 fastjson） | 安全 + 规范 |
 | **#45** | **统一 Dubbo 应用名规范**（front/search/ams 仍撞名但无 provider） | 规范项：3 模块 `dubbo.application.name` = spring 名，但**不暴露 @DubboService**（无 20880 实例，lb:// 实测安全）→ 本次不改（避免回归面）；统一为 `*-dubbo` 后缀防未来加 provider 时踩坑 |
-| **#46** | **nacos 数据卷挂载重启**（2026-09-08 记录，低优先） | 运维项：compose 已加 `nacos_data:/home/nacos/data` 卷（本地已提交），但**服务器 nacos 容器仍是无卷状态**（derby 582M 在容器可写层，重建即丢）。待执行：备份 derby → `docker volume create nacos_data` → 临时容器中转拷数据 → 重建 nacos 挂卷 → 验证认证/规则/登录仍在。执行指令在对话记录（或按 #13 部署清单 §补充）。⚠️ **下次任何动 nacos 的操作前必须优先做这个** |
+| **#46** | **nacos 数据卷挂载重启**（2026-09-08 记录，低优先） | 运维项：compose 已加 `nacos_data:/home/nacos/data` 卷（本地已提交），但**服务器 nacos 容器仍是无卷状态**（derby 582M 在容器可写层，重建即丢）。待执行：备份 derby → `docker volume create nacos_data` → 临时容器中转拷数据 → 重建 nacos 挂卷 → 验证认证/规则/登录仍在。执行指令见 #13 部署会话记录。⚠️ **下次任何动 nacos 的操作前必须优先做这个** |
 
 ### ⏸️ 明确暂缓/仅评估（不实现，面试讲认知即可）
 
@@ -122,24 +101,6 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 
 ---
 
-### 2. 【AI 安全】`/ai/**` 接口接入 Sentinel 限流 ✅ 已完成并部署（2026-09-08，与 #34 合并实施）
-
-> ✅ **2026-09-08 完成 + 已部署**：`/ai/**` 全接口防护三件套——**① Sentinel QPS 限流**（3 组资源：ai-chat=5 流式/同步对话、ai-reason=10 搜索重排/问答/对比、ai-light=30 补全/推荐/历史；Nacos mall-ai-flow-rules 统一管理，AiController 加 @SentinelResource + 专属 blockHandler 返回 429/SSE error）；**② 并发闸门**（AiConcurrencyGuard Semaphore=20，挂所有真实 LLM 调用汇聚点 DeepSeekAiClient + streamDeepSeek，闸门满抛 AiBusyException → 服务内既有降级路径兜底/局部 advice 返 429 = 繁忙永不 500）；**③ 每用户频控**（AiUserRateLimiter Redis INCR+TTL 60s/10 次，防单用户刷爆预算）。**服务器实测**：30 并发 /ai/search → 10×200 + 20×429（无 500）；每用户频控 15 连打全 429。**部署踩两坑**：pom 缺 sentinel-datasource-nacos（启动崩）+ blockHandler 签名缺原参数（500），均修复提交（bddb590）。明细见 [[AI限流与并发闸门-部署执行清单-2026-09-08]]。
->
-> **2026-08-14 新增**：AI 接口审计发现所有 `/ai/**` 接口均无限流规则（无 `@SentinelResource`、`sentinel-rules.json` 无 ai 规则），单个用户/单 IP 可无限并发调用，即使有 2 元/日预算也存在并发冲超风险。
-
-**目标**：给 AI 调用路径（重点：`/ai/chat/stream`、`/ai/chat/send`、`/ai/ask`、`/ai/compare`、`/ai/search`）加 Sentinel 限流，例如：
-- 按用户或按 IP：每 60 秒最多 N 次（N 建议 10~30，需实测）
-- 流式接口额外限制并发连接数（防 SSE 长连接占满线程池）
-
-**参考实现**：
-- 现有先例：`mall-sso` 的 `AdminSSOController.doLogin` 已用 `@SentinelResource(value = "adminLogin", blockHandler = "loginBlock")` + 自定义 `BlockException` 统一返回 429 JSON（见 `mall-common` 全局异常处理）
-- 流控规则可通过 Sentinel 控制台（8090 端口）动态下发，或写入 `deploy/docker/sentinel-rules.json` 持久化
-
-**涉及文件**：`AiController.java`（各端点加注解）、`deploy/docker/sentinel-rules.json`（规则）、`mall-common`（429 响应处理已有）
-
----
-
 ### 3. 【秒杀管理】缺少秒杀活动管理功能（后台 UI + 场次维度购买标记）
 
 > **2026-08-26 新增**：审计发现秒杀模块**完全没有管理功能**——活动/时间窗口/价格/库存全靠手动改数据库（`seckill_spu`/`seckill_sku` 表），且**无后台管理界面**。
@@ -179,48 +140,6 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 - **单机集群 = 演示级 HA，机器宕机所有实例一起挂**，面试只讲"验证机制"不讲"高可用"
 
 📄 **完整方案（内存测算/三模块价值对比/两阶段步骤/风险与回滚/执行清单）见 [[集群化与配置中心迁移方案]]**
-
----
-
-### 5. 【Sentinel】能力补充计划 ✅ P0 已完成并部署（2026-09-08）；P1/P2 未做
-
-> ✅ **2026-09-08 P0 完成 + 已部署服务器**：**审计修正**——原记载"规则持久化 Nacos + 代码双保险"与事实不符：Nacos SENTINEL_GROUP 规则全空，秒杀本地代码规则被 Nacos 空配置覆盖（日志 `source is empty`）= **秒杀限流当时实际失效**（历史覆盖坑复现，日志实证）。
->
-> **实施内容**：① order/sso 加 `sentinel-datasource-nacos` + prod/test yml datasource（flow+degrade，sso 仅 flow）；② 秒杀代码规则保留为"启动瞬态 + Nacos 宕机兜底"（注释机制：Nacos 正常→以 Nacos 为准；Nacos 空→代码也被擦；Nacos 宕机→代码兜底存活）；③ **规则 JSON 入库 `deploy/docker/sentinel/`**（5 个 dataId 事实来源：seckill flow QPS10+degrade、order flow QPS20×2+degrade、sso adminLogin QPS10）；④ 删除死文件 `deploy/docker/sentinel-rules.json`（无引用/GBK 乱码/count=100 错）；⑤ **sso 补 dashboard env**（compose）+ 服务器 compose 同步（曾漏同步导致 sso 心跳连 nacos:8858 失败）；⑥ **`eager: true`**——修复 transport 懒加载（无流量时 CommandCenter 不启动，Dashboard 查不到规则/监控，实测 `Begin listening at port 8880` 在打流量后才出现）。
->
-> **服务器验证（2026-09-08）**：Nacos 5 规则全部发布（curl content@file 单次编码防双重编码坑）；三容器重建后 record 日志 flow+degrade 全部 `notify-ok` 加载；实测 adminLogin 30 并发 → **10×400 + 20×429**（QPS=10 精确生效）；transport 端口 8880/8872/8870 均可达，Dashboard 可见 mall-sso/order/seckill 三应用及规则。
->
-> **遗留（未做）**：P1 热点参数限流（秒杀按 spuId 差异化，随集群化评估）、P2 集群流控（随 #4）、P3 系统保护/授权（无场景）。
->
-> **2026-08-26 新增**：对项目 Sentinel 使用程度全面评估（代码实证）——当前只用了"基础三件套"（秒杀 QPS=10 流控 + 规则存 Nacos + 控制台），**4 个 @SentinelResource（秒杀/新增订单/支付订单/adminLogin）只有秒杀配了规则，其余 3 个是"注解但无规则"空转**；企业级高级能力（热点限流/系统保护/授权/集群流控）均未使用。
-
-**优先级划分（用户确认后实施）**：
-- 🔴 **P0 补齐 3 接口规则**（新增订单/支付订单 QPS=20、adminLogin QPS=10，Nacos 建规则即可，消除空转）——✅ 已完成
-- 🟠 **P1 热点参数限流**（秒杀按 spuId 差异化：爆款 QPS=100、普通 1000，当前整接口共享 QPS=10 互相误伤）——面试价值最高，⏳ 未做
-- 🟡 **P2 集群流控**（秒杀集群化后 token server 统一配额，否则双实例各自 QPS=10 总量翻倍失真）——与 #4 集群化配套，⏳ 未做
-- ⚪ **P3 暂不推荐**（系统自适应保护：CPU<5%无场景；授权规则：Gateway+Security 已挡）
-
-📄 **完整计划见 [[Sentinel能力补充计划]]；执行清单与验证见 [[Sentinel部署执行清单-2026-09-08]]**
-
----
-
-### 6. 【网关】Dubbo 应用名撞名 → lb:// 混入 Dubbo 实例 ✅ 已修复（2026-09-08 全项目排查）
-
-> ✅ **2026-09-08 完成（从 mall-product 扩展为全项目排查 + 3 模块修复）**：
-> - **触发**：生产实测 bug——用户"商品列表→秒杀→商品列表→秒杀"第二次进秒杀报 **500**，gateway 日志 `invalid version format: UNSUPPORTED` + `R:172.18.0.20:20880` = lb://mall-seckill 轮询打到 Dubbo 端口（第一次 HTTP 成功、第二次 Dubbo 失败 = 轮询交替）
-> - **排查方法**：gateway `lb://` 路由 × Nacos 实例列表 × `@DubboService` 扫描三向对照，揪出所有"暴露 Dubbo + 撞名"的模块
-> - **修复**：3 模块 dubbo 应用名分离（prod+test 对齐）：
->   - `mall-seckill`: `mall-seckill` → `mall-seckill-dubbo`（本次 500 根因）
->   - `mall-ums`: `mall-ums` → `mall-ums-dubbo`（UserServiceImpl 暴露 Dubbo，潜伏隐患）
->   - `mall-product`: `mall-product` → `mall-product-dubbo`（原 #6 主角，曾用直连 9010 规避）
-> - **无需改**：mall-ai/order 本就是 `*-dubbo`；mall-front/search/ams **撞名但无 @DubboService**（不注册 20880，Nacos 实测仅 HTTP 实例，lb:// 安全）→ 统一规范放 TODO #45（第三批）
-> - **验证**：Nacos `mall-seckill`/`mall-ums`/`mall-product` 服务名下只剩 HTTP 实例，20880 移入 `*-dubbo` 名下；Dubbo 消费者按接口引用不受影响
->
-> **2026-08-28 新增（Nacos 实例列表实测确认）**：`mall-product` 服务下有 **2 个实例** = `172.18.0.19:20880`（Dubbo provider，`protocol=dubbo`）+ `172.18.0.19:9010`（Spring Cloud HTTP）→ 网关 `lb://mall-product` 轮询**一半请求打到 Dubbo 端口**（非 HTTP 协议）报错。这是 prod pms 路由直连 `http://mall-product:9010` 的**真实原因**（配置注释："直连 HTTP 端口，避免 Nacos 混入 Dubbo 20880"）。
-
-**根因**：`dubbo.application.name` 与 `spring.application.name` 撞名 → Dubbo 3.x 应用级注册把 20880 实例混进同一服务名。对比 `mall-order`：dubbo 应用名 `mall-order-dubbo`（分开）→ "mall-order" 服务下只有 HTTP 实例，lb:// 安全。
-
-**后续（可选）**：gateway pms 路由可改回 `lb://mall-product`（去掉直连特例，统一风格）——product 改名后已无 Dubbo 混入，直连 9010 仍可用不必急改。
 
 ---
 
@@ -340,55 +259,6 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 📄 **完整评估（含重定向机制/成本收益表/演进路径）见 [[Redis集群适配与配置管理评估]]**
 
 > 🟡 **第二批 #4**
-### 13. 【安全】Nacos 开启认证 ✅ 已完成并部署（2026-09-08）
-
-> ✅ **2026-09-08 完成 + 已部署**：认证开启（NACOS_AUTH_ENABLE + 随机 TOKEN/IDENTITY）+ 管理员密码初始化 + 11 服务全客户端同步（discovery 11 + Dubbo registry 8 + Sentinel datasource 4,Seata file 模式豁免）。服务器实测：无 token=403、登录拿真 JWT、全服务注册正常、Sentinel 规则热更新正常。**部署发现历史隐患并修复**：nacos 此前无数据卷 → 重建容器 derby 数据（配置/用户/规则）全丢 → 已补 `nacos_data:/home/nacos/data` 卷 + 从仓库 JSON 重建 6 条规则。明细见 [[Nacos认证-部署执行清单-2026-09-08]]。
->
-> **2026-08-26 新增**：实测 Nacos **完全无认证**（无 token 直接读配置返回 200、控制台免登录、默认账号 nacos 未改）。公网安全组只开 22/80 挡得住外部，但内网失陷后可无认证读写 Nacos + 注册假服务（服务伪装）→ 消费者被引流到攻击者机器。
-
-**判定：值得加**（成本低 + 生产化标配 + 面试必问），**优先级中**（当前公网进不来，非紧急）。
-**方案 A（最小可行认证）**：
-1. compose nacos 加 `NACOS_AUTH_ENABLE=true` + `NACOS_AUTH_TOKEN`（Base64 ≥32字节随机串）+ `NACOS_AUTH_IDENTITY_KEY/VALUE`——✅ 已完成
-2. 重启 nacos → 无 token 访问返回 403——✅ 已完成（实测 403）
-3. **全量同步**：11 微服务 + Seata + Dubbo 全配 username/password（任一漏配 = 该服务起不来），须同一维护窗口完成——✅ 已完成（discovery/Dubbo/Sentinel datasource 三类客户端,Seata file 豁免）
-4. 验证：注册/发现正常 + Sentinel 规则仍能拉取——✅ 已完成
-
-> ⚠️ **2.4+ 关键差异**：无默认密码，开鉴权后必须先 `POST /nacos/v1/auth/users/admin` 初始化管理员密码；备选 B=8848 映射改 127.0.0.1（只挡外部，不解决内网）。
-> 📄 执行清单见 [[Nacos认证-部署执行清单-2026-09-08]]
-
-### 14. 【Redis】主从切换防数据问题（五层方案）✅ P0+P1 已完成（2026-09-07~08 已部署）；P2 余随 #9
-
-> ✅ **2026-09-07/08 完成（P0 三层 + P1 对账均已部署）**：
-> - **P0 落库失败不静默（第3层）✅**：SeckillQueueConsumer 库存不足从 basicAck 静默丢弃改为三兜底——失败留痕 + 已付款告警（新增 IOmsOrderService.getOrderStateBySn Dubbo 查询）+ x-death 限次重试（与 #36 同款）
-> - **订单 order_type 标识（治本前置）✅**：oms_order 加 order_type 列（Flyway V6），秒杀入口置 1、普通入口强制 0（防伪造）；markSeckillPurchased/clearSeckillOrdered 仅秒杀单执行（修复"普通订单被误当秒杀单写 reseckill 标记"的潜在 bug）；本地普通购买实测验证守卫生效
-> - **✅ P0 方案Y 支付前校验本单成交状态（success 落库）**：P0"付款前查库存"原方案放弃（语义缺陷见下）后，用**查询本单是否已写入 success 表**替代实现——秒杀单（orderType=1）支付前经新 Dubbo `IForOrderSeckillRecordService.isSeckillSuccessRecorded(orderSn)` 校验本单是否已成功落库，未落库则拦截支付（防"Redis 预扣放行但 DB 扣减失败 rows==0"的用户付了钱没货）；查本单而非剩余库存，不误拦已成交最后一件；Dubbo 异常保守放行。本地秒杀→支付全链路实测通过（order_type=1、state=3 已支付、success 有记录）
-> - **P2 配置层**：随 R2 主从哨兵一起（#9，第三批）
-> - **P1 对账任务 ✅（2026-09-07 完成，09-08 已部署）**：`SeckillReconcileTask` 运行期 5 分钟轻量纠偏（\|diff\|≥2 直接修、\|diff\|=1 连续 3 次才修）+ 凌晨全量校准（\|diff\|≥1 即修 + 补建缺失 key），以 DB 为唯一基准修正 Redis；本地实测修掉 sku26/sku35 漂移、12 sku 零误改。明细见 [[TODO已完成]] §六、[[秒杀对账任务实现方案]]
-> - **🔧 秒杀 SPU VO 缓存一致性 bug（2026-09-07 本地实测发现并修复）**：`getSeckillSpu`（详情页）先读 Redis 缓存 `mall:seckill:spu:vo:{pmsSpuId}`，该 VO 在**改秒杀时间窗口**后不失效（TTL 约 2h）→ 详情页读到**旧窗口**误显示"秒杀已结束"，而**列表页** `listSeckillSpus` 直接查 DB（显示进行中），两页不一致。已修：`SeckillManageController` 新增/删除秒杀 SPU 时 `redisTemplate.delete(该 VO key)` 主动失效（`evictSeckillSpuVoCache`）。**注意局限**：仅"经管理端接口改窗口"会触发失效；若直接改 DB 表（如本次本地演示），仍会命中旧缓存直到 TTL 到期——根治需在 `getSeckillSpu` 读缓存时校验窗口/或改时区/缓存双写，待后续评估。
-
-> **2026-08-26 新增**：Redis 主从复制异步 → 主挂瞬间丢最后几笔写（库存 DECR/购买标记/幂等锁可能丢）。代码层无法 100% 消灭（本质），目标是"让丢失无害化"。
-
-**五层方案（按优先级）**：
-- 🔴 **P0 付款前校验 DB 库存**：⛔ 原方案"支付时查 seckill_stock 剩余库存"**评估后放弃（2026-09-07）**——语义缺陷见下方分析结论。**已用"方案Y"替代实现：付款前校验本单是否已写入 success 表**（✅ 已完成，见上方完成列表）
-- 🔴 **P0 落库失败不静默**：✅ 已完成（2026-09-07，SeckillQueueConsumer 三兜底）
-- 🟠 **P1 对账任务**：定时 Redis vs DB 比对，以 DB 为准自动修正漂移 + 预热校验（待做）
-- 🟡 **P2 配置层**：min-replicas-to-write 1（随 R2 主从哨兵一起，#9）
-
-> **⛔ P0 付款前查库存 —— 分析后放弃（2026-09-07，重要设计结论）**
->
-> 曾计划：支付前 order 通过新 Dubbo 服务查 seckill_stock 剩余库存，不足则拦。**实现前推演发现语义缺陷**：
->
-> **时序**：Redis 预扣（下单闸门，最多放行 N 单）→ DB 条件扣减（MQ 逐单扣，`seckill_stock>=qty`，每单一条消息）。
->
-> **缺陷 1（误拦已成交）**：库存一致时（Redis=DB=N），放行 N 单 MQ 全部扣成功——**最后一件成交后 DB=0 是正常结果**，其用户付款时查剩余库存 0 < 1 会被**误拦**。付款前查"剩余库存"无法区分"本单的货已被 MQ 扣掉（正常）"与"本单货没扣上（异常）"。
->
-> **缺陷 2（防不了真问题）**：真正要防的"Redis 多放导致的超卖"，DB 条件扣减已兜底（`rows==0` 即本单不成交），第 3 层失败留痕+告警已覆盖——付款前查剩余库存既不拦"该拦的"（无归属标记），又误拦"不该拦的"（已成交）。
->
-> **结论**：秒杀成交资格在 **Redis 预扣时已确定**，DB 只是记账（闸门/账本模型）。"付款前查剩余库存"在逐单扣减模型下**不可正确实现**——正确防线 = Redis 预扣闸门 + DB 条件扣减兜底 + 第3层落库失败处理（均已做）。**该子项关闭，不再实现**（若未来改"下单即同步扣 DB"模型才需重估）。
-
-> 架构层已做（Redis=闸门/DB=账本，条件扣减兜底）；配置层依托 R1~R4。
-> 📄 **完整方案（五层详解/代码示例/实施清单/风险回滚）见 [[Redis主从切换防数据问题方案]]**（注：其中第 2 层"付款前查库存"示意代码经推演有误，实际以本条目结论为准）
-
 ### 15. 【学习】K8s 实操实验（k3s 方案备用，2026-08-26 评估，暂不部署）
 
 > **2026-08-26 新增**：K8s 架构已理解（控制平面/etcd/节点），**当前单机 4C16G 不部署**（场景不匹配 + 内存剩 2G），但 k3s 轻量方案已备好，未来学习实操/迁移演练时用。
@@ -485,31 +355,6 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 **面试价值**：能讲清"CORS 是浏览器机制，生产收敛到网关、dev 直连才需要服务端 CORS"
 
 > 🟡 **第二批 #6**（✅ doRegister 已修，2026-09-07）
-### 23. 【校验】漏触发接口补 @Validated ✅ 部分完成（2026-09-07，仅 doRegister）
-
-> ✅ **2026-09-07 实施修正**：代码复核发现原审计描述与事实**部分不符**——5 个接口里只有 `UserController.doRegister` 的 DTO（UserRegistryDTO）**真有校验规则但没触发**（@RequestBody 前漏 `@Valid`），属真实 bug，**已修复**（补 `@Valid`，遵循项目惯例与同文件 renewPassword 一致）。
-> ✅ **2026-09-07 第二批补充实施（B/C 类 5 个 DTO 补规则 + 全局异常补全）**：
-> - `DeliveryAddressAddDTO`：联系人/省市区名/详细地址 @NotBlank，手机/固话/地区码有则验格式；**"手机/固话二选一"在 Service 层兜底**（DTO 无法表达 or）
-> - `DeliveryAddressEditDTO`：仅 id @NotNull（编辑走动态更新，允许部分修改），其余有则验格式
-> - `AdminUpdateDTO`：仅 id @NotNull，其余有则验格式；顺带修复 `AdminServiceImpl.updateAdmin` **无条件 encode(null) → 不传密码更新即 500** 的 bug（改为密码成对且非空才加密）
-> - `SeckillSpuAddDTO`/`SeckillSkuAddDTO`：全必填(@NotNull/@DecimalMin/@Min)（秒杀管理接口直插 Mapper，无 Service 校验层）
-> - `AdminAddDTO`：恢复校验（username/password/phone/email @NotBlank/@Pattern，原 4 处 @NotNull 被注释）；addAdmin 补类级+参数级 @Validated（GET 绑定 DTO 需参数级触发）
-> - **⭐ 全局异常处理器补全**：`mall-common GlobalControllerExceptionHandler` 缺 `MethodArgumentNotValidException`/`ConstraintViolationException` handler → 校验失败落 Throwable 返回 500 而非 400，已补两个 handler（这是校验"真生效"的关键一环）
-> - Controller 触发注解：`DeliveryAddressController.addAddress/editAddress`、`AdminController.updateAdmin/addAdmin` 补 @Validated（ums/ams）
-> - 已编译验证（mall-common/mall-pojo/mall-ums/mall-ams/mall-seckill）
-> ⚠️ **延伸发现（已核实非线上风险）**：前端 `admin.js`（REST 风格 add/update/delete）是**废弃残留无人引用**，真接口在 `sso.js`+AdminController；AdminAddDTO 后端接口暂无前端页面接入。
-> ✅ **2026-09-07 已彻底核查 + 标记废弃**：admin.js 全项目零 import/零调用（6 方法全无引用，仅 api/index.js re-export 而 index.js 本身也无人用）；调用路由在后端均不存在。已在 `src/api/admin.js` 头部加废弃标注 + `src/api/index.js` re-export 行加 TODO 提示（前端仓库，待提交）。
-> 回归说明：doRegister 补 @Valid 后，传非法值将触发 400（依赖新增的 MethodArgumentNotValidException handler），已编译验证。
-
-> **2026-08-28 新增（源自 06-安全设计 Q6 审计）**：全项目审计 39 个 @RequestBody 接口，**5 个漏了 @Validated 触发开关**（规则在 DTO 但没触发 = 校验静默失效）：`UserController.doRegister`（**注册最严重**——UserRegistryDTO 的 @NotNull/@Pattern 全失效，非法数据可入库）、`DeliveryAddressController.addAddress/editAddress`（地址增改）、`AdminController.updateAdmin`（管理员更新）。`PaymentCallbackController.wechatNotify`（String body）无需 DTO 校验，可豁免。
-
-**方案（P1）**：
-1. 5 个接口（注册/地址增改/管理员更新）方法参数补 `@Validated`（注册最优先）——✅ doRegister 已完成；其余 4 个 DTO 无规则，需先补规则
-2. 回归：传非法值断言返回 400（注册接口重点验证用户名/邮箱/手机号格式）——待服务器回归
-3. 可选：AOP 统一给 @RequestBody 加校验，从根上消灭漏触发
-
-**面试价值**：能讲"注解校验会静默失效（规则与触发分离），我审计出 5 个漏触发接口"——**实施中进一步发现 4 个是 DTO 本身无规则（比漏触发更早的问题），修正了原审计结论**
-
 ### 26. 【网络】容器网络隔离：应用网/数据网分网段（2026-08-28 记录，待实施）
 
 > **2026-08-28 记录（源自 07-部署运维 Q3）**：csmall-net 是**单网段大锅烩**（21 容器全挂一个 bridge 网络），无网络隔离。企业做法：**应用网/数据网分网段**——应用（gateway/front/order...）在应用网，数据库（mysql/redis/es）在数据网，**数据网只允许应用网访问** → 网络隔离 = 纵深防御（比端口映射收窄更进一步）。
@@ -538,20 +383,6 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 **面试价值**：能讲"我实测发现生产容器是 JRE 抓不了 jstack，改进方案是 JDK 镜像/Arthas/JFR"——比背流程高一个段位的诚实审计
 
 > 🟡 **第二批 #5**
-### 29. 【备份】数据库定期备份 ✅ 已完成（2026-09-08）
-
-> ✅ **2026-09-08 完成**：备份脚本 `/data/csmall/backup/backup-db.sh`（docker exec mysqldump 6 库全量 + gzip + 保留 7 天）+ cron 每日 02:30 + 仓库留档 `deploy/backup-db.sh`。实测备份 49KB/6 库/39 表,内容完整性验证通过。**恢复演练**（TODO 铁律）待做：导临时库验证可用性。
->
-> **2026-08-28 记录（源自 07 Q9）**：07 Q9 提到"定期 mysqldump（可改进项）"但 TODO 从未记录——**文档缺口补上**。当前数据库数据在 Docker 卷（csmall_mysql_data），无定时备份；数据是"命"，备份是运维底线。
-
-**方案（P2）**：
-1. cron 定时 mysqldump（每日全量 6 库）+ 保留策略（保留 7 天/循环覆盖）
-2. 备份文件落 `/data/csmall/backup/`（或对象存储）
-3. **定期恢复演练**（备份没验证过 = 没有备份）
-4. 与 R8 巡检同节奏（月检 + 大版本前）
-
-**面试价值**：能讲"备份要有恢复演练，没验证过的备份等于没有"的运维底线
-
 ### 30. 【监控】Prometheus + Alertmanager 主动告警（2026-08-28 记录，待实施）
 
 > **2026-08-28 记录（源自 07 Q10）**：07 Q10 提到"改进方向是 Prometheus + Alertmanager"但 TODO 从未记录——**文档缺口补上**。**"resource 挂 2 天才发现"的根治手段**：restart 只能拉起崩溃，静默挂/循环崩靠人工发现——主动告警是唯一根治。
@@ -603,50 +434,6 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 ---
 
 > 🟡 **第二批 #1**：用户可见 bug（search 缺 2 条新商品）✅ 已修复（2026-09-08 A2 上线）
-### 33. 【搜索】双索引数据不一致（mall-search 与 mall-ai 各维护一个 ES 索引）✅ 已完成（2026-09-08，代码+本地验证+已部署）
-
-> ✅ **2026-09-08 完成（方案 A2）+ 当天中午部署上线**：统一单一索引 + mall-search 改造为**只读普通搜索降级层** + 同步模型补全 + 前端 fallback。本地实测：AI 主链路（意图/扩展/重排）全通；`docker stop mall-ai` 后前端秒级降级到普通搜索。服务器验证（2026-09-08）：AI 索引 `/ai/syncAll` 重建后 **19 条**（剔除已下架 18）、空索引 `cool_shark_mall_index` 与旧 `cool_shark_mall_index2` 已删除、普通搜索 `/search` 返回正常。明细见 [[TODO第二批实现与原理]] §五、[[搜索双索引统一与一致性评估]]。
-
-> **2026-09-02 新增（源自 09 Q7 复核，服务器实测确认）**：普通搜索和 AI 搜索**各维护一个 ES 索引 + 各一套同步链路**——数据同源（pms_spu，都经 Dubbo IForFrontSpuService 拉取），但**数据不一致实锤**。
-
-**现状（2026-09-02 服务器实测）**：
-- ES 三个索引：`cool_shark_mall_index`（**0 条**，空/旧索引遗留）、`cool_shark_mall_index2`（**18 条**，mall-search 用）、`cool_shark_mall_ai`（**20 条**，mall-ai 用）
-- **不一致实锤：AI 索引 20 > search 索引 18**——2 条新商品只进了 AI 索引，普通搜索查不到新商品（两条同步链路各自为政）
-- mall-search 同步：手动 `/search/sync` → Dubbo 分页拉 DB → Spring Data ES 批量写（SearchServiceImpl.loadSpuByPage，pageSize 注释还写 2）
-- mall-ai 同步：启动自动 sync-auto-on-startup + `/ai/syncAll`（VectorSyncServiceImpl）
-
-**影响**：① 同一批商品重复存储两份 + 旧索引垃圾（index 空索引）② 两套同步链路都要维护，漏同步 = 普通搜索缺新商品（已发生）③ 面试若被问"两个索引怎么保证一致"无解——当前不一致
-
-**方案（P2，演示项目暂缓）**：
-1. **统一单一索引**：mall-search 与 mall-ai 共用同一个 ES 索引（如保留 cool_shark_mall_ai 或重建 index2）
-2. mall-search 只做**召回层**（过滤/分页/排序），mall-ai 在召回基础上做意图重排（AI 不自己建数据）≈ 淘宝架构
-3. 清理空索引 cool_shark_mall_index（0 条）
-4. 同步收敛到一条链路（Dubbo 变更通知 + 全量启动同步）
-
-**面试价值**：能主动讲"我发现两个搜索各维护索引、数据不一致（18 vs 20），演进方向是统一索引 + AI 只做重排层"——比被面试官问出来强
-
----
-
-### 34. 【AI】AI 模块高并发应对 ✅ 已完成并部署（2026-09-08，与 #2 合并实施）
-
-> ✅ **2026-09-08 完成 + 已部署（与 #2 合并）**：Sentinel 入口限流(3组) ✅ + **并发闸门 Semaphore=20** ✅（核心：防少量慢请求占满 Tomcat；挂 LLM 调用汇聚点，超限→既有降级路径=纯ES/busy/SSE error，非 500）+ 每用户频控 60s/10 ✅。**未做**（按范围确认）：问答 Redis 缓存（#34 层 3）、多实例扩容（层 6，随 #4）。服务器实测限流/频控生效（30 并发 20×429）。执行清单见 [[AI限流与并发闸门-部署执行清单-2026-09-08]]。
->
-> **2026-09-02 新增（源自 09 Q9）**：AI 问答高并发与秒杀本质不同——秒杀是大量快请求（限流削峰可控），AI 是**少量慢请求占 Tomcat 线程 + 外部 LLM API 配额有限**。两个铁约束：① 每个 SSE 请求秒级 + 挂一个线程（少量用户就能占满线程池，拖垮其他接口）② LLM API 外部共享资源（QPS 配额 + token 收费），不能无限调。
-
-**应对层次（从便宜到贵）**：
-1. 🔴 **Sentinel 入口限流**：QPS 限流 /ai/**（与 TODO #2 合并——ai 接口现在无限流）
-2. 🔴 **并发闸门**：Semaphore 限制"同时进行的 LLM 调用数"（如 20），超出 429"AI 繁忙"——**不设闸门，Tomcat 线程被 AI 占满，其他接口全挂**
-3. 🟠 **问答缓存**：常见问答 Redis 缓存 2min TTL（IoT AssistantService 已有 2min 缓存先例可复制）→ 重复问题不调 LLM
-4. 🟠 **降级链路**：LLM 满/挂 → 降级纯 ES 检索（直接给商品列表不生成）→ 保证"有响应"而非"卡死"（与 TODO #31 向量降级同一思想）
-5. 🟡 **每用户频控**：Redis 计数（如 10 次/分钟），防单用户刷爆预算
-6. 🟡 **多实例扩容**：会话在 Redis = 无状态 → 多实例分压 SSE 长连接（内存允许时，配合 TODO #4）
-
-**项目现状**：SSE 异步 ✅ / 每日预算 TokenBudget ✅ / 无状态会话 ✅；Sentinel ai 限流 ❌ / 并发闸门 ❌ / 问答缓存 ❌ / 降级 ❌
-
-**面试价值**：能讲清"AI 高并发 ≠ 秒杀高并发——核心是并发闸门防线程占满 + 缓存降 LLM 调用 + 降级保可用 + 无状态扩容"，AI 上生产前必修课
-
----
-
 ### 35. 【JSON】统一 Jackson，替换 fastjson（2026-09-03 记录，待实施）
 
 > **2026-09-03 新增（源自 10 Q6 讨论，用户拍板）**：项目 JSON 混用——**Web 层默认 Jackson（Spring 集成），业务手写解析用 fastjson**。决定统一 Jackson。
@@ -796,13 +583,3 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 **涉及文件**：mall-front-webapi / mall-search-webapi / mall-ams-webapi 的 application-{prod,test}.yml（各 2 处 dubbo.application.name）。
 
 **面试价值**：能讲"我排查 #6 时发现 3 个模块撞名但无 provider——当时没风险所以没动，但记了规范项防未来加 provider 时踩坑"，展示"按风险分级处理 + 前瞻性记录"。
-
----
-
-## ✅ 已完成归档
-
-> **已完成（第一批 + 历史 + 第二批 #8/#36/#23/#14 P0+P1/#33/#5）已整体迁至 [[TODO已完成]]**（含第一批明细表、第一批之前的历史归档、及所有正文标"✅ 已完成"的条目）。第二批代码批已完成并**已部署服务器（2026-09-08）**，部署明细见 [[第二批部署执行清单-2026-09-08]]、[[Sentinel部署执行清单-2026-09-08]]。本文件只保留未完成 / 部分完成 / 暂缓 / 评估项。
-
----
-
-**维护提示**: 新增待办时按优先级放入对应区块（🔴高/🟡中/🟢绿），完成后移入 [[TODO已完成]] 末尾。
