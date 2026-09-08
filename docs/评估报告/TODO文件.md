@@ -751,6 +751,20 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 
 ---
 
+### 44. 【安全】吊销已泄露的硅基流动 Embedding Key（2026-09-08 记录，待处理）🔴
+
+> **2026-09-08 发现**：`mall-ai-webapi/src/main/resources/application-test.yml` 曾硬编码硅基流动 embedding key（`sk-pffsuu...`），该文件已被 commit **719ff6f** 提交并 **push 到公开 GitHub 仓库**——**key 已公开泄露**（即使本地已改占位符，历史提交里仍可查到）。
+
+**处理（尽快）**：
+1. 登录硅基流动控制台（siliconflow.cn）→ API 密钥管理 → **吊销/删除** `sk-pffsuu...` 开头的旧 key
+2. 生成新 key → 配到本地环境变量 `EMBEDDING_API_KEY`（.env 不入库 / IDE Run Configuration）
+3. 服务器 `.env` 的 `EMBEDDING_API_KEY` 同步换新值 → 重启 mall-ai
+4. 验证：本地 `embedding-enabled: true` 向量检索正常（/ai/syncAll 能向量化）
+
+> **教训**：API key 绝不硬编码进 yml/代码；test 环境也要用占位符 + 环境变量注入。已改占位符见 commit c0d7209。
+
+---
+
 ## ✅ 已完成归档
 
 > **已完成（第一批 + 历史 + 第二批 #8/#36/#23/#14 P0/P1/#33）已整体迁至 [[TODO已完成]]**（含第一批明细表、第一批之前的历史归档、及所有正文标"✅ 已完成"的条目）。第二批代码批已全部完成，**待部署服务器**。本文件只保留未完成 / 部分完成 / 暂缓 / 评估项。
