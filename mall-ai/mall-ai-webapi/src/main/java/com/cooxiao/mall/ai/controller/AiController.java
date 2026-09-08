@@ -67,7 +67,7 @@ public class AiController {
 
     @PostMapping("/search")
     @ApiOperation("AI 语义搜索 — ES 召回 Top-15 → AI 按意图重排序 → 返回 Top-5 + 解释")
-    @SentinelResource(value = "ai-reason", blockHandler = "reasonBlock")
+    @SentinelResource(value = "ai-reason", blockHandler = "searchBlock")
     public JsonResult<SearchResultVO> search(@Valid @RequestBody SearchDTO dto) {
         userRateLimiter.checkRate(getCurrentUserId(), "search");
         SearchResultVO result = searchService.search(
@@ -77,7 +77,7 @@ public class AiController {
 
     @GetMapping("/search/suggest")
     @ApiOperation("搜索自动补全 — 输入部分文字实时返回补全建议")
-    @SentinelResource(value = "ai-light", blockHandler = "lightBlock")
+    @SentinelResource(value = "ai-light", blockHandler = "suggestBlock")
     public JsonResult<SuggestVO> suggest(@RequestParam String keyword) {
         SuggestVO result = searchService.suggest(keyword);
         return JsonResult.ok(result);
@@ -85,7 +85,7 @@ public class AiController {
 
     @GetMapping("/product/{spuId}/related")
     @ApiOperation("相关商品推荐 — 基于 ES more_like_this，返回与当前商品相似的商品")
-    @SentinelResource(value = "ai-light", blockHandler = "lightBlock")
+    @SentinelResource(value = "ai-light", blockHandler = "relatedBlock")
     public JsonResult<List<RelatedProductVO>> getRelated(@PathVariable Long spuId) {
         List<RelatedProductVO> result = searchService.getRelated(spuId);
         return JsonResult.ok(result);
@@ -95,7 +95,7 @@ public class AiController {
 
     @PostMapping("/compare")
     @ApiOperation("AI 商品对比 — 选择多个商品后，AI 自动生成结构化对比结果")
-    @SentinelResource(value = "ai-reason", blockHandler = "reasonBlock")
+    @SentinelResource(value = "ai-reason", blockHandler = "compareBlock")
     public JsonResult<CompareResultVO> compareProducts(
             @Valid @RequestBody ProductCompareDTO dto) {
         userRateLimiter.checkRate(getCurrentUserId(), "compare");
@@ -104,7 +104,7 @@ public class AiController {
 
     @PostMapping("/ask")
     @ApiOperation("RAG 智能问答 — 用自然语言提问，AI 基于商品数据生成回答")
-    @SentinelResource(value = "ai-reason", blockHandler = "reasonBlock")
+    @SentinelResource(value = "ai-reason", blockHandler = "askBlock")
     public JsonResult<AskResultVO> ask(@Valid @RequestBody AskDTO dto) {
         userRateLimiter.checkRate(getCurrentUserId(), "ask");
         AskResultVO result = ragService.ask(dto.getQuestion(), dto.getTopK());
@@ -162,7 +162,7 @@ public class AiController {
 
     @GetMapping("/chat/history")
     @ApiOperation("获取对话历史")
-    @SentinelResource(value = "ai-light", blockHandler = "lightBlock")
+    @SentinelResource(value = "ai-light", blockHandler = "historyBlock")
     public JsonResult<ChatHistoryVO> getHistory(@RequestParam String sessionId) {
         ChatHistoryVO result = chatService.getHistory(sessionId);
         return JsonResult.ok(result);
@@ -185,16 +185,45 @@ public class AiController {
     }
 
     // ========== Sentinel blockHandler（TODO #2：限流触发 → 429，非 500） ==========
+    // ⚠️ 签名铁律：blockHandler 参数列表 = 原方法全部参数 + 末尾 BlockException（Sentinel 反射精确匹配，
+    //    缺原参数会找不到方法 → FlowException 原样抛出 → 500。2026-09-08 部署实测踩坑）
 
-    /** ai-chat（对话）被限流 */
-    public JsonResult<Void> chatBlock(BlockException e) {
-        return JsonResult.failed(ResponseCode.TOO_MANY_REQUESTS, "AI 对话请求过于频繁，请稍后再试");
+    /** /ai/search 被限流 */
+    public JsonResult<SearchResultVO> searchBlock(SearchDTO dto, BlockException e) {
+        return busyResult("AI 服务繁忙，请稍后再试");
     }
 
-    /**
-     * /ai/chat/stream 被限流：返回"繁忙"的 SSE 流（前端按 error 事件处理，与正常 error 分支一致）
-     * blockHandler 签名必须与原方法一致（ResponseEntity + 参数 + BlockException）
-     */
+    /** /ai/search/suggest 被限流 */
+    public JsonResult<SuggestVO> suggestBlock(String keyword, BlockException e) {
+        return busyResult("请求过于频繁，请稍后再试");
+    }
+
+    /** /ai/product/{spuId}/related 被限流 */
+    public JsonResult<List<RelatedProductVO>> relatedBlock(Long spuId, BlockException e) {
+        return busyResult("请求过于频繁，请稍后再试");
+    }
+
+    /** /ai/compare 被限流 */
+    public JsonResult<CompareResultVO> compareBlock(ProductCompareDTO dto, BlockException e) {
+        return busyResult("AI 服务繁忙，请稍后再试");
+    }
+
+    /** /ai/ask 被限流 */
+    public JsonResult<AskResultVO> askBlock(AskDTO dto, BlockException e) {
+        return busyResult("AI 服务繁忙，请稍后再试");
+    }
+
+    /** /ai/chat/send 被限流 */
+    public JsonResult<ChatResultVO> chatBlock(ChatSendDTO dto, BlockException e) {
+        return busyResult("AI 对话请求过于频繁，请稍后再试");
+    }
+
+    /** /ai/chat/history 被限流 */
+    public JsonResult<ChatHistoryVO> historyBlock(String sessionId, BlockException e) {
+        return busyResult("请求过于频繁，请稍后再试");
+    }
+
+    /** /ai/chat/stream 被限流：返回"繁忙"的 SSE 流（前端按 error 事件处理，与正常 error 分支一致） */
     public ResponseEntity<StreamingResponseBody> chatStreamBlock(ChatSendDTO dto, BlockException e) {
         StreamingResponseBody body = outputStream -> {
             try {
@@ -230,14 +259,12 @@ public class AiController {
         return emitter;
     }
 
-    /** ai-reason（搜索/问答/对比）被限流 */
-    public JsonResult<Void> reasonBlock(BlockException e) {
-        return JsonResult.failed(ResponseCode.TOO_MANY_REQUESTS, "AI 服务繁忙，请稍后再试");
-    }
-
-    /** ai-light（补全/推荐/历史）被限流 */
-    public JsonResult<Void> lightBlock(BlockException e) {
-        return JsonResult.failed(ResponseCode.TOO_MANY_REQUESTS, "请求过于频繁，请稍后再试");
+    /** 构造 429 busy JSON（泛型擦除，运行时类型安全） */
+    private <T> JsonResult<T> busyResult(String message) {
+        JsonResult<T> result = new JsonResult<>();
+        result.setState(ResponseCode.TOO_MANY_REQUESTS.getValue());
+        result.setMessage(message);
+        return result;
     }
 
     /** 从 SecurityContext 获取当前登录用户 ID */

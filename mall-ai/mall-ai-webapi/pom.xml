@@ -72,6 +72,12 @@
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
         </dependency>
+        <!-- Sentinel 规则持久化到 Nacos（TODO #2+#34：/ai/** 限流规则，yml datasource 依赖此 jar；
+             缺它会启动崩 ClassNotFoundException: NacosDataSource，2026-09-08 部署实测踩坑） -->
+        <dependency>
+            <groupId>com.alibaba.csp</groupId>
+            <artifactId>sentinel-datasource-nacos</artifactId>
+        </dependency>
 
         <!-- Knife4j API 文档 -->
         <dependency>
