@@ -1,7 +1,7 @@
 # TODO 第二批实现与原理（面试深挖应对）
 
 > **创建日期**: 2026-09-07
-> **状态**: 🟡 第二批"正确性 + 面试/演示价值"——**代码批全部完成（2026-09-08）**：#8（AI 预算时区）、#23（DTO 校验+全局异常补全）、#36（requeue 限次 + 订单 DLX）、#14（P0 三层 + order_type 治本 + 方案Y + P1 对账任务）、**#33（双索引统一 A2：统一索引 + mall-search 只读降级层，本地验证通过）**。**全部待部署服务器**（服务器仍跑 2026-08-04 旧 jar）；剩余待做：#13 / #29 / #5 / #2+#34、#14 余 P2。
+> **状态**: 🟡 第二批"正确性 + 面试/演示价值"——**代码批全部完成（2026-09-08）+ ✅ 已全量部署服务器（2026-09-08 中午维护窗口，11 模块新 jar + Flyway V6 + ES 索引清理；晚间追加 #5 P0 部署）**：#8（AI 预算时区）、#23（DTO 校验+全局异常补全）、#36（requeue 限次 + 订单 DLX）、#14（P0 三层 + order_type 治本 + 方案Y + P1 对账任务）、#33（双索引统一 A2：统一索引 + mall-search 只读降级层）、**#5（Sentinel P0：统一 Nacos 规则管理 + eager 修复 transport 懒加载，实测限流生效）**。部署明细见 [[第二批部署执行清单-2026-09-08]]、[[Sentinel部署执行清单-2026-09-08]] 与 [[TODO已完成]]。剩余待做：#13 / #29 / #2+#34、#14 余 P2、#5 余 P1/P2。
 > **用途**: 面试深挖应对 —— 每条都含「原理 → 本项目实现 → 代码实证 → 遇到的问题/疑惑 → 面试话术」
 > **关联**: [[TODO文件]] 第二批（#33 / #8 / #36 / #13 / #29 / #23 / #5 / #2+#34）、[[TODO第一批实现与原理]]（第一批执行 + §九 实战经验写法参考）、[[搜索双索引统一与一致性评估]]（#33 完整评估 + A1/A2 原文 + 复核证据）
 
@@ -11,17 +11,17 @@
 
 | 顺序 | 编号 | 事项 | 本质 | 状态（2026-09-08） |
 |---|---|---|---|---|
-| 1 | **#33** | 双索引数据不一致 | 架构债（用户可见 bug 已不成立，见 §五 复核） | ✅ **A2 落地完成 + 本地端到端验证通过**（2026-09-08：统一索引 + mall-search 只读降级层；停 mall-ai 前端秒降级），待部署 |
-| 2 | **#8** | AI 预算按北京时间结算 | 唯一线上代码 bug | ✅ **已完成**（~10 行，TokenBudgetService 时区），待部署 |
-| 3 | **#36** | DLX 死信 + requeue 修复 | MQ 可靠性 | ✅ **已完成**（requeue 限 3 次 + 订单 DLX + OrderDlxConsumer），待部署 |
+| 1 | **#33** | 双索引数据不一致 | 架构债（用户可见 bug 已不成立，见 §五 复核） | ✅ **A2 落地 + 部署 + 服务器验证通过**（统一索引 + mall-search 只读降级层；AI 索引 19 条） |
+| 2 | **#8** | AI 预算按北京时间结算 | 唯一线上代码 bug | ✅ **已完成 + 已部署**（~10 行，TokenBudgetService 时区） |
+| 3 | **#36** | DLX 死信 + requeue 修复 | MQ 可靠性 | ✅ **已完成 + 已部署**（requeue 限 3 次 + 订单 DLX + OrderDlxConsumer） |
 | 4 | **#13** | Nacos 开启认证 | 安全 | ⏳ 待做（需维护窗口原子切换） |
-| 5 | **#14** | Redis 主从切换防数据 | 消费者可靠性 + Redis 一致性 | ✅ **P0 已完成**（第3层落库失败不静默 + order_type 治本 + 方案Y支付前校验本单成交）＋ **P1 对账任务**（运行期轻量 + 凌晨全量），待部署；P2 归第三批（#9） |
+| 5 | **#14** | Redis 主从切换防数据 | 消费者可靠性 + Redis 一致性 | ✅ **P0+P1 已完成 + 已部署**（第3层落库失败不静默 + order_type 治本 + 方案Y + 对账任务）；P2 归第三批（#9） |
 | 6 | **#29** | 数据库定期备份 | 运维底线 | ⏳ 待做（需 ecs-user 配 cron） |
-| 7 | **#23** | 漏触发接口补 @Validated | 校验静默失效 | ✅ **已完成**（含审计修正 + 全局异常处理器补全），待部署 |
-| 8 | **#5** | Sentinel 能力补齐 | 面试价值 | ⏳ 待做（P0 规则可随时，P1 热点需改造） |
+| 7 | **#23** | 漏触发接口补 @Validated | 校验静默失效 | ✅ **已完成 + 已部署**（含审计修正 + 全局异常处理器补全） |
+| 8 | **#5** | Sentinel 能力补齐 | 面试价值 | ✅ **P0 已完成 + 已部署**（2026-09-08 晚：统一 Nacos 管理 + eager 修复懒加载，实测 429 生效）；P1 热点/P2 集群待做（见 §六） |
 | 9 | **#2+#34** | AI 接口限流 + 并发闸门 | AI 承载 | ⏳ 待做（后置，改动最大） |
 
-**执行顺序**：代码批（#8→#23→#36→#14→#33 全部完成）✅ → **下一步 = 部署服务器**（第二批代码批一次维护窗口全量构建部署，含 Flyway V6）→ 剩余待做 #13/#29（运维批）→ #5/#2+#34（设计批）。第一批已证明"先本地改 → 编译验证 → 维护窗口部署"的节奏有效。
+**执行顺序**：代码批（#8→#23→#36→#14→#33 全部完成）✅ → **部署服务器（2026-09-08 已完成）** ✅ → **#5 P0（2026-09-08 晚完成并部署）** ✅ → 剩余待做 #13/#29（运维批）→ #2+#34（设计批）。第一批已证明"先本地改 → 编译验证 → 维护窗口部署"的节奏有效。
 
 ---
 
@@ -531,20 +531,76 @@ Web 前端：正常走 /ai/search → AI 失败/超时 → fallback 调 /search
 
 ## 六、第二批剩余项速览（待实施，含对应方案文档）
 
-> #33 / #8 / #36 / #23 / #14(P0+P1) 已完成（见 §一~§五），仅剩以下：
+> #33 / #8 / #36 / #23 / #14(P0+P1) / **#5(P0)** 已完成（见 §一~§五、§六.5），仅剩以下：
 
 | 编号 | 事项 | 方案文档 | 关键难点 | 状态 |
 |---|---|---|---|---|
 | #13 | Nacos 认证 | [[集群化与配置中心迁移方案]] §A0 | 11 服务+Seata+Dubbo 全配账号，原子切换 | ⏳ 待做 |
 | #29 | 数据库备份 | 无（TODO 已给命令） | 需 ecs-user 配 cron | ⏳ 待做 |
-| #5 | Sentinel 补齐 | [[Sentinel能力补充计划]] | P0 规则随时 / P1 热点参数改造 | ⏳ 待做 |
+| #5 余 P1 | Sentinel 热点参数限流 | [[Sentinel能力补充计划]] | 秒杀按 spuId 差异化（ParamFlowRule + 秒杀接口改造） | ⏳ 待做（随集群化评估） |
+| #5 余 P2 | Sentinel 集群流控 | [[Sentinel能力补充计划]] | token server 统一配额（随 #4 集群化） | ⏳ 待做 |
 | #2+#34 | AI 限流+并发闸门 | 无（TODO 已给层次） | 并发闸门 Semaphore 设计，改动最大 | ⏳ 待做 |
 
 ---
 
-## 七、第二批通用面试话术（贯穿主线）
+## 七、#5 Sentinel 能力补齐 P0（已完成：统一 Nacos 规则管理 + eager 修复）
 
-**主线叙事**："第二批我按'收益/成本/独立性'排序做了代码批：#8 修了 AI 预算 8:00 重置的时区 bug（10 行）；#23 做了一轮校验审计——过程中修正了原审计'漏触发 vs 没规则'的混淆，补了 5 个 DTO 规则 + 类级/参数级 @Validated，还发现并补全了全局异常处理器对 MethodArgumentNotValidException 的缺失（否则校验失败会返回 500 而不是 400）；#36 把订单消费者的无限 requeue 改成 x-death 限次重试，并补了 DLX 死信链路——期间踩了 RabbitMQ 队列参数不可变（406 PRECONDITION_FAILED）的坑；#14 处理 Redis 与 DB 库存一致性——推翻了自己第一版'付款前查库存'方案（语义缺陷），改为方案Y查'本单成交'，补 order_type 治本，第3层改静默丢弃为三兜底，最后落地 P1 对账任务（运行期轻量 + 凌晨全量）。四条线都踩了认知坑：时区不能依赖环境、DTO 校验有表达边界（or/跨字段）、自定义容器工厂会绕过 Spring retry、MQ 队列声明是一次性的、'查剩余库存'不可区分本单归属。"
+> 本节记录 #5 P0 的**审计修正、实施、部署踩坑与面试话术**（P1/P2 见 §六 剩余项）。
+
+### 7.1 审计修正：原"规则持久化 Nacos + 代码双保险"记载与事实不符（⭐ 面试开场）
+
+**原记载**（方案文档/面试文档）："秒杀 QPS=10 = Nacos + 代码双保险，重启不丢"。
+
+**实测打碎**（2026-09-08 服务器 + 日志双重证据）：
+
+| 证据 | 内容 |
+|---|---|
+| ① Nacos 规则全空 | SENTINEL_GROUP / DEFAULT_GROUP 下 `mall-seckill-flow-rules` 等 dataId 均 `config data not exist` |
+| ② 秒杀限流实际失效 | seckill 日志：代码规则加载（`QPS=10`）后，Nacos datasource 异步拉空 → `converter can not convert rules because source is empty` → **空规则整体替换本地规则** |
+| ③ 3 个注解空转 | order（新增订单/支付订单）、sso（adminLogin）有 @SentinelResource 但无 datasource、无规则 |
+| ④ degrade 空转 | seckill prod 配了 degrade datasource，Nacos 无 degrade 规则 |
+
+**机制认知（覆盖坑）**：Sentinel 规则容器 FlowRuleManager 是**全局唯一 + 整体替换**——本地代码 loadRules（@PostConstruct 先执行）和 Nacos datasource（异步初始化后执行）都只是"往黑板上写"，**谁后写谁生效，不是叠加**。配了 datasource 后权威源 = Nacos：Nacos 空 → 擦空黑板（本地 QPS=10 消失）；Nacos 有值 → 加载生效。**代码规则兜底对"Nacos 空配置"无效，只对"Nacos 宕机/不可达"有效**（拉取失败不推送 → 本地存活）。
+
+### 7.2 实施方案（为什么选 Nacos 统一管理而非代码 loadRules）
+
+| 方案 | 结论 |
+|---|---|
+| 纯代码 loadRules（order/sso 各加规则类） | ❌ 与已配 datasource 的 seckill 行为不一致；Nacos 空仍会擦除；且用户历史踩过覆盖坑（面试文档 Q2 实证） |
+| **Nacos 统一管理**（本次采用） | ✅ 权威源唯一、控制台/Nacos 热更新、重启自动恢复；代码规则保留为"宕机兜底"不删（双保险语义修正为"Nacos 运行期权威 + 代码宕机兜底"） |
+
+### 7.3 实施清单（2026-09-08）
+
+| 改动 | 文件 | 说明 |
+|---|---|---|
+| 加依赖 | order/sso pom | `sentinel-datasource-nacos` |
+| 配 datasource | order/sso prod+test yml | flow+degrade → Nacos（sso 仅 flow：登录失败是业务异常，degrade 会误伤） |
+| 规则事实来源入库 | `deploy/docker/sentinel/*.json`（5 个） | seckill flow QPS10+degrade、order flow QPS20×2+degrade、sso flow QPS10；`git add -f`（deploy/ 被 gitignore，与 compose/redis-conf 同策略） |
+| 代码规则改兜底 | seckill `SentinelFlowRuleConfig` | 保留 + 注释机制（启动瞬态 + Nacos 宕机兜底） |
+| 补 dashboard env | compose mall-sso | `SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858` |
+| 删死文件 | `deploy/docker/sentinel-rules.json` | 无引用、GBK 乱码、count=100 与实际 10 不符 |
+
+### 7.4 部署踩坑记录（⭐ 面试最有价值的三连坑）
+
+| # | 坑 | 现象 → 根因 → 解法 |
+|---|---|---|
+| ① | **compose 未同步** | sso 心跳 `Connection refused`（host='nacos:8858'）→ 本地 compose 加了 sso dashboard env 但服务器 compose 是旧的 → 同步 compose + 重建 sso |
+| ② | **双重 URL 编码** | Nacos 规则内容是 `%5B%0A...`（URL 编码串）→ python `quote()` + curl `--data-urlencode` 各编一次 → 改用 curl `content@file`（读文件自动编码一次） |
+| ③ | **transport 懒加载** | Dashboard 看不到规则/监控，但规则实际生效（30 并发 20×429）→ SCA `spring.cloud.sentinel.eager` 默认 false，CommandCenter 等**首次流量**才启动（sso 日志：打流量后才出现 `Begin listening at port 8880`）→ prod yml 补 `eager: true`，启动即初始化 |
+
+### 7.5 面试话术
+
+**主线**："#5 Sentinel 我做了 P0：先审计发现原文档'规则持久化 Nacos + 代码双保险'是假的——Nacos 规则全空，秒杀本地代码规则被 Nacos 空配置覆盖（日志 source is empty），**限流实际失效**。这是 Sentinel 的覆盖坑：FlowRuleManager 整体替换非叠加，配了 datasource 后权威源就是 Nacos，代码 loadRules 兜底只对 Nacos 宕机有效、对空配置无效。我把三个模块统一到 Nacos 管理（建 5 条 flow+degrade 规则、order/sso 接 datasource、规则 JSON 入库作为事实来源），秒杀代码规则保留为宕机兜底。部署时踩了三个坑：compose 漏同步导致 sso 心跳连错地址、Nacos 规则双重 URL 编码、以及最隐蔽的——**Sentinel transport 默认懒加载**，没流量时 CommandCenter 不启动，Dashboard 看起来'没规则'但限流实际生效（我用 30 并发压出 20 个 429 证明规则在工作），最后用 `eager: true` 让 transport 启动即初始化。"
+
+**被追问"为什么 Dashboard 空但限流生效？"**："Sentinel 规则有两条独立链路：规则数据在应用内存（从 Nacos datasource 加载），Dashboard 展示需要反向连应用的 transport 端口（CommandCenter）拉取。SCA 的 transport 默认懒加载——首次流量才启动 CommandCenter。所以'规则生效'（SphU.entry 检查 FlowRuleManager）和'Dashboard 可见'（CommandCenter 监听）是两回事。生产必须 `eager: true`，否则没流量的服务在 Dashboard 永远查无此人。"
+
+**被追问"为什么 sso 不配 degrade？"**："adminLogin 失败是业务异常（密码错），degrade 的异常比例熔断会把正常业务失败当故障触发熔断——登录接口只配 QPS 限流防爆破，不配降级。order/seckill 配的是慢调用比例熔断（RT>2s 比例 0.5 → 熔断 10s），因为订单/秒杀链路的故障形态是下游变慢而非异常率升高。"
+
+---
+
+## 八、第二批通用面试话术（贯穿主线）
+
+**主线叙事**："第二批我按'收益/成本/独立性'排序做了代码批：#8 修了 AI 预算 8:00 重置的时区 bug（10 行）；#23 做了一轮校验审计——过程中修正了原审计'漏触发 vs 没规则'的混淆，补了 5 个 DTO 规则 + 类级/参数级 @Validated，还发现并补全了全局异常处理器对 MethodArgumentNotValidException 的缺失（否则校验失败会返回 500 而不是 400）；#36 把订单消费者的无限 requeue 改成 x-death 限次重试，并补了 DLX 死信链路——期间踩了 RabbitMQ 队列参数不可变（406 PRECONDITION_FAILED）的坑；#14 处理 Redis 与 DB 库存一致性——推翻了自己第一版'付款前查库存'方案（语义缺陷），改为方案Y查'本单成交'，补 order_type 治本，第3层改静默丢弃为三兜底，最后落地 P1 对账任务（运行期轻量 + 凌晨全量）；#5 审计发现 Sentinel 规则实际全空、秒杀限流失效，统一到 Nacos 管理并修复 transport 懒加载。这些线都踩了认知坑：时区不能依赖环境、DTO 校验有表达边界（or/跨字段）、自定义容器工厂会绕过 Spring retry、MQ 队列声明是一次性的、'查剩余库存'不可区分本单归属、规则权威源只能有一个、transport 懒加载≠规则不生效。"
 
 **被追问"为什么不等公司方案"时**：个人项目我是 owner，但每个决策对齐企业做法（DLX/发送确认/kid 轮换/审计先行/对账分层），说明知道生产标准与当前取舍。
 

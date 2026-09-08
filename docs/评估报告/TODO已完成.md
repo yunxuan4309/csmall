@@ -18,17 +18,18 @@
 
 > 📌 明细与实战经验（Redis RDB→AOF 迁移丢数据、gateway 启动竞态、conf 属主权限）见 [[TODO第一批实现与原理]] §九；轮换操作见 [[运维手册--密钥密码轮换]]。
 
-**第二批已完成项**（2026-09-08 更新：#8/#36/#23/#14 P0+P1 已完成、#33 A2 落地+本地验证通过——**代码批全部完成，待部署服务器**）：
+**第二批已完成项**（2026-09-08：#8/#36/#23/#14 P0+P1/#33/#5——**代码批全部完成并已全量部署服务器**）：
 
 | 编号 | 事项 | 完成情况 |
 |------|------|---------|
-| **#33** | 双索引数据不一致（A2：统一索引 + mall-search 只读降级层） | ✅ 代码+本地验证完成（2026-09-08；本地实测 AI 主链路通 + 停 mall-ai 前端秒降级普通搜索），**待部署**。明细见 [[TODO第二批实现与原理]] §五 |
-| **#8** | AI 预算按北京时间结算 | ✅ 已完成（2026-09-07，TokenBudgetService 时区） |
-| **#36** | DLX 死信 + OrderQueueConsumer requeue 修复 | ✅ 已完成（x-death 限次重试 + 订单队列 DLX + OrderDlxConsumer）|
-| **#23** | 漏触发接口补 @Validated | ✅ 已完成（DTO 补规则 + 全局异常处理器补全 + admin.js 废弃标注）|
-| **#14** | Redis 主从切换防数据 P0+P1 | ✅ P0 三层 + order_type 治本 + 方案Y + P1 对账任务（见 §六）|
+| **#33** | 双索引数据不一致（A2：统一索引 + mall-search 只读降级层） | ✅ 完成 + **已部署**（2026-09-08；本地实测 AI 主链路通 + 停 mall-ai 前端秒降级；服务器验证：AI 索引重建后 19 条无下架残留、普通搜索 /search 返回正常、图片 URL 完整）。明细见 [[TODO第二批实现与原理]] §五 |
+| **#8** | AI 预算按北京时间结算 | ✅ 完成 + **已部署**（2026-09-07 改码，TokenBudgetService 时区，09-08 随批上线） |
+| **#36** | DLX 死信 + OrderQueueConsumer requeue 修复 | ✅ 完成 + **已部署**（x-death 限次重试 + 订单队列 DLX + OrderDlxConsumer；服务器 order_queue_dlx 已建）|
+| **#23** | 漏触发接口补 @Validated | ✅ 完成 + **已部署**（DTO 补规则 + 全局异常处理器补全 + admin.js 废弃标注）|
+| **#14** | Redis 主从切换防数据 P0+P1 | ✅ 完成 + **已部署**（P0 三层 + order_type 治本(Flyway V6) + 方案Y + P1 对账任务，见 §六）|
+| **#5** | Sentinel 能力补齐 P0 | ✅ 完成 + **已部署**（2026-09-08：统一 Nacos 管理 flow+degrade；order/sso 加 datasource；秒杀代码规则改"宕机兜底"；规则 JSON 入库 `deploy/docker/sentinel/`；sso 补 dashboard env；`eager:true` 修复 transport 懒加载。服务器实测 30 并发 adminLogin → 20×429 限流生效，Dashboard 三应用可见规则。P1 热点/P2 集群未做）。明细见 [[Sentinel部署执行清单-2026-09-08]]、[[TODO文件]] #5 |
 
-> 📌 **部署说明**：上述第二批代码批已在本地编译/自检通过，但**服务器仍运行 2026-08-04 旧 jar**——需一次维护窗口全量构建部署（含 Flyway V6 order_type 迁移）。服务器部署完成后在"备注"列补"已上线"。
+> 📌 **部署回填（2026-09-08 维护窗口执行完毕，服务器实测）**：11 个微服务 jar 全量重建替换（11:25~12:59，旧 jar 备份 `/data/csmall/jars/backup-20260908/`）+ Flyway V6 自动执行成功（oms_order 已加 `order_type` 列默认 0，flyway success=1）+ ES 索引清理（删空索引 `cool_shark_mall_index` + 旧 `cool_shark_mall_index2`，AI 索引 `/ai/syncAll` 重建后 **19 条**）+ 前端 dist 更新 + 21 容器全 Up。**部署中修复 mall-ai 既有 bug**：AI 重排偶发降级/超时，真因 = reasoning 模型过度思考致 content 截断（JSON 任务改用 `deepseek-chat`、SSE 对话保留 `v4-flash`），详见 [[TODO第二批实现与原理]] §5.4.5 边界表 #21。
 
 ---
 
@@ -235,3 +236,27 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 - **P1 对账任务**：运行期 5 分钟轻量纠偏（\|diff\|≥2 直接修、\|diff\|=1 连续 3 次才修）+ 凌晨全量校准（\|diff\|≥1 即修 + 补建缺失 key），以 DB 为唯一基准修正 Redis，本地实测修掉 sku26/sku35 漂移、12 sku 零误改
 
 > 📄 方案与原理详见 [[秒杀对账任务实现方案]]、[[TODO第二批实现与原理]] §四。
+
+---
+
+## 七、#5 Sentinel 能力补齐 P0（2026-09-08 完成并部署）
+
+> **说明**：#5 P1 热点参数限流 / P2 集群流控未做（原条目保留在 [[TODO文件]]），此处归档 **P0 已完成部分**。
+
+**审计修正（原方案文档与事实不符）**：原记载"秒杀 QPS=10 = Nacos + 代码双保险"，实测 **Nacos SENTINEL_GROUP 规则全空** + seckill 日志 `converter can not convert rules because source is empty` = **本地代码规则被 Nacos 空配置覆盖，秒杀限流当时实际失效**（历史覆盖坑复现：FlowRuleManager 整体替换非叠加，配了 datasource 后权威源 = Nacos）。
+
+**完成内容（2026-09-08）**：
+- **统一 Nacos 管理规则**：Nacos 建 5 个 dataId（SENTINEL_GROUP）——`mall-seckill-flow-rules`(QPS=10)/`mall-seckill-degrade-rules`(慢调用熔断)、`mall-order-flow-rules`(新增/支付订单 QPS=20)/`mall-order-degrade-rules`、`mall-sso-flow-rules`(adminLogin QPS=10)；规则 JSON 事实来源入库 `deploy/docker/sentinel/*.json`（git add -f，与 compose/redis-conf 同策略）
+- **order/sso 接入 datasource**：pom 加 `sentinel-datasource-nacos`，prod/test yml 配 flow+degrade datasource（sso 仅 flow——登录失败属业务异常，配 degrade 会误伤）
+- **秒杀代码规则改兜底语义**：`SentinelFlowRuleConfig` 保留为"启动瞬态 + Nacos 宕机兜底"（Nacos 正常→以 Nacos 为准；Nacos 空→代码也被擦；Nacos 宕机→代码兜底存活），注释写明机制
+- **sso 补 dashboard env**：compose 加 `SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858`（曾漏同步导致 sso 心跳连 nacos:8858 失败 `Connection refused`）
+- **`eager: true` 修复 transport 懒加载**：SCA 默认懒加载，无流量时 CommandCenter 不启动 → Dashboard 查不到规则/监控；实测 sso 打流量后才出现 `Begin listening at port 8880`，加 eager 后启动即初始化
+- **清理死文件**：删除 `deploy/docker/sentinel-rules.json`（无代码/compose 引用、GBK 乱码、count=100 与真实 10 不符）
+
+**服务器验证（2026-09-08 实测）**：
+- Nacos 5 规则发布成功（curl `content@file` 单次编码——曾踩双重编码坑：python quote + --data-urlencode 各编一次 → 存了 URL 编码串）
+- 三容器（order/sso/seckill）重建后 record 日志 flow+degrade 全部 `notify-ok` 从 Nacos 加载；心跳 0 失败
+- **限流实测**：adminLogin 30 并发 → 10×400(进业务) + **20×429(被拦)** = QPS=10 精确生效
+- transport 端口 8880/8872/8870 均可达（dashboard 视角 `getRules?type=flow` 拉到真实规则）；Dashboard 左侧可见 mall-sso/mall-order/mall-seckill 三应用
+
+> 📄 完整执行清单与验证见 [[Sentinel部署执行清单-2026-09-08]]；原方案与 P1/P2 见 [[Sentinel能力补充计划]]。
