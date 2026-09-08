@@ -1,4 +1,4 @@
-# ##################################################################### #
+﻿# ##################################################################### #
 #                            【生产】环境配置                              #
 # ##################################################################### #
 #  当前文件是Profile配置，需要主配置文件中通过spring.profiles.active激活后生效   #
@@ -30,6 +30,9 @@ spring:
     nacos:
       discovery:
         server-addr: ${my.server.addr}:8848
+        # #13 Nacos 认证：客户端账号密码（compose 注入 NACOS_USERNAME/PASSWORD）
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:}
     sentinel:
       # eager=true: transport(CommandCenter)启动时即初始化并向 Dashboard 注册，
       # 否则懒加载——无流量时 Dashboard 查不到规则/监控（#5 部署实测发现）
@@ -42,6 +45,9 @@ spring:
         flow:
           nacos:
             server-addr: ${my.server.addr}:8848
+            # #13 Nacos 认证：Sentinel 规则 datasource 账号
+            username: ${NACOS_USERNAME:nacos}
+            password: ${NACOS_PASSWORD:}
             data-id: mall-seckill-flow-rules
             group-id: SENTINEL_GROUP
             data-type: json
@@ -49,6 +55,9 @@ spring:
         degrade:
           nacos:
             server-addr: ${my.server.addr}:8848
+            # #13 Nacos 认证：Sentinel 规则 datasource 账号
+            username: ${NACOS_USERNAME:nacos}
+            password: ${NACOS_PASSWORD:}
             data-id: mall-seckill-degrade-rules
             group-id: SENTINEL_GROUP
             data-type: json
@@ -83,6 +92,9 @@ dubbo:
     name: dubbo
   registry:
     address: nacos://${my.server.addr}:8848
+    # #13 Nacos 认证：Dubbo registry 客户端账号
+    username: ${NACOS_USERNAME:nacos}
+    password: ${NACOS_PASSWORD:}
     use-as-metadata-center: false
     use-as-config-center: false
   consumer:

@@ -1,4 +1,4 @@
-services:
+﻿services:
 
   # ==================== 数据库 ====================
   mysql:
@@ -54,6 +54,12 @@ services:
       JVM_XMS: "512m"
       JVM_XMX: "512m"
       JVM_XMN: "256m"
+      # #13 认证开启（2026-09-08）：NACOS_AUTH_TOKEN 必须 Base64 ≥32 字节，
+      # 值在 .env 同步；开启后无 token 访问返回 403，所有客户端须配账号（见 #13 部署清单）
+      NACOS_AUTH_ENABLE: "true"
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:}
+      NACOS_AUTH_IDENTITY_KEY: serverIdentity
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:}
     mem_limit: 1g
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/"]
@@ -191,6 +197,9 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
+      # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
     mem_limit: 768m
@@ -212,6 +221,9 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
+      # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
@@ -240,6 +252,9 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
+      # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
@@ -268,6 +283,9 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
+      # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
     mem_limit: 1g
@@ -289,6 +307,9 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
+      # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
@@ -322,6 +343,9 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
+      # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       # TODO #33 A2：普通搜索返回图片需拼接完整 URL（与 mall-ai/product/resource 对齐）
       CUSTOM_FILE_UPLOAD_RESOURCE_HOST: http://8.156.77.197/
@@ -348,6 +372,9 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
+      # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
@@ -380,6 +407,9 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
+      # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
@@ -405,6 +435,9 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
+      # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
@@ -431,6 +464,9 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
+      # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
@@ -459,6 +495,9 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
+      # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       AI_API_KEY: ${AI_API_KEY}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}

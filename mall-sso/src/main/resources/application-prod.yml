@@ -1,4 +1,4 @@
-# ##################################################################### #
+﻿# ##################################################################### #
 #                            【生产】环境配置                              #
 # ##################################################################### #
 #  当前文件是Profile配置，需要主配置文件中通过spring.profiles.active激活后生效   #
@@ -20,6 +20,9 @@ spring:
     nacos:
       discovery:
         server-addr: ${my.server.addr}:8848
+        # #13 Nacos 认证：客户端账号密码（compose 注入 NACOS_USERNAME/PASSWORD）
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:}
     # TODO #5：Sentinel 规则统一 Nacos 管理（flow + degrade）。
     # ⚠️ 机制认知：配了 Nacos datasource 后权威源=Nacos（整体替换非叠加）——
     #   Nacos 配置为空会擦除本地代码规则，故 dataId 必须在 Nacos 持久存在
@@ -37,6 +40,9 @@ spring:
         flow:
           nacos:
             server-addr: ${my.server.addr}:8848
+            # #13 Nacos 认证：Sentinel 规则 datasource 账号
+            username: ${NACOS_USERNAME:nacos}
+            password: ${NACOS_PASSWORD:}
             data-id: mall-sso-flow-rules
             group-id: SENTINEL_GROUP
             data-type: json
