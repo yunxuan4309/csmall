@@ -19,7 +19,7 @@
 | 6 | **#29** | 数据库定期备份 | 运维底线 | ⏳ 待做（需 ecs-user 配 cron） |
 | 7 | **#23** | 漏触发接口补 @Validated | 校验静默失效 | ✅ **已完成 + 已部署**（含审计修正 + 全局异常处理器补全） |
 | 8 | **#5** | Sentinel 能力补齐 | 面试价值 | ✅ **P0 已完成 + 已部署**（2026-09-08 晚：统一 Nacos 管理 + eager 修复懒加载，实测 429 生效）；P1 热点/P2 集群待做（见 §六） |
-| 9 | **#2+#34** | AI 接口限流 + 并发闸门 | AI 承载 | ⏳ 待做（后置，改动最大） |
+| 9 | **#2+#34** | AI 接口限流 + 并发闸门 | AI 承载 | 🟡 **代码批完成待部署**（2026-09-08：Sentinel 3 组规则 + Semaphore 并发闸门=20 + 每用户频控；见 §七·六） |
 
 **执行顺序**：代码批（#8→#23→#36→#14→#33 全部完成）✅ → **部署服务器（2026-09-08 已完成）** ✅ → **#5 P0（2026-09-08 晚完成并部署）** ✅ → 剩余待做 #13/#29（运维批）→ #2+#34（设计批）。第一批已证明"先本地改 → 编译验证 → 维护窗口部署"的节奏有效。
 
@@ -632,6 +632,52 @@ Dubbo 消费者按**接口**引用(`providers:com.cooxiao.mall.product.*` 接口
 ### 面试话术
 
 "部署后用户反馈秒杀页第二次进入 500——排查 gateway 日志发现 `invalid version format: UNSUPPORTED` 且目标是 **20880 端口**,立刻明白是 `lb://` 轮询把请求打到了 Dubbo 端口。根因是 **Dubbo 应用名与 Spring 应用名撞名**,Dubbo 3.x 应用级注册把 20880 混进服务名。我做的不只是修 seckill,而是**全项目排查**:gateway lb:// 路由 × Nacos 实例 × @DubboService 三向对照,发现 ums 也撞名且有 provider(潜伏隐患)一并修,product 是历史遗留(曾用直连规避)也根治;front/search/ams 虽撞名但无 provider 不构成风险,记为规范项防未来踩坑。这个排查思路——'不只是修当前故障,而是按故障模式全量清查'——比单点修复更有价值。"
+
+---
+
+## 七·六、#2+#34 AI 限流 + 并发闸门（代码批完成：Sentinel 3 组规则 + Semaphore 闸门 + 每用户频控）
+
+### 7.6.1 问题本质：AI 高并发 ≠ 秒杀高并发（⭐ 面试核心认知）
+
+| 维度 | 秒杀 | AI |
+|---|---|---|
+| 请求特征 | **大量快请求**（毫秒级） | **少量慢请求**（SSE 秒级~十几秒挂一个线程） |
+| 主要风险 | 瞬时 QPS 冲高 | **少量并发即占满 Tomcat 线程池**，拖垮其他接口 |
+| 外部约束 | 无（内部资源） | **LLM API 共享配额**（QPS 限制 + token 收费） |
+| 应对 | 限流削峰（Sentinel QPS） | 限流 + **并发闸门** + 频控 + 缓存 + 降级 |
+
+**铁约束**：① 每个 SSE 请求 = 一个线程占用秒级 → 不设闸门，10 个用户同时流式对话就可能吃满线程池；② LLM API 是外部共享资源，不能无限并发调。
+
+### 7.6.2 三层防护设计（本次实施）
+
+| 层 | 机制 | 挂点 | 超限行为 |
+|---|---|---|---|
+| **① 入口 QPS 限流**（Sentinel，#2） | 3 组资源：ai-chat=5(流式/同步对话)、ai-reason=10(搜索/问答/对比)、ai-light=30(补全/推荐/历史) | AiController @SentinelResource + blockHandler | 429 JSON / SSE error 事件 |
+| **② 并发闸门**（Semaphore=20，#34 核心） | tryAcquire，满即抛 AiBusyException | **所有真实 LLM 调用汇聚点**：DeepSeekAiClient.chat/chatWithModel/doChat/embed + ChatServiceImpl.streamDeepSeek | 服务内既有降级路径（纯 ES/busy VO/SSE error）→ **繁忙永不 500** |
+| **③ 每用户频控**（Redis） | INCR+TTL 60s 窗口，阈值 10 次/分 | AiController 各重接口入口 | 429「操作太频繁」 |
+
+**为什么闸门挂"LLM 调用汇聚点"而非 Controller**（关键设计决策）：
+- 一次 /ai/search 内部可能调 2 次 LLM（意图提取 + 重排），一次 /ai/chat 内部意图提取 + 流式生成各 1 次——**按请求限流 ≠ 按 LLM 调用限流**
+- 闸门挂在 `DeepSeekAiClient` + `streamDeepSeek` 后，**统计的是真实并发 LLM 调用数**（外部 API 的真实占用），与预算（TokenBudget）同层，语义一致
+- Controller 的 @SentinelResource 只解决"入口打爆"（快失败），闸门解决"慢请求堆积"（限并发）——两层互补
+
+### 7.6.3 代码结构与降级闭环
+
+```
+AiController (@SentinelResource QPS 限流 + 频控)
+  └→ service (Search/Ask/Compare/Chat)
+       └→ DeepSeekAiClient.chat/chatWithModel/doChat  ← Semaphore.acquire("chat")
+       └→ ChatServiceImpl.streamDeepSeek              ← Semaphore.acquire("stream")
+             │ 闸门满 → AiBusyException
+             ├→ service 内 try-catch → 既有降级（Search→纯ES"已按关键词排序" / Ask→busy VO / SSE→error事件）
+             └→ Controller 直抛 → AiBusyExceptionAdvice → 429 JSON
+```
+
+### 7.6.4 面试话术
+
+**主线**："#2+#34 我给 AI 模块做了三层防护。核心认知是 **AI 高并发 ≠ 秒杀高并发**——秒杀是大量快请求，AI 是少量慢请求占线程（一个 SSE 流式秒级~十几秒挂一个线程），不设闸门时 10 个用户就能占满 Tomcat 线程池拖垮全站；而且 LLM 是外部共享 API（有 QPS 配额 + 按 token 收费），不能无限调。我做了三层：① Sentinel 入口 QPS 限流（按接口轻重分 3 组：对话 5、推理 10、轻量 30）；② **核心是并发闸门**——Semaphore=20，挂在所有真实 LLM 调用的汇聚点（客户端 chat 方法 + SSE 流式），而不是 Controller——因为一次 /ai/search 内部要调 2 次 LLM（意图提取+重排），按请求限流不等于按 LLM 调用限流，闸门统计的是外部 API 的真实并发占用；③ 每用户频控（Redis 60s/10 次）防单用户刷爆预算。闸门满抛的 AiBusyException 走服务内**既有降级路径**（Search 直接返回纯 ES 结果、SSE 发 error 事件），所以繁忙是降级不是 500。面试价值最高的是'为什么闸门挂在 LLM 汇聚点而不是 Controller'——这是想清楚'限流对象'才知道的。"
+
+**被追问"为什么不只靠 Sentinel QPS 限流？"**："QPS 限流解决'入口打爆'（瞬时大量请求快速失败），但解决不了'慢请求堆积'——QPS=5 意味着每秒进 5 个，每个挂 15 秒，稳态下也会有 75 个线程被 AI 占着。Sentinel 的并发线程数限流（grade=线程数）理论上也能做，但项目里 LLM 调用点分散（客户端 + 流式直连），用 Semaphore 在汇聚点统一控制更直观、可测（availablePermits 可监控），也和预算检查同层。两层互补：入口 QPS 快速失败 + 闸门限真实并发。"
 
 ---
 
