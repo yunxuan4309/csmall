@@ -338,6 +338,6 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
 **实测**：49KB / 6 库 / 39 表完整性验证通过（CREATE DATABASE×6 / CREATE TABLE×39）。
 
-**待办**：恢复演练（TODO 铁律"备份没验证过=没有备份"，建议导临时库验证）。
+**待办**：恢复演练（TODO 铁律"备份没验证过=没有备份"，建议导临时库验证）→ 已记入 [[TODO文件]] 第三批 #47（有空再做）。
 
 > 面试价值：能讲"备份要有恢复演练，没验证过的备份等于没有"的运维底线。
