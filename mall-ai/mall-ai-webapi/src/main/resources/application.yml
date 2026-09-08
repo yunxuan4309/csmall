@@ -20,10 +20,17 @@ cooxiao:
     #    或用系统/用户环境变量（本机用户级已有 DEEPSEEK_API_KEY）。踩坑记录见 TODO 第二批 §5.4.5。
     api-key: ${AI_API_KEY:${DEEPSEEK_API_KEY:sk-placeholder}}
     base-url: ${AI_API_BASE_URL:https://api.deepseek.com}
-    chat-model: deepseek-v4-flash
+    # ⚠️ chat-model 用 deepseek-chat（非推理模型）：重排/意图提取等 JSON 结构化任务需要"快+稳+不截断"，
+    # 推理模型(deepseek-v4-flash)会思考到预算耗尽才输出，content 易被截断/挤空（2026-09-08 实测）。
+    # 真正需要深度推理的 SSE 对话在 ChatServiceImpl 硬编码 v4-flash，不受此配置影响。
+    chat-model: deepseek-chat
     compare-model: deepseek-v4-flash
     temperature: 0.7
-    max-tokens: 2000
+    # max-tokens：deepseek-v4-flash 是 reasoning 模型，提示词禁思考后仍会产出大量 reasoning
+    # （实测随 max_tokens 水涨船高：1000→想满1000、2000→想~1630）。max_tokens 必须 >> reasoning
+    # 自然上限 + content 长度，否则 reasoning 占满 → content 空（重排偶发降级）。
+    # 实测 2000 时 reasoning≈1630 content 正常(3/3成功)，但余量偏紧；3000 留足安全边际（2026-09-08 实测调优）
+    max-tokens: 3000
     # LLM HTTP 调用超时：deepseek-v4-flash 是 reasoning 模型（先思考后回答），
     # 意图提取/AI 重排等完整生成常需 15-30s，15s 会导致 AI 重排 Read timed out 频繁降级
     timeout: 60000

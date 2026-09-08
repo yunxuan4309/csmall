@@ -98,10 +98,16 @@ public class DeepSeekAiClient implements AiClient {
             tokenBudgetService.record(inputCost + outputCost);
         }
 
-        return json.getJSONArray("choices")
+        String content = json.getJSONArray("choices")
                 .getJSONObject(0)
                 .getJSONObject("message")
                 .getString("content");
+        if (content == null || content.isBlank()) {
+            // reasoning 模型思考过长可能把 max_tokens 吃满，content 为空 → 调用方解析 null
+            log.warn("DeepSeek 响应 content 为空（model={}, jsonMode={}, 可能 reasoning 耗尽 max_tokens={}），usage={}",
+                    model, jsonMode, aiProperties.getMaxTokens(), usage);
+        }
+        return content;
     }
 
     private String doChat(HttpHeaders headers, List<Map<String, String>> messages) {

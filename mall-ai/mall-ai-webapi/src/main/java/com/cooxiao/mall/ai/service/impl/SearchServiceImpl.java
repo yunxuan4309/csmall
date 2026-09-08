@@ -89,28 +89,25 @@ public class SearchServiceImpl {
             return empty;
         }
 
-        // 2. AI 重排序
+        // 2. AI 重排序（reasoning 模型偶发 content 为空 → 重试一次再降级）
         List<Long> rankedIds;
         String explanation;
         try {
             String candidateText = buildCandidateList(candidates);
             String prompt = String.format(SEARCH_PROMPT, keyword, candidates.size(),
                     RERANK_RESULT, candidateText);
-            // jsonMode=true：约束 deepseek-v4-flash（reasoning 模型）输出纯 JSON，
-            // 与意图提取（extractSearchIntent）同款——否则模型自由发挥返回非 JSON，parseObject 得 null
-            String aiResponse = aiClient.chatWithModel(
-                    "你是专业的电商导购，只输出 JSON 不要其他内容。", prompt, aiProperties.getChatModel(), true);
-            // 清理 AI 可能输出的 markdown 包裹（```json ... ```）
-            if (aiResponse != null) {
-                aiResponse = aiResponse.trim();
-                if (aiResponse.startsWith("```")) {
-                    aiResponse = aiResponse.replaceAll("```json?", "").replace("```", "").trim();
-                }
+            String[] result = callRerank(prompt);   // [rankedIdsJson, explanation] 或 null
+            if (result == null) {
+                // 重试一次：reasoning 模型思考过长致 content 为空是偶发的，二次调用通常成功
+                log.warn("AI重排序首次返回异常，重试一次");
+                result = callRerank(prompt);
             }
-            JSONObject aiJson = aiResponse == null || aiResponse.isBlank() ? null : JSON.parseObject(aiResponse);
-            rankedIds = aiJson.getJSONArray("rankedIds")
+            if (result == null) {
+                throw new IllegalStateException("AI重排序两次均失败");
+            }
+            rankedIds = com.alibaba.fastjson.JSONArray.parseArray(result[0])
                     .stream().map(o -> ((Number) o).longValue()).toList();
-            explanation = aiJson.getString("explanation");
+            explanation = result[1];
         } catch (Exception e) {
             log.warn("AI重排序失败，降级为ES原始排序: {}", e.getMessage());
             // 降级：直接返回 ES 原始排序的 Top-5
@@ -219,6 +216,48 @@ public class SearchServiceImpl {
     }
 
     // ==================== 辅助方法 ====================
+
+    /**
+     * 调用 AI 重排并解析结果
+     *
+     * @return String[2] = {rankedIds 的 JSON 数组字符串, explanation}；解析失败返回 null（供调用方重试/降级）
+     */
+    private String[] callRerank(String prompt) {
+        try {
+            String aiResponse = aiClient.chatWithModel(
+                    // ⚠️ 关键：deepseek-v4-flash 是 reasoning 模型，若不禁思考会把 max_tokens 全耗在
+                    // reasoning_content 上导致 content 为空（实测 reasoning_tokens=4000=max_tokens）。
+                    // "不要任何思考过程，直接输出" 可关掉过度思考（实测 reasoning_tokens 降到 58，1.6s 返回）
+                    "你是专业的电商导购。直接输出 JSON，不要任何思考过程，不要输出 reasoning，不要解释。",
+                    prompt, aiProperties.getChatModel(), true);
+            // 清理 AI 可能输出的 markdown 包裹（```json ... ```）
+            if (aiResponse != null) {
+                aiResponse = aiResponse.trim();
+                if (aiResponse.startsWith("```")) {
+                    aiResponse = aiResponse.replaceAll("```json?", "").replace("```", "").trim();
+                }
+            }
+            if (aiResponse == null || aiResponse.isBlank()) {
+                log.warn("AI重排序响应为空（可能 reasoning 耗尽 max_tokens）");
+                return null;
+            }
+            JSONObject aiJson = JSON.parseObject(aiResponse);
+            if (aiJson == null) {
+                log.warn("AI重排序响应非 JSON: {}", truncate(aiResponse, 200));
+                return null;
+            }
+            String rankedIdsJson = aiJson.getJSONArray("rankedIds").toJSONString();
+            String explanation = aiJson.getString("explanation");
+            return new String[]{rankedIdsJson, explanation};
+        } catch (Exception e) {
+            log.warn("AI重排序调用异常: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private String truncate(String s, int max) {
+        return s == null ? "" : (s.length() > max ? s.substring(0, max) + "..." : s);
+    }
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> esKeywordSearch(String keyword, int size) {

@@ -283,7 +283,7 @@ public class ChatServiceImpl {
         String preferenceContext = buildPreferenceContext(session.getPreferences());
         String prompt = """
                 你是一个电商搜索意图解析器。根据用户消息和历史偏好，输出JSON格式的搜索参数。
-                只输出JSON，不要任何解释。
+                直接输出JSON，不要任何思考过程，不要输出 reasoning，不要任何解释。
 
                 历史偏好：
                 %s
@@ -310,7 +310,9 @@ public class ChatServiceImpl {
                 """.formatted(preferenceContext.isBlank() ? "无" : preferenceContext, message);
 
         try {
-            String raw = aiClient.chatWithModel(null, prompt, "deepseek-v4-flash", true);
+            // 意图提取是 JSON 结构化任务：用 deepseek-chat（非推理，快+稳+不截断）。
+            // 推理模型(v4-flash)会思考到预算耗尽才输出，JSON 易被截断/延迟大（2026-09-08 实测调优）
+            String raw = aiClient.chatWithModel(null, prompt, "deepseek-chat", true);
             // 清理 AI 可能输出的 markdown 包裹
             raw = raw.trim();
             if (raw.startsWith("```")) raw = raw.replaceAll("```json?", "").replace("```", "").trim();

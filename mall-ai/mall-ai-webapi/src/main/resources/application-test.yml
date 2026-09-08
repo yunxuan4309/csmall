@@ -45,8 +45,10 @@ cooxiao:
     # 嵌套占位符：AI_API_KEY 优先，其次 DEEPSEEK_API_KEY，都缺才回退占位符。
     api-key: ${AI_API_KEY:${DEEPSEEK_API_KEY:sk-placeholder}}
     # 向量检索（硅基流动 BGE-M3，免费）
+    # ⚠️ 2026-09-08：原硬编码 key(sk-pffsuu...)曾提交进 git 并已 push，已改占位符；
+    #   本地用 EMBEDDING_API_KEY 环境变量注入。建议到硅基流动控制台吊销旧 key（已进公开仓库历史）
     embedding-enabled: true
-    embedding-api-key: sk-pffsuuahmchjczrsmyltgaflkqyaeymcgwtsyrxoswvrnllw
+    embedding-api-key: ${EMBEDDING_API_KEY:${EMBEDDING_API_KEY_LOCAL:sk-placeholder}}
     # 开发阶段放行 sync 接口（Swagger 可直调）
     sync-whitelisted: true
 
