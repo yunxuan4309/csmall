@@ -6,6 +6,27 @@
 
 ---
 
+## 〇、第三批已完成（2026-09-09 起）
+
+### #46. 【运维】nacos 数据卷挂载重启 ✅ 已完成（2026-09-09）
+
+> **说明**：#46 是第三批 P0 运维项——nacos 此前是 21 容器里唯一无数据卷的中间件，derby（配置/用户/规则）裸存容器可写层，重建即丢（#13 部署实测丢过 6 条 Sentinel 规则）。
+
+**完成内容（2026-09-09 维护窗口）**：
+- **compose 同步**：本地已含 `nacos_data:/home/nacos/data` 卷定义 → scp 覆盖服务器（先 diff 确认仅差 9 行）→ md5 校验
+- **数据迁移**：停容器 → `docker cp` 备份 derby（8.5M = protocol 5.8M + derby-data 2.8M，JRaft 停机 compact 后为持久状态）→ 灌入命名卷 → 重建挂卷
+- **验证全通过**：无 token 403 ✅ / 管理员登录 accessToken ✅ / **6 条 Sentinel 规则**完整 ✅ / 挂载 `csmall_nacos_data` ✅ / **27 服务重新注册** ✅
+
+**⭐ 踩坑（面试最值钱的素材）——compose 卷名前缀**：
+- 手动 `docker volume create nacos_data`（无前缀），但 compose 卷名 = `项目名_卷名` = **`csmall_nacos_data`** → compose 不认识手动卷，重建时**自动创建空卷**挂给 nacos → nacos 在空库全新初始化 → 登录报 `User nacos not found`
+- 排坑三证据：卷列表出现两个卷 / `docker inspect` 看挂载名 / `docker compose config` 显示 `name: csmall_nacos_data`
+- 修复：删空卷 → `docker volume create csmall_nacos_data`（正确卷名）→ 从宿主机备份灌数据 → compose 重建 → 全验证通过
+- **教训**：① compose 卷名带项目前缀，手动建卷须用全名或先 `docker compose config` 核对；② 容器数据备份以停机后为准（运行中 du 看到的是 JRaft 日志膨胀态）；③ 宿主机备份 + 卷双保险让排坑零损失
+
+📄 **完整原理/疑惑点/面试话术见 [[TODO第三批实现与原理]] §一**
+
+---
+
 ## 一、第一批：安全 + 资源止血（2026-09-07 已全部完成）
 
 | 顺序 | 编号 | 事项 | 完成情况 |
