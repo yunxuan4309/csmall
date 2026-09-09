@@ -670,6 +670,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://172.29.193.239:3306/cs_mall_seckill?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
       SPRING_DATA_REDIS_HOST: 172.29.193.239
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 2026-09-09 阶段3.6 后补：与老机 11 个服务口径一致改【哨兵模式】
+      # （standalone 在主从切换后会打到只读从库报 READONLY；哨兵在新机本机，用私网 IP 访问；哨兵本身无密码故不设 SENTINEL_PASSWORD）
+      SPRING_DATA_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_DATA_REDIS_SENTINEL_NODES: 172.29.193.240:26379,172.29.193.240:26380,172.29.193.240:26381
       SPRING_RABBITMQ_HOST: 172.29.193.239
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
