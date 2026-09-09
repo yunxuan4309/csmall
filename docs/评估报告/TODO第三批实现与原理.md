@@ -474,7 +474,7 @@ java.lang.IllegalStateException: Could not initialize plugin: interface org.mock
 | A 新机铺路 | ✅ 完成 |
 | 2a/2b 老机端口放行 | ✅ **已完成（2026-09-09 窗口 A）**：3306/6379 绑私网 IP；product/order 注册 `172.29.193.239:20880/20881`；新机→老机 4 端口全通；消费方 Dubbo 动态切换成功、错误 0 条；21 容器零重启 |
 | 3 Redis 从 + 3 哨兵 | ✅ **已完成（2026-09-09）**：副本 `master_link_status:up`、主从 `DBSIZE 21=21`、副本 `READONLY` 拒写；3 哨兵视角一致 + `quorum=2` + 互认；**配置持久化已修通**（`Sentinel new configuration saved on disk`）；踩坑三层见 §5.4 |
-| 3.5 客户端迁哨兵模式 | ⏳ 11 个服务加 2 行 env + canary 灰度（1→3→全量） |
+| 3.5 客户端迁哨兵模式 | ✅ **已完成（2026-09-09）**：11 个服务注入 `SENTINEL_MASTER/NODES`，4 批灰度全部 Started + health 200、Redis 错误 0 条；**行为验证**：seckill 的 Redis 对端由 `172.18.0.5:6379`（容器 IP）变为 `172.29.193.239:6379`（宿主 IP）→ 确认走哨兵 |
 | 4 秒杀副本 10017 | ⏳ 需先部署带锁的新 jar（老机 seckill 也必须换） |
 | 5 文档回填 | ⏳ |
 
