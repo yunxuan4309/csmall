@@ -5,7 +5,9 @@ services:
     image: mysql:8.0
     container_name: csmall-mysql
     ports:
-      - "127.0.0.1:3306:3306"
+      # 2026-09-09 窗口A（阶段2a）：127.0.0.1 → 宿主内网 IP，供新机 csmall-node2 跨机访问
+      # 绑私网 IP 而非 0.0.0.0 → 公网不可达；安全组未放行 3306 公网
+      - "172.29.193.239:3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
@@ -26,7 +28,9 @@ services:
     container_name: csmall-redis
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     ports:
-      - "127.0.0.1:6379:6379"
+      # 2026-09-09 窗口A（阶段2a）：127.0.0.1 → 宿主内网 IP
+      # 哨兵监控地址必须稳定（容器 IP 重建即变）→ 用宿主私网 IP + 映射端口
+      - "172.29.193.239:6379:6379"
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:
@@ -250,9 +254,14 @@ services:
       context: ./jars
       dockerfile: ../dockerfiles/mall-product.Dockerfile
     container_name: csmall-product
-    ports: ["9010:9010"]
+    # 20880: Dubbo provider 端口（2026-09-09 窗口A 阶段2b，跨机集群）
+    ports: ["9010:9010", "20880:20880"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      # 2026-09-09 窗口A（阶段2b）：注册到 Nacos 的地址用宿主内网 IP + 映射端口
+      # 否则消费者（含新机秒杀副本）拿到容器 IP 172.18.x → 跨机不可达
+      DUBBO_IP_TO_REGISTRY: 172.29.193.239
+      DUBBO_PORT_TO_REGISTRY: "20880"
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
@@ -305,9 +314,13 @@ services:
       context: ./jars
       dockerfile: ../dockerfiles/mall-order.Dockerfile
     container_name: csmall-order
-    ports: ["10005:10005"]
+    # 20881(宿主) → 20880(容器)：与 product 的 20880 错开，避免宿主端口冲突（2026-09-09 窗口A 阶段2b）
+    ports: ["10005:10005", "20881:20880"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      # 2026-09-09 窗口A（阶段2b）：注册宿主内网 IP + 映射端口（20881），跨机消费者才能连到
+      DUBBO_IP_TO_REGISTRY: 172.29.193.239
+      DUBBO_PORT_TO_REGISTRY: "20881"
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
