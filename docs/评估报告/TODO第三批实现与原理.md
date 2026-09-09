@@ -602,6 +602,12 @@ Lettuce 的 `ConnectionWatchdog` 在连接断开后：① 按退避策略重连*
 - **为什么这么久**：哨兵要等主库恢复被感知（`-sdown`）、再重新纳入拓扑、再下发降级指令。
 - **为什么业务没事**：客户端只连**哨兵返回的地址**，不会主动连老地址。
 - **为什么仍要防**：万一有客户端/脚本直连老地址，这 10.9s 内它会把数据写进一个**即将被全量覆盖的主库** → 数据丢失。这正是 **`min-replicas-to-write 1`（TODO #14-P2）** 的价值：让"没有从库确认"的主库**拒绝写**。
+  > ✅ **Redis 官方文档佐证**（Sentinel 文档 "Example 2: basic setup with three boxes"）：官方用**同一场景**（分区里的旧主库继续被写）说明该配置，并直接给出：
+  > ```conf
+  > min-replicas-to-write 1
+  > min-replicas-max-lag 10
+  > ```
+  > *"the old Redis master M1 … will become unavailable after 10 seconds. When the partition heals, the Sentinel configuration will converge to the new one"* —— 也就是说，**#14-P2 不是我们自己想出来的加固，而是官方对"哨兵架构固有缺陷"的标准补丁**，我们演练测到的 10.9s 窗口正是它要覆盖的时间。
 - **顺带解释了另一个坑**：老机 `redis-master.conf` 是**单文件 bind mount**，Redis 改写配置需要"写临时文件 + rename"→ 必然 `Resource busy`（与哨兵踩的坑同源）→ **降级只能靠哨兵运行时下发，不可能落盘**。
 
 **⑤ 🔴 红线：哨兵 conf 是"运行时状态"，不能反向覆盖**
