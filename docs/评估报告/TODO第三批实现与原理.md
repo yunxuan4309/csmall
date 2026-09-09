@@ -459,6 +459,9 @@ java.lang.IllegalStateException: Could not initialize plugin: interface org.mock
 | 4 | 服务器 `redis-master.conf` 属主 `dnsmasq`、权限 600、**容器内实际只有 9 行**（仓库模板 21 行）= 历史漂移且 AI 读不到 | 窗口里改为**幂等追加两行**（`grep -q … \|\| tee -a`），不覆盖、不碰密码 |
 | 5 | 新机 `.env` 设 600 → **AI 跑不了 `docker compose`**（compose 启动时要读 `.env`）；两台机器都没装 `setfacl` | 改 `chown ecs-user:ai-deepseek` + `chmod 640`（比老机的 664 更严） |
 | 6 | compose 变量未解析时满屏 `WARN variable is not set` | 那是**缺 .env 的正常提示**，不是配置错误；`.env` 到位即消失 |
+| 7 | **Redis Sentinel 启动即退出**：`config file ... is not writable: Permission denied` | 容器内 redis 进程是 **uid 999**，而 conf 属 `ecs-user(1000)` → `chown 999:1000 <conf>`（顺带 644→600，防密码被本机其他用户读到） |
+| 8 | 修完权限仍报 `Could not create tmp config file` | conf 挂载点 `/usr/local/etc/redis/` 在容器内属 **root** → 改挂到属 999 的 `/data` |
+| 9 | 再修仍报 `Could not rename tmp config file (Resource busy)` | ⭐ **单文件 bind-mount 不能被 rename 覆盖**（Docker 挂载点固有限制）；哨兵重写配置是「写 .tmp → rename」→ **必须挂目录**（`./redis:/conf`）+ 宿主目录 `chown 999:1000`。**修好后日志出现 `Sentinel new configuration saved on disk`，conf 里出现 `myid`/`known-replica`/`known-sentinel` 字段** |
 
 ### 5.5 当前进度与下一步
 
@@ -467,7 +470,7 @@ java.lang.IllegalStateException: Could not initialize plugin: interface org.mock
 | 0 定时任务分布式锁 | ✅ 代码 + 9/9 单测 + 本地双实例联调（见 §四） |
 | A 新机铺路 | ✅ 完成 |
 | 2a/2b 老机端口放行 | ✅ **已完成（2026-09-09 窗口 A）**：3306/6379 绑私网 IP；product/order 注册 `172.29.193.239:20880/20881`；新机→老机 4 端口全通；消费方 Dubbo 动态切换成功、错误 0 条；21 容器零重启 |
-| 3 Redis 从 + 3 哨兵 | ⏳ **不需要维护窗口**（只在新机起 4 个容器） |
+| 3 Redis 从 + 3 哨兵 | ✅ **已完成（2026-09-09）**：副本 `master_link_status:up`、主从 `DBSIZE 21=21`、副本 `READONLY` 拒写；3 哨兵视角一致 + `quorum=2` + 互认；**配置持久化已修通**（`Sentinel new configuration saved on disk`）；踩坑三层见 §5.4 |
 | 3.5 客户端迁哨兵模式 | ⏳ 11 个服务加 2 行 env + canary 灰度（1→3→全量） |
 | 4 秒杀副本 10017 | ⏳ 需先部署带锁的新 jar（老机 seckill 也必须换） |
 | 5 文档回填 | ⏳ |

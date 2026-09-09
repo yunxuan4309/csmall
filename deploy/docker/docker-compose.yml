@@ -255,7 +255,8 @@ services:
       dockerfile: ../dockerfiles/mall-product.Dockerfile
     container_name: csmall-product
     # 20880: Dubbo provider 端口（2026-09-09 窗口A 阶段2b，跨机集群）
-    ports: ["9010:9010", "20880:20880"]
+    # 绑定宿主私网 IP（纵深防御：公网由安全组挡，绑定地址再挡一层；与 3306/6379 风格一致）
+    ports: ["9010:9010", "172.29.193.239:20880:20880"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
       # 2026-09-09 窗口A（阶段2b）：注册到 Nacos 的地址用宿主内网 IP + 映射端口
@@ -315,7 +316,8 @@ services:
       dockerfile: ../dockerfiles/mall-order.Dockerfile
     container_name: csmall-order
     # 20881(宿主) → 20880(容器)：与 product 的 20880 错开，避免宿主端口冲突（2026-09-09 窗口A 阶段2b）
-    ports: ["10005:10005", "20881:20880"]
+    # 同样绑定宿主私网 IP（纵深防御）
+    ports: ["10005:10005", "172.29.193.239:20881:20880"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
       # 2026-09-09 窗口A（阶段2b）：注册宿主内网 IP + 映射端口（20881），跨机消费者才能连到
@@ -569,9 +571,12 @@ services:
     image: redis:7-alpine
     container_name: csmall-sentinel-1
     network_mode: host
-    command: ["redis-server", "/usr/local/etc/redis/sentinel-1.conf", "--sentinel"]
+    # ⚠️ 哨兵必须【挂目录】而非单文件：它要用 "写 .tmp → rename 覆盖" 的方式重写自己的配置，
+    #    单文件 bind-mount 会报 `Could not rename tmp config file (Resource busy)`。
+    #    前提：宿主机目录属 uid 999（`sudo chown 999:1000 /data/csmall/redis`）→ 容器内 redis 用户可创建 .tmp
+    command: ["redis-server", "/conf/sentinel-1.conf", "--sentinel"]
     volumes:
-      - ./redis/sentinel-1.conf:/usr/local/etc/redis/sentinel-1.conf
+      - ./redis:/conf
       - sentinel_1_data:/data
     mem_limit: 128m
     restart: on-failure
@@ -580,9 +585,9 @@ services:
     image: redis:7-alpine
     container_name: csmall-sentinel-2
     network_mode: host
-    command: ["redis-server", "/usr/local/etc/redis/sentinel-2.conf", "--sentinel"]
+    command: ["redis-server", "/conf/sentinel-2.conf", "--sentinel"]
     volumes:
-      - ./redis/sentinel-2.conf:/usr/local/etc/redis/sentinel-2.conf
+      - ./redis:/conf
       - sentinel_2_data:/data
     mem_limit: 128m
     restart: on-failure
@@ -591,9 +596,9 @@ services:
     image: redis:7-alpine
     container_name: csmall-sentinel-3
     network_mode: host
-    command: ["redis-server", "/usr/local/etc/redis/sentinel-3.conf", "--sentinel"]
+    command: ["redis-server", "/conf/sentinel-3.conf", "--sentinel"]
     volumes:
-      - ./redis/sentinel-3.conf:/usr/local/etc/redis/sentinel-3.conf
+      - ./redis:/conf
       - sentinel_3_data:/data
     mem_limit: 128m
     restart: on-failure
