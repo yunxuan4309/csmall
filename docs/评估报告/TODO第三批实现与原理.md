@@ -463,6 +463,9 @@ java.lang.IllegalStateException: Could not initialize plugin: interface org.mock
 | 8 | 修完权限仍报 `Could not create tmp config file` | conf 挂载点 `/usr/local/etc/redis/` 在容器内属 **root** → 改挂到属 999 的 `/data` |
 | 9 | 再修仍报 `Could not rename tmp config file (Resource busy)` | ⭐ **单文件 bind-mount 不能被 rename 覆盖**（Docker 挂载点固有限制）；哨兵重写配置是「写 .tmp → rename」→ **必须挂目录**（`./redis:/conf`）+ 宿主目录 `chown 999:1000`。**修好后日志出现 `Sentinel new configuration saved on disk`，conf 里出现 `myid`/`known-replica`/`known-sentinel` 字段** |
 
+> **原理（为什么哨兵非写配置不可）**：Redis Sentinel 每次状态变化（发现从库/发现其他哨兵/故障转移选出新主）都会**重写自己的配置文件**（写 `.tmp` → `rename` 覆盖），用来在**重启后恢复状态**：`sentinel myid`（自身身份）、`known-replica`、`known-sentinel`，以及被改写的 `sentinel monitor <新主IP> <新主端口>`。
+> 写不进去时，哨兵**内存里照常工作**（监控、投票、切换都正常），但**一旦重启就退回监视旧主地址**——而旧主此时已是只读从库 → **"切换成功但回不来"**。这类问题**不重启、不演练根本发现不了**，所以必须修而不是"先放着"。
+
 ### 5.5 当前进度与下一步
 
 | 阶段 | 状态 |

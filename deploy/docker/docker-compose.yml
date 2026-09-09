@@ -204,6 +204,10 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 2026-09-09 阶段3.5：Redis 客户端改【哨兵模式】——standalone 在故障转移后会连到只读从库报 READONLY
+      # 配了 sentinel 后 SPRING_DATA_REDIS_HOST 自动失效；哨兵本身无密码，故不设 SENTINEL_PASSWORD
+      SPRING_DATA_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_DATA_REDIS_SENTINEL_NODES: 172.29.193.240:26379,172.29.193.240:26380,172.29.193.240:26381
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
@@ -228,6 +232,10 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 2026-09-09 阶段3.5：Redis 客户端改【哨兵模式】——standalone 在故障转移后会连到只读从库报 READONLY
+      # 配了 sentinel 后 SPRING_DATA_REDIS_HOST 自动失效；哨兵本身无密码，故不设 SENTINEL_PASSWORD
+      SPRING_DATA_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_DATA_REDIS_SENTINEL_NODES: 172.29.193.240:26379,172.29.193.240:26380,172.29.193.240:26381
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
@@ -265,6 +273,10 @@ services:
       DUBBO_PORT_TO_REGISTRY: "20880"
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 2026-09-09 阶段3.5：Redis 客户端改【哨兵模式】——standalone 在故障转移后会连到只读从库报 READONLY
+      # 配了 sentinel 后 SPRING_DATA_REDIS_HOST 自动失效；哨兵本身无密码，故不设 SENTINEL_PASSWORD
+      SPRING_DATA_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_DATA_REDIS_SENTINEL_NODES: 172.29.193.240:26379,172.29.193.240:26380,172.29.193.240:26381
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
@@ -296,6 +308,10 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 2026-09-09 阶段3.5：Redis 客户端改【哨兵模式】——standalone 在故障转移后会连到只读从库报 READONLY
+      # 配了 sentinel 后 SPRING_DATA_REDIS_HOST 自动失效；哨兵本身无密码，故不设 SENTINEL_PASSWORD
+      SPRING_DATA_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_DATA_REDIS_SENTINEL_NODES: 172.29.193.240:26379,172.29.193.240:26380,172.29.193.240:26381
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
@@ -325,6 +341,10 @@ services:
       DUBBO_PORT_TO_REGISTRY: "20881"
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 2026-09-09 阶段3.5：Redis 客户端改【哨兵模式】——standalone 在故障转移后会连到只读从库报 READONLY
+      # 配了 sentinel 后 SPRING_DATA_REDIS_HOST 自动失效；哨兵本身无密码，故不设 SENTINEL_PASSWORD
+      SPRING_DATA_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_DATA_REDIS_SENTINEL_NODES: 172.29.193.240:26379,172.29.193.240:26380,172.29.193.240:26381
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
@@ -361,6 +381,10 @@ services:
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 2026-09-09 阶段3.5：Redis 客户端改【哨兵模式】——standalone 在故障转移后会连到只读从库报 READONLY
+      # 配了 sentinel 后 SPRING_DATA_REDIS_HOST 自动失效；哨兵本身无密码，故不设 SENTINEL_PASSWORD
+      SPRING_DATA_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_DATA_REDIS_SENTINEL_NODES: 172.29.193.240:26379,172.29.193.240:26380,172.29.193.240:26381
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
@@ -390,6 +414,10 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 2026-09-09 阶段3.5：Redis 客户端改【哨兵模式】——standalone 在故障转移后会连到只读从库报 READONLY
+      # 配了 sentinel 后 SPRING_DATA_REDIS_HOST 自动失效；哨兵本身无密码，故不设 SENTINEL_PASSWORD
+      SPRING_DATA_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_DATA_REDIS_SENTINEL_NODES: 172.29.193.240:26379,172.29.193.240:26380,172.29.193.240:26381
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
@@ -425,6 +453,10 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 2026-09-09 阶段3.5：Redis 客户端改【哨兵模式】——standalone 在故障转移后会连到只读从库报 READONLY
+      # 配了 sentinel 后 SPRING_DATA_REDIS_HOST 自动失效；哨兵本身无密码，故不设 SENTINEL_PASSWORD
+      SPRING_DATA_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_DATA_REDIS_SENTINEL_NODES: 172.29.193.240:26379,172.29.193.240:26380,172.29.193.240:26381
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
@@ -453,6 +485,10 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 2026-09-09 阶段3.5：Redis 客户端改【哨兵模式】——standalone 在故障转移后会连到只读从库报 READONLY
+      # 配了 sentinel 后 SPRING_DATA_REDIS_HOST 自动失效；哨兵本身无密码，故不设 SENTINEL_PASSWORD
+      SPRING_DATA_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_DATA_REDIS_SENTINEL_NODES: 172.29.193.240:26379,172.29.193.240:26380,172.29.193.240:26381
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
@@ -482,6 +518,10 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 2026-09-09 阶段3.5：Redis 客户端改【哨兵模式】——standalone 在故障转移后会连到只读从库报 READONLY
+      # 配了 sentinel 后 SPRING_DATA_REDIS_HOST 自动失效；哨兵本身无密码，故不设 SENTINEL_PASSWORD
+      SPRING_DATA_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_DATA_REDIS_SENTINEL_NODES: 172.29.193.240:26379,172.29.193.240:26380,172.29.193.240:26381
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
@@ -513,6 +553,10 @@ services:
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 2026-09-09 阶段3.5：Redis 客户端改【哨兵模式】——standalone 在故障转移后会连到只读从库报 READONLY
+      # 配了 sentinel 后 SPRING_DATA_REDIS_HOST 自动失效；哨兵本身无密码，故不设 SENTINEL_PASSWORD
+      SPRING_DATA_REDIS_SENTINEL_MASTER: mymaster
+      SPRING_DATA_REDIS_SENTINEL_NODES: 172.29.193.240:26379,172.29.193.240:26380,172.29.193.240:26381
       SEATA_SERVICE_GROUPLIST_DEFAULT: seata:8091
       ALIYUN_SERVER_IP: nacos
       # #13 Nacos 认证：客户端账号（nacos 用户, 密码在 .env）
