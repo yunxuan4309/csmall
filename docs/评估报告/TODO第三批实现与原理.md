@@ -264,6 +264,8 @@ java.lang.IllegalStateException: Could not initialize plugin: interface org.mock
 
 **结果**：`mvn -pl mall-seckill/mall-seckill-webapi -am test -Dtest=RedisLockUtilsTest,MessageRetryTaskTest` → **Tests run: 9, Failures: 0, Errors: 0** ✅
 
+**双实例本地联调（2026-09-09 实跑，详见 [[本地双实例锁验证报告-2026-09-09]]）**：本地起 Nacos + **两个真实 JVM**（10007/20880 + 10017/20881），注册到同一 Nacos（`mall-seckill` 双实例 healthy），人为制造 4 次"Redis 库存 ≠ DB 库存"漂移 → **恰好出现 4 条修正日志**（实例1 两条、实例2 两条，**无重复执行**），失败方累计 7 条「未抢到锁，跳过本次执行」；收尾 `KEYS mall:seckill:lock:*` 为空、Redis 回到 DB 基准值 45。→ **互斥、无重复、正确释放三项全部验证通过**。
+
 **顺带踩的两个小坑**：
 - **TTL 断言不能用秒**：`getExpire(key, SECONDS)` 对 1 秒 TTL 会取整成 0（断言误判）→ 改 `MILLISECONDS` 断言 `(0,1000]`。
 - **`RedisTemplate.execute` 二义性**：`execute(RedisCallback)` 与 `execute(SessionCallback)` 在 lambda 下编译报"引用不明确"→ 显式转型 `(RedisCallback<String>) connection -> connection.ping()`。
