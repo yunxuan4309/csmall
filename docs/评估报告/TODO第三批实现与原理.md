@@ -273,11 +273,98 @@ java.lang.IllegalStateException: Could not initialize plugin: interface org.mock
 - **TTL 断言不能用秒**：`getExpire(key, SECONDS)` 对 1 秒 TTL 会取整成 0（断言误判）→ 改 `MILLISECONDS` 断言 `(0,1000]`。
 - **`RedisTemplate.execute` 二义性**：`execute(RedisCallback)` 与 `execute(SessionCallback)` 在 lambda 下编译报"引用不明确"→ 显式转型 `(RedisCallback<String>) connection -> connection.ping()`。
 
-### 4.5 疑惑点：为什么只改 mall-seckill，不动 mall-common？
+### 4.5 疑惑点 1：为什么只改 mall-seckill，不动 mall-common？
 
 `mall-common` 被 **11 个 jar 依赖**（统一异常/JWT/幂等 AOP…），改它意味着 **11 个 jar 全量重建重部署**；把锁工具放 `mall-seckill` 则**只重建 1 个 jar**。同理，锁 key 前缀常量写在 `RedisLockUtils` 里，而不是加进 `mall-common` 的 `PrefixConfiguration`（后者会触发同一条依赖链）。
 
-### 4.6 验证与边界
+### 4.6 疑惑点 2：为什么需要"分布式"锁？为什么是"定时"任务？
+
+**① 为什么必须"分布式"（不能本地锁）**
+
+```
+老机 JVM #1（10007）        新机 JVM #2（10017）
+  synchronized / ReentrantLock  ← 只在各自 JVM 内有效，互相看不见
+                ↓
+      需要外部协调者 → Redis（项目已有 + SETNX 单命令原子）
+```
+`synchronized`/`ReentrantLock`/`AtomicXxx` 只保证**单进程内**互斥；秒杀从 1 实例变 2 实例（且在两台机器）→ 本地锁**完全失效**（两个实例都能"抢到自己的锁"）。
+
+**② 为什么这两个任务是"定时"的**
+
+因为它们本质是**兜底/补偿**任务，处理的是"**不知道何时发生**的异常"，没有事件可订阅，只能定期巡检：
+
+| 任务 | 兜什么底 | 为什么只能定时 |
+|---|---|---|
+| `MessageRetryTask`（5s） | MQ 发送失败 → 失败记录落 `seckill_message_retry` → 扫表重发 | 发送失败异步且偶发，没有"失败事件"；这是 **DB 轮询版延迟队列**（TODO #11 评估过换 ZSET） |
+| `SeckillReconcileTask`（5min / 每日 3:30） | "Redis 预扣 + MQ 异步扣 DB"双写导致库存漂移 → 定时把 Redis 修回 DB（DB 是账本） | 漂移**静默发生**，只能靠定期对账（业界叫 reconciliation / compensating job） |
+
+**③ 而"定时"正是"需要锁"的原因**：所有实例共享同一 cron/interval → **到点同时触发**（不像 HTTP 请求被网关分散）→ 冲突是**系统性的**，不是偶发的。
+
+**④ 不加锁会怎样（具体到代码）**：
+
+| 任务 | 后果 |
+|---|---|
+| `MessageRetryTask` | 两实例同时 `selectPending(3)` 拿到**同一批** status=0 记录 → 各发一次 MQ → **重复投递**（消费端 `uk_sku_user` 兜底不会写脏数据，但有无谓重试与报错日志） |
+| `SeckillReconcileTask` | "连续同向差计数"`mall:seckill:reconcile:cnt:*` 被**加倍累计** → 提前误判漂移；极端下两实例竞争写同一库存键 |
+
+**⑤ 关键认知（面试点）**：要防的是**"并发"**，不是"重复"——
+
+```
+串行天然安全：第一次执行已 updateStatusSent（status=1）→ 第二次 selectPending 取不到这批
+并发才危险：两个实例在"标记之前"同时读到同一批
+```
+→ 锁的语义是"**每 tick 只有一个实例进入临界区**"，不是"这任务一辈子只跑一次"。
+
+### 4.7 疑惑点 3：为什么不用 Redisson / ShedLock？现在用的是什么？
+
+**现在用的**：自研 `RedisLockUtils`（`mall-seckill/utils`），底层是 Spring Data Redis + **Lettuce**（Spring Boot 3.2 默认客户端）：
+- 加锁：`setIfAbsent(key, token, ttl)` → 实际命令 `SET key token NX PX ttl`
+- 释放：Lua `if redis.call('get',KEYS[1])==ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end`
+
+**Redisson 的现状（实测）**：`mall-seckill-webapi/pom.xml` 里**已引 `redisson 3.24.3`，但代码零使用**（无 `RedissonClient` 配置、无任何 API 调用）= **死依赖**。
+
+**为什么没直接用 Redisson（四条理由）**：
+
+| # | 理由 | 说明 |
+|---|---|---|
+| 1 | **需求不匹配** | 我们只要"一把简单互斥锁 + 抢不到就跳过"（非阻塞 tryLock）。Redisson `RLock` 提供的是可重入 / 看门狗续期 / pub-sub 等待队列 / Redlock / 公平锁 / 读写锁——为一个"门闩"引入整套分布式同步组件 |
+| 2 | **多一份运行时成本** | Redisson 自带连接池（默认 `connectionPoolSize=64`）与 Netty 线程；老机内存本就紧（available 3.1G）。**没有收益的复杂度就是负债** |
+| 3 | **多一套配置 + 与哨兵模式不兼容** | 需新增 `RedissonClient` Bean；阶段 3 要把 Redis 迁到**哨兵**，而 Redisson 的哨兵配置是另一套 API（`Config.useSentinelServers()`），与 Spring 的 `spring.data.redis.sentinel.*` 不通用 |
+| 4 | **教学/可控性（本项目尤其重要）** | 30 行自研代码把"SETNX 原子性 / TTL 兜底 / Lua CAS 释放"逐行讲清；`RLock.lock()` 反而讲不出原理。出问题 `redis-cli` 直接看 key/value/TTL 即可，不用读 Redisson 内部机制 |
+
+**但 Redisson 确实更强——什么时候该换**：
+
+| 场景 | 为什么 Redisson 更好 |
+|---|---|
+| 任务耗时不固定、可能超过 TTL | **看门狗自动续期**（自研需自己写续期线程） |
+| 需要可重入（同一线程重复加锁） | 自研要维护重入计数 |
+| 抢不到需要**排队等待**而非跳过 | Redisson 用 pub/sub 唤醒，避免轮询空转 |
+| 需要 Redlock（多 Redis 节点） | 自研实现复杂且极易写错 |
+| 团队统一规范、少造轮子 | 长期维护成本更低 |
+
+**为什么"现在不换、未来能换"是合理的**：
+- **语义兼容**：`tryLock(key, ttl)` ↔ `RLock.tryLock(0, ttl, unit)`；替换只改 `RedisLockUtils` 一个类 + 加配置，**两个任务类零改动**
+- **零新增依赖**：Redisson 已在 pom 里 → 想换随时能换
+- **触发条件**：任务耗时可能超过 TTL / 需要可重入或排队 / Redis 上哨兵后想用 Redlock 增强
+
+**Redisson 也不是银弹**：看门狗续期依赖客户端存活（GC 停顿/网络分区仍可能失效）；Redlock 本身有争议（Kleppmann 质疑 antirez）。→ **真正的正确性仍靠幂等 + DB 约束**（见 §4.8）。
+
+**顺带对比 ShedLock**：它**更贴合本场景**（专为 `@Scheduled` 设计，`@SchedulerLock` + `lockAtMostFor`/`lockAtLeastFor`，语义比裸锁精确），但同样要引依赖 + 配 provider（Redis/JDBC），且**锁的可见性/排错不如自研直观** → 本项目选择"白盒教学版"，ShedLock/Redisson 作为演进选项记录在案。
+
+### 4.8 疑惑点 4：这套锁对"未来"有什么影响？
+
+| # | 影响 | 应对 / 现状 |
+|---|---|---|
+| 1 | **新增定时任务**若也改共享状态，必须同样加锁 | 已立规矩：`RedisLockUtils.key("xxx")` 统一前缀 |
+| 2 | **任务耗时增长**（数据量上来）可能超过 TTL（30s/5min/30min）→ 锁提前过期、失去互斥 | 监控任务耗时；必要时换 Redisson 看门狗自动续期 |
+| 3 | **Redis 变主从/哨兵**（阶段 3）：异步复制下主挂瞬间锁**可能双持**（Redlock 争议） | **靠幂等 + DB 约束兜底**：`updateStatusSent` / `seckill_stock >= qty` / `uk_sku_user`。锁只负责"减少并发"，**不是正确性的唯一保证** |
+| 4 | **再扩实例（3+）** | SETNX 天然支持 N 个竞争者，代码不用改 |
+| 5 | **换 ZSET 延迟队列 / MQ 延迟插件**（TODO #11） | `MessageRetryTask` 会被替换 → 锁随之废弃；我们只"包了一层"、业务代码零改动 → **易移除** |
+| 6 | **换 ShedLock / Redisson** | 语义兼容可平滑替换（见 §4.7） |
+| 7 | **锁泄漏**（异常未释放 / 进程被 kill） | TTL 兜底自动恢复；`mall:seckill:lock:*` 可巡检（本地联调实测收尾为空） |
+| 8 | **执行频率语义**：两实例 tick 叠加 → 实际执行间隔可能小于配置值 | 已记录；若需严格"每 N 秒一次"，改成"锁持有到 TTL"（等价 ShedLock `lockAtLeastFor`） |
+
+### 4.9 验证与边界
 
 | 层 | 可测性 | 做法 |
 |---|---|---|
@@ -289,7 +376,7 @@ java.lang.IllegalStateException: Could not initialize plugin: interface org.mock
 
 **✅ 本地双实例联调结论（2026-09-09，详见 [[本地双实例锁验证报告-2026-09-09]]）**：本地起 Nacos + 两个真实 JVM（10007/20880 + 10017/20881），人为制造 4 次"Redis 库存 ≠ DB 库存"漂移 → **恰好 4 条修正日志**（实例1 两条、实例2 两条，**无重复执行**）；失败方累计 **7 条「未抢到锁，跳过本次执行」**；收尾 `KEYS mall:seckill:lock:*` 为空、Redis 回到 DB 基准值 → **互斥 / 无重复 / 正确释放 三项全过**。
 
-### 4.7 面试话术
+### 4.10 面试话术
 
 **主线**："秒杀集群化前我先补了定时任务的分布式锁。全项目 3 处 `@Scheduled` 都在秒杀模块，其中消息重试是'扫表→发 MQ→标记已发'——两个实例同时扫会拿到同一批 pending 记录，**重复投递**。我的锁是 `SET key token NX EX ttl` 单命令原子 + TTL 兜底 + **Lua 比较 token 再删**（防误删别人的锁）。这里最容易被追问的是'为什么不用 SETNX+EXPIRE'——两步之间宕机就留死锁；以及'为什么串行就安全'——因为后一次扫描时前一次已把记录标记为已发送。Quartz 那两个预热任务我**没改**，因为它们有 `hasKey` 幂等守卫，双跑只多日志。"
 
