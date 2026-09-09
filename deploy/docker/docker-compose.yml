@@ -529,6 +529,105 @@ services:
     depends_on: [mall-gateway]
     networks: [csmall-net]
 
+  # ==================================================================================
+  # 跨机集群成员（2026-09-09 新增，第三批 #4/#9/#14-P2）
+  # ⚠️ 以下 5 个服务【只在第二台机器 csmall-node2 上启动】：
+  #    cd /data/csmall && docker compose up -d redis-replica redis-sentinel-1 redis-sentinel-2 redis-sentinel-3
+  #    cd /data/csmall && docker compose up -d --no-build mall-seckill-2
+  # ⚠️ 老机（8.156.77.197）永远不要启动它们（老机只启动原有 21 个服务）
+  # 方案与验证步骤见 docs/评估报告/跨机集群实施执行清单-2026-09-09.md
+  # ==================================================================================
+
+  # Redis 从节点：复制老机主库；host 网络 → 主库/哨兵看到的是宿主内网 IP（跨机可达）
+  redis-replica:
+    image: redis:7-alpine
+    container_name: csmall-redis-replica
+    network_mode: host
+    command: ["redis-server", "/usr/local/etc/redis/redis-replica.conf"]
+    volumes:
+      # ⚠️ 不加 :ro —— Redis 运行时会 REWRITE 该配置
+      - ./redis/redis-replica.conf:/usr/local/etc/redis/redis-replica.conf
+      - redis_replica_data:/data
+    mem_limit: 256m
+    restart: on-failure
+
+  # 哨兵 ×3（奇数 + quorum=2 才能多数派投票；容忍挂 1 个）
+  redis-sentinel-1:
+    image: redis:7-alpine
+    container_name: csmall-sentinel-1
+    network_mode: host
+    command: ["redis-server", "/usr/local/etc/redis/sentinel-1.conf", "--sentinel"]
+    volumes:
+      - ./redis/sentinel-1.conf:/usr/local/etc/redis/sentinel-1.conf
+      - sentinel_1_data:/data
+    mem_limit: 128m
+    restart: on-failure
+
+  redis-sentinel-2:
+    image: redis:7-alpine
+    container_name: csmall-sentinel-2
+    network_mode: host
+    command: ["redis-server", "/usr/local/etc/redis/sentinel-2.conf", "--sentinel"]
+    volumes:
+      - ./redis/sentinel-2.conf:/usr/local/etc/redis/sentinel-2.conf
+      - sentinel_2_data:/data
+    mem_limit: 128m
+    restart: on-failure
+
+  redis-sentinel-3:
+    image: redis:7-alpine
+    container_name: csmall-sentinel-3
+    network_mode: host
+    command: ["redis-server", "/usr/local/etc/redis/sentinel-3.conf", "--sentinel"]
+    volumes:
+      - ./redis/sentinel-3.conf:/usr/local/etc/redis/sentinel-3.conf
+      - sentinel_3_data:/data
+    mem_limit: 128m
+    restart: on-failure
+
+  # 秒杀副本（新机）：注册宿主内网 IP + 映射端口，老机 gateway lb:// 与 order 的 Dubbo 才能连到
+  mall-seckill-2:
+    build:
+      context: ./jars
+      dockerfile: ../dockerfiles/mall-seckill-replica.Dockerfile
+    image: csmall/mall-seckill-replica:20260909
+    container_name: csmall-seckill-2
+    ports:
+      - "10017:10017"                       # HTTP：老机 gateway lb://mall-seckill 轮询
+      - "20880:20880"                       # Dubbo：老机 order 消费 IForOrderSeckillRecordService
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 10017                    # 与老机 10007 区分
+      # 注册到 Nacos 的地址必须是宿主内网 IP（否则默认注册容器 IP，老机不可达）
+      SPRING_CLOUD_NACOS_DISCOVERY_IP: 172.29.193.240
+      DUBBO_IP_TO_REGISTRY: 172.29.193.240
+      DUBBO_PORT_TO_REGISTRY: "20880"
+      DUBBO_PROTOCOL_PORT: 20880            # 固定容器内端口（默认 -1 随机，无法做端口映射）
+      # 副本无独立数据：MySQL/Redis/MQ/Nacos/Seata/Sentinel 全部指向老机内网 IP
+      ALIYUN_SERVER_IP: 172.29.193.239
+      SPRING_DATASOURCE_URL: jdbc:mysql://172.29.193.239:3306/cs_mall_seckill?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      SPRING_DATA_REDIS_HOST: 172.29.193.239
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SPRING_RABBITMQ_HOST: 172.29.193.239
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      NACOS_USERNAME: nacos
+      NACOS_PASSWORD: ${NACOS_PASSWORD}
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      SEATA_SERVICE_GROUPLIST_DEFAULT: 172.29.193.239:8091
+      SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: 172.29.193.239:8858
+      JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
+    extra_hosts:
+      # 镜像里 agent 用容器名 skywalking-oap，新机无此容器 → 指向老机
+      - "skywalking-oap:172.29.193.239"
+    mem_limit: 1g
+    restart: on-failure
+    volumes:
+      - /data/csmall/skywalking-agent:/skywalking-agent:ro
+    networks: [csmall-net]
+
 networks:
   csmall-net:
     driver: bridge
@@ -540,3 +639,8 @@ volumes:
   es_data:
   # 2026-09-08 补：nacos derby 数据卷（防重建丢配置，见 nacos 服务注释）
   nacos_data:
+  # 2026-09-09 补：跨机集群卷（仅新机使用）
+  redis_replica_data:
+  sentinel_1_data:
+  sentinel_2_data:
+  sentinel_3_data:
