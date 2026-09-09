@@ -13,6 +13,7 @@
 |---|---|---|---|---|
 | 🔴 P0 | **#46** | nacos 数据卷挂载重启 | 运维消雷（nacos 重建即丢配置） | ✅ **已完成（2026-09-09，含卷名前缀大坑，见 §一）** |
 | 🔴 P0 | **#47** | 数据库备份恢复演练 | 运维底线（备份没验证过=没有备份） | ✅ **已完成（2026-09-09，独立临时容器方案，见 §三）** |
+| 🔴 P0 | **#4-阶段0** | 秒杀定时任务分布式锁（集群化前置） | 集群正确性（防双实例重复发 MQ） | ✅ **代码完成（2026-09-09，含"测试手法小插曲"，见 §四）** |
 | 🟠 P1 | **#4** | 秒杀集群化 + 配置中心（单机 2 实例） | 面试主菜（负载均衡/故障剔除/定时任务锁） | ⏳ 待做 |
 | 🟠 P1 | **#5-P1** | Sentinel 热点参数限流（秒杀按 spuId） | 面试主菜（热点限流） | ⏳ 待做 |
 | 🟡 P2 | **#9** | Redis 主从 + 哨兵 | 学习 HA（搭 #9 的车做 #14-P2） | ⏳ 待做 |
@@ -199,4 +200,96 @@ Step 5  docker rm -f 临时容器 → 确认生产 csmall-mysql 无损（Up heal
 
 ---
 
+## 四、#4 前置：秒杀定时任务分布式锁（✅ 代码完成 2026-09-09，待部署验证）
+
+> 本项是 **#4 秒杀集群化的唯一硬代码改造点**（跨机方案阶段 0）。集群化本身（新机副本/Redis 主从哨兵/端口放行）见 [[跨机集群实施执行清单-2026-09-09]]。
+
+### 4.1 问题本质（为什么集群化必须先做这个）
+
+秒杀服务从 1 实例变 2 实例（老机 10007 + 新机 10017）后，**每个实例都会独立触发自己的定时任务**。全项目共 **3 处 `@Scheduled`**（均在 mall-seckill，2026-09-09 全仓库 grep 实测）：
+
+| 任务 | 频率 | 双实例双跑的后果 |
+|---|---|---|
+| `MessageRetryTask.retryFailedMessages` | fixedDelay 5s | **重复发 MQ**：两实例同时 `selectPending` 会拿到**同一批** status=0 记录 → 各发一次 → 秒杀消息重复投递 |
+| `SeckillReconcileTask.reconcileOnline` | fixedDelay 5min | 对账重复执行（Redis 库存被两次校准，含"连续同向差计数"被加倍累计） |
+| `SeckillReconcileTask.reconcileDaily` | cron 03:30 | 同上，全量校准重复跑 |
+
+> ✅ **Quartz 的两个任务（`SeckillInitialJob`/`SeckillBloomInitialJob`，每分钟）无需改造**：代码里都有 `redisTemplate.hasKey(...)` 幂等守卫（已缓存则跳过），双跑只多日志、不改数据。
+
+### 4.2 原理：Redis 分布式锁三要素（面试必答）
+
+```
+① 加锁原子：SET key <token> NX EX <ttl>      ← 一条命令完成"判断+写入+过期"
+② TTL 兜底：ttl 远大于任务耗时               ← 实例被 kill/网络断，锁自动释放，任务不停摆
+③ 释放校验：Lua「比较 token + DEL」原子执行    ← 只删自己加的锁，防误删他人刚抢到的锁
+```
+
+- **为什么不用 `SETNX` + `EXPIRE` 两步**：中间宕机就留下**永不过期的死锁**，任务永久停摆。
+- **为什么释放要用 Lua**：`GET` 再 `DEL` 是两条命令，中间存在竞态（自己的锁恰好过期 + 别人抢到 → 删掉别人的锁）。Lua 在 Redis 端原子执行，比较与删除不可分割。
+- **为什么"并发"才是问题**：串行执行是安全的——后一次扫描时，前一次已把记录 `updateStatusSent`（status=1），`selectPending` 不会再取到。所以锁只需保证**不并发**，不需要保证"每 tick 只跑一次"。
+- **本项目一致性**：项目未用 Redis 事务（见上下文文档 §6.6），全部依赖"单命令原子 + 锁 + 补偿"；Lua 先例 `RedisBloomUtils`、SETNX 先例 `IdempotentAspect`，本改造沿用同风格。
+
+### 4.3 本项目实现（文件级）
+
+| 文件 | 类型 | 关键点 |
+|---|---|---|
+| `mall-seckill-webapi/.../utils/RedisLockUtils.java` | 新增 | `tryLock(key, ttl)` 返回 token / `unlock(key, token)` 走 Lua CAS / 统一前缀 `mall:seckill:lock:` |
+| `.../task/MessageRetryTask.java` | 修改 | 包锁 key=`message-retry`、TTL=30s，`finally` 释放；抢不到直接 `return` |
+| `.../task/SeckillReconcileTask.java` | 修改 | 两个 `@Scheduled` 各一把锁（`reconcile-online` 5min / `reconcile-daily` 30min） |
+
+### 4.4 ⭐ 小插曲：测试手法怎么选（Mockito / 手写替身 / 真实中间件）
+
+**第一版**：用 Mockito 写单测（`@Mock` 模板 + `@ExtendWith(MockitoExtension.class)`）→ **10 个用例全 ERROR**：
+
+```
+java.lang.IllegalStateException: Could not initialize plugin: interface org.mockito.plugins.MockMaker
+  Caused by: MockitoInitializationException: Could not initialize inline Byte Buddy mock maker.
+             It appears as if your JDK does not supply a working agent attachment mechanism.
+  Caused by: java.lang.IllegalStateException: Could not self-attach to current VM using external process
+```
+
+**排查路径（三段，值得记）**：
+1. 先怀疑版本不兼容 → `dependency:tree` 实测：Mockito 5.7.0 + ByteBuddy 1.14.13 + JDK 21，**版本全兼容**，排除。
+2. 读 surefire 报告拿到**真正根因**：Mockito 5 默认 inline mock maker 需要把 byte-buddy agent **self-attach 到当前 JVM**（`ByteBuddyAgent.installExternal` 会拉起子进程），而 AI 执行沙箱禁止该操作。
+3. **关键验证**：项目里 `mall-order/.../OmsOrderServiceImplTest`（5 例 Mockito 用例，早就存在）在**同一环境同样报错** → 结论：**是执行环境限制，不是项目缺陷**（曾一度写进文档说"本项目无法使用 Mockito"，已纠正）。
+
+**重新设计测试（三选一的判断标准）**：
+
+| 被测对象 | 手法 | 理由 |
+|---|---|---|
+| 锁的**互斥语义**（`RedisLockUtilsTest`，5 例） | **真实本地 Redis 集成测试** | SETNX 原子性 / TTL / Lua CAS 都是 **Redis 服务端行为**，mock 掉等于"自己造假 Redis 再自证"，证明不了任何东西 |
+| 任务的**编排逻辑**（`MessageRetryTaskTest`，4 例） | **手写替身**（`FakeLock` 子类 + `Proxy` 假 Mapper + `RabbitTemplate` 子类 + `ReflectionTestUtils` 注入） | 只验证"抢不到锁→不扫表""异常路径仍释放"这类**自己算得出来**的分支，无需框架 |
+
+> **一句话判断标准**：被测逻辑**自己算得出来** → 用 mock；被测逻辑**依赖中间件行为** → 必须打真实中间件。
+
+**结果**：`mvn -pl mall-seckill/mall-seckill-webapi -am test -Dtest=RedisLockUtilsTest,MessageRetryTaskTest` → **Tests run: 9, Failures: 0, Errors: 0** ✅
+
+**顺带踩的两个小坑**：
+- **TTL 断言不能用秒**：`getExpire(key, SECONDS)` 对 1 秒 TTL 会取整成 0（断言误判）→ 改 `MILLISECONDS` 断言 `(0,1000]`。
+- **`RedisTemplate.execute` 二义性**：`execute(RedisCallback)` 与 `execute(SessionCallback)` 在 lambda 下编译报"引用不明确"→ 显式转型 `(RedisCallback<String>) connection -> connection.ping()`。
+
+### 4.5 疑惑点：为什么只改 mall-seckill，不动 mall-common？
+
+`mall-common` 被 **11 个 jar 依赖**（统一异常/JWT/幂等 AOP…），改它意味着 **11 个 jar 全量重建重部署**；把锁工具放 `mall-seckill` 则**只重建 1 个 jar**。同理，锁 key 前缀常量写在 `RedisLockUtils` 里，而不是加进 `mall-common` 的 `PrefixConfiguration`（后者会触发同一条依赖链）。
+
+### 4.6 验证与边界
+
+| 层 | 可测性 | 做法 |
+|---|---|---|
+| 锁语义 / 任务分支 | ✅ 已测（本地） | 9/9 单测通过 |
+| 双实例"每 tick 只有一个执行" | ✅ 可测（同机双实例） | 本地 Nacos + 两个 Run Config（10007/10017，Dubbo 端口错开 20880/20881），看日志 |
+| 跨机注册 IP / 哨兵切换 / `lb://` 跨机轮询 / Nacos 剔除 | ❌ 本地测不了 | 两台同 VPC 服务器验证（阶段 3/4） |
+
+**待部署验证**：① 老机 seckill **也必须换新 jar**（否则老机无锁实例与新机有锁实例仍会并发双跑）；② 两实例日志对照——同一时刻只有一台打印「发现 N 条待重试消息」；③ `redis-cli --scan --pattern 'mall:seckill:lock:*'` 在任务间隙应为空。
+
+### 4.7 面试话术
+
+**主线**："秒杀集群化前我先补了定时任务的分布式锁。全项目 3 处 `@Scheduled` 都在秒杀模块，其中消息重试是'扫表→发 MQ→标记已发'——两个实例同时扫会拿到同一批 pending 记录，**重复投递**。我的锁是 `SET key token NX EX ttl` 单命令原子 + TTL 兜底 + **Lua 比较 token 再删**（防误删别人的锁）。这里最容易被追问的是'为什么不用 SETNX+EXPIRE'——两步之间宕机就留死锁；以及'为什么串行就安全'——因为后一次扫描时前一次已把记录标记为已发送。Quartz 那两个预热任务我**没改**，因为它们有 `hasKey` 幂等守卫，双跑只多日志。"
+
+**被追问"你怎么验证锁真的生效"**："分两层：锁的**语义**用真实 Redis 做集成测试（双实例互斥、错误 token 删不掉、TTL 到期自动释放，5 例）；任务的**编排**用手写替身测（抢不到锁不扫表、异常路径仍释放锁，4 例），一共 9 例全绿。**为什么不用 Mockito 测锁**——锁的原子性是 Redis 服务端行为，mock 掉就成了自己造假 Redis 自证；这也是我判断'什么时候该 mock'的标准：被测逻辑自己算得出来才 mock，依赖中间件行为的必须打真实中间件。"
+
+---
+
 **维护提示**: 本文件随第三批逐项实施持续补充；完成一项更新头部状态并回填细节。与 [[TODO文件]] 保持一致（TODO 是状态源，本文件是"原理+疑惑+话术"深挖）。
+
+
