@@ -70,6 +70,20 @@
 > ⚠️ **购买决策要点**（可复用）：经济型 e 2C8G ¥71/月 最划算（老机同系列已验证）；**必须同地域同 VPC**（跨地域内网不通）；**带宽按使用流量**（集群走内网，公网仅 SSH）；镜像与老机一致（Ubuntu 24.04）便于排障。
 > 🐛 **安装踩坑**：`download.docker.com` 直连拉 GPG key 失败（0 字节 keyring → `NO_PUBKEY`）→ 改用**阿里云 docker 源** `mirrors.aliyun.com/docker-ce/linux/ubuntu` 一次成功。
 
+**新机实际运行容器（2026-09-09 晚，共 5 个）**
+
+| 容器 | 端口 | 网络 | 说明 |
+|---|---|---|---|
+| `csmall-redis-replica` | 6380 | **host** | `replicaof 172.29.193.239 6379` + `replica-announce-ip 172.29.193.240` + `replica-announce-port 6380` + `requirepass` |
+| `csmall-sentinel-1` | 26379 | **host** | `sentinel monitor mymaster 172.29.193.239 6379 2` |
+| `csmall-sentinel-2` | 26380 | **host** | 同上（三个哨兵各独立 conf，**共用一份会互相覆盖**） |
+| `csmall-sentinel-3` | 26381 | **host** | 同上 |
+| `csmall-seckill-2` | 10017 + 20880 | bridge | 秒杀副本；注册宿主 IP `172.29.193.240`（`SPRING_CLOUD_NACOS_DISCOVERY_IP` / `DUBBO_IP_TO_REGISTRY`） |
+
+> ⚠️ **新机上永远不要裸跑 `docker compose up -d`**（会把老机 21 个服务一起拉起）——必须带服务名，详见 [[项目上下文文档]] 附录 A.6 红线。
+> ⚠️ **新机无 Java 环境**（宿主机无 `java`、镜像只有 redis）→ 已用镜像站前缀拉取 `eclipse-temurin:21-jre`（459MB，Java 21.0.12）并 `docker tag` 成标准名；详见 TODO #52。
+> ⚠️ **5 个容器都是 `restart: on-failure`** → 重启 docker/主机后不会自动恢复，需手动 `docker compose up -d <服务名>`。
+
 ---
 
 ## 二、安全组配置（两台共用）
