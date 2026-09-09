@@ -40,7 +40,7 @@
 
 | 阶段 | 内容 | 前置 | 风险 | 状态 |
 |---|---|---|---|---|
-| **0** | **代码改造**：`MessageRetryTask` + `SeckillReconcileTask` 加 Redis 分布式锁（SETNX+TTL，可复用 `IdempotentAspect`/`SeckillServiceImpl` 已有 `setIfAbsent` 写法）→ 本地编译验证（不部署） | 无（纯本地，**可立即开工**） | 🟢 低 | ⏳ 待启动 |
+| **0** | **代码改造**：`MessageRetryTask` + `SeckillReconcileTask` 加 Redis 分布式锁（SETNX+TTL，可复用 `IdempotentAspect`/`SeckillServiceImpl` 已有 `setIfAbsent` 写法）→ 本地编译验证（不部署） | 无（纯本地，**可立即开工**） | 🟢 低 | ✅ **代码完成（2026-09-09）**：新增 `RedisLockUtils`（SETNX+Lua CAS）+ 2 个任务包锁；本地 9/9 单测通过（真实 Redis 互斥）；**待阶段 4 部署后做双实例日志验证** |
 | 1 | 新机就绪：采购 + ssh 打通 + Docker 安装 | — | 🟢 | ✅ 已完成（2026-09-09：Docker 29.8.0 + Compose v5.5.1 + ai-deepseek 账号） |
 | 2 | 老机端口放行：MySQL 3306 / Redis 6379 由 `127.0.0.1` 改绑 `172.29.193.239` + 安全组限定新机内网 IP | **维护窗口**（重建 mysql/redis + 依赖服务重启） | 🟡 中 | ⏳ 待做 |
 | 3 | 新机起 Redis 从 + 3 哨兵 → 验证主从复制 + kill 主演练自动切换 | 阶段 2 | 🟡 中 | ⏳ 待做 |

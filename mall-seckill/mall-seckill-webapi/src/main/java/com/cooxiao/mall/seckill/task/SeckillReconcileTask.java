@@ -2,6 +2,7 @@ package com.cooxiao.mall.seckill.task;
 
 import com.cooxiao.mall.pojo.seckill.model.SeckillSku;
 import com.cooxiao.mall.seckill.mapper.SeckillSkuMapper;
+import com.cooxiao.mall.seckill.utils.RedisLockUtils;
 import com.cooxiao.mall.seckill.utils.SeckillCacheUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +11,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -51,31 +53,56 @@ public class SeckillReconcileTask {
 
     private static final String RECONCILE_CNT_PREFIX = "mall:seckill:reconcile:cnt:";
 
+    /** 分布式锁：运行期对账（双实例互斥，TODO #4 阶段 0） */
+    private static final String LOCK_ONLINE = RedisLockUtils.key("reconcile-online");
+    /** 锁 TTL：> 单次对账最坏耗时，兜住进程被 kill */
+    private static final Duration LOCK_ONLINE_TTL = Duration.ofMinutes(5);
+
+    /** 分布式锁：凌晨全量校准 */
+    private static final String LOCK_DAILY = RedisLockUtils.key("reconcile-daily");
+    private static final Duration LOCK_DAILY_TTL = Duration.ofMinutes(30);
+
     @Autowired
     private SeckillSkuMapper seckillSkuMapper;
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+    @Autowired
+    private RedisLockUtils redisLockUtils;
 
     /** 运行期轻量纠偏（每 5 分钟） */
     @Scheduled(fixedDelayString = "${seckill.reconcile.online-fixed-delay:300000}")
     public void reconcileOnline() {
+        String token = redisLockUtils.tryLock(LOCK_ONLINE, LOCK_ONLINE_TTL);
+        if (token == null) {
+            log.debug("未抢到运行期对账锁，跳过本次执行（另一实例正在执行）");
+            return;
+        }
         try {
             reconcileAll(true);
         } catch (Exception e) {
             // 对账是兜底任务，绝不能因异常冒泡影响主链路；失败仅告警留痕
             log.error("【对账-运行期】执行异常: {}", e.getMessage(), e);
+        } finally {
+            redisLockUtils.unlock(LOCK_ONLINE, token);
         }
     }
 
     /** 凌晨全量校准（默认 03:30，低峰执行） */
     @Scheduled(cron = "${seckill.reconcile.daily-cron:0 30 3 * * ?}")
     public void reconcileDaily() {
+        String token = redisLockUtils.tryLock(LOCK_DAILY, LOCK_DAILY_TTL);
+        if (token == null) {
+            log.debug("未抢到凌晨全量对账锁，跳过本次执行（另一实例正在执行）");
+            return;
+        }
         try {
             log.info("【对账-凌晨校准】开始执行全量校准");
             reconcileAll(false);
             log.info("【对账-凌晨校准】执行完成");
         } catch (Exception e) {
             log.error("【对账-凌晨校准】执行异常: {}", e.getMessage(), e);
+        } finally {
+            redisLockUtils.unlock(LOCK_DAILY, token);
         }
     }
 
