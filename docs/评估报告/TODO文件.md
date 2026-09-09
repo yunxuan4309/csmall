@@ -50,7 +50,7 @@
 
 **硬前置（阶段 2/4 共同依赖，缺一不可）**：
 1. **端口放行**：3306/6379 绑 `127.0.0.1` 是第一批安全加固的副作用 → 跨机不可达（**实测**新机→老机 3306/6379 不通，22/80/8848/5672/8091/9200/10007 通）；改绑内网 IP 后**安全组必须只放行新机内网 IP**，不可裸 `0.0.0.0`
-2. **注册 IP 覆盖**：新机副本默认注册容器 IP（172.18.x）→ 必须注入 `SPRING_CLOUD_NACOS_DISCOVERY_IP=172.29.193.240`（Dubbo 注册 IP 同理），否则老机 gateway `lb://` 路由不到
+2. **注册 IP 覆盖（双向）**：① 新机副本默认注册容器 IP → 必须注入 `SPRING_CLOUD_NACOS_DISCOVERY_IP=172.29.193.240` + `DUBBO_IP_TO_REGISTRY`；② **老机 product/order 的 Dubbo provider 也注册容器 IP（实测 172.18.0.18/20:20880），新机路由不到** → 老机侧加 `DUBBO_IP_TO_REGISTRY=172.29.193.239` + `DUBBO_PORT_TO_REGISTRY` + 发布 20880/20881（**Path 1，已定夺**，需重启这两个服务；Path 2 静态路由为回退方案）
 3. **连接串全指向老机**：副本无独立数据，`SPRING_DATASOURCE_URL` / `SPRING_DATA_REDIS_HOST` / `SPRING_RABBITMQ_HOST` / Nacos 全用老机内网 IP（**不能再用容器名** `mysql`/`redis`）
 4. **代码改造**：定时任务分布式锁（阶段 0），否则双实例**双跑**（重试任务重复发 MQ + 对账任务重复跑）
 5. **Quartz 任务无需改造（已核实）**：`SeckillInitialJob` / `SeckillBloomInitialJob`（`QuartzConfig` 每分钟触发）都有 `redisTemplate.hasKey` 幂等守卫（已缓存则跳过）→ 双实例双跑只多日志、不改数据；**全项目仅 3 处 `@Scheduled`（均在 mall-seckill）**，其中 2 处必须加锁
