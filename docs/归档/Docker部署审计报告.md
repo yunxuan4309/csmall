@@ -2,6 +2,27 @@
 
 > 审计日期：2026-07-27
 > 审计范围：11 个后端微服务模块 + 前端 Vue 项目 + 部署配置 + 凭据管理
+> **📦 归档日期：2026-09-10** —— 归档原因：**一次性基线快照**，核心结论「不能直接 Docker 部署」已完全过时（项目已 21 容器稳定运行）；8 项发现中 5 项已解决、1 项已失效。与 [[企业级生产评估报告-2026-08-15]] 同性质。
+> ⚠️ **归档前已逐项实测复核（见下方对照表）—— "未收口的活待办"已全部转成 TODO，不会因归档而丢失。**
+
+---
+
+## 📊 归档时（2026-09-10）现状对照表
+
+> **本表是唯一可信的"现状"来源**；下方正文保留为**当时（2026-07-27）的原始审计记录**，不要再据正文判断现状。
+
+| # | 审计发现（2026-07-27） | 2026-09-10 实测现状 | 判定 |
+|---|---|---|---|
+| 1 | Gateway 6/8 条路由 `http://127.0.0.1` 在容器内全断 | ✅ **已修**：prod 路由已全部 `lb://`（唯一非 lb 的是 `http://mall-product:9010` **容器名直连**，不是 127.0.0.1）；`mall-resource` 也已补 `nacos-discovery` 依赖 | 已解决 |
+| 2 | 前端 `nginx.conf` 12 条 API 路径仅 1 条被代理（+ SSE 缓冲未关） | ✅ **已修**：已有 `/ai/chat/stream` 精确匹配 + `proxy_buffering off`；`location ~ ^/(admin\|sso\|oms\|front\|seckill\|ai\|search\|user\|ums\|pms\|resource\|ams)/` 全路径代理 + `/upload/` + 静态资源直供 | 已解决 |
+| 3 | 11 个微服务**没有健康检查端点** | ✅ **端点侧已解决**：11 个 webapi 模块 pom **全部引入** `spring-boot-starter-actuator`，11 个 `application.yml` **全部配置** `management.endpoints.web.exposure.include: health,info`；服务器实测 `/actuator/health` 返回 **200**<br>⏳ **但"容器级 healthcheck"仍未做**（compose 里 11 个微服务仍无 `healthcheck:`，`docker ps` 里只有 6 个中间件显示 `(healthy)`）→ **见 TODO #40（Step 1 已完成 / Step 2 待做）** | 已解决（**留一半给 #40**）|
+| 4 | JWT 签名密钥硬编码在 10 个模块 | ✅ **已修**（TODO #25）：11 容器 `JWT_SECRET` 实测为 **64 位随机值且互相同一**、非默认值 | 已解决 |
+| 5 | **真实 API Key 泄露在源码** | ⚠️ **未完全收口**（必须看）：<br>· DeepSeek key `sk-0ac9a54…` → **未进 git 历史** ✅<br>· 当前生产 DeepSeek key `sk-de931f…` → **未进 git 历史**（仅在被 gitignore 的本地 `.env`）✅<br>· **硅基流动 embedding key `sk-pffsuuah…` → 已随 commit `719ff6f` push 进"公开"仓库历史 = 已公开泄露** → **必须吊销 → TODO #44 🔴 仍未处理**<br>· `git ls-files deploy` 复核：**21 个被跟踪文件全是模板/配置（只有 `.env.example`），无真 Key** ✅ | 🔴 **活待办 → #44** |
+| 6 | CORS 域名硬编码 | ❌ **仍未做**：`mall-gateway-server/.../CorsConfig.java` 实测仍是 `addAllowedOrigin("http://…")` 硬编码 3 处 | 活待办 → **#22** |
+| 7 | systemd JAR 文件名不一致 | ⚪ **已失效**：项目已全量 Docker 化，systemd 部署方式弃用 | 过时 |
+| 8 | 前端遗留：明文密码日志 / 硬编码 IP | ✅ `console.log(password)` 实测**已清理**；⚪ 旧 IP `8.156.85.160` 仍散落在 5 份文档与 `deploy/*.env`（历史遗留，无功能影响）| 基本解决 |
+
+> **关联（归档时）**：[[TODO文件]] #40（healthcheck Step 2）/ **#44（🔴 吊销泄露的 embedding key）** / #22（CORS）；[[问题解决--容器构建与编排卫生]]（容器编排类问题合集）；[[企业级生产评估报告-2026-08-15]]（同期同性质的归档件）。
 
 ---
 
