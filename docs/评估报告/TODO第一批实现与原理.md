@@ -448,7 +448,11 @@ redis-cli CONFIG SET appendonly yes
 
 **经验**：① 依赖 Nacos 的服务重建时有启动竞态，`restart: on-failure` 是底线（gateway 之前漏了）；② 容器 "running" ≠ 服务可用，验证要看端口监听 + Nacos 注册 + 实际请求。
 
-> ⚠️ **2026-09-10 复核（#51 现状）**：当时 compose 里 **6 个容器**是 `on-failure`（front/gateway/order/product/search/seckill），**服务器实测至今仍是这 6 个**；另有 `csmall-resource` = `unless-stopped`；**其余 14 个为 `no`** → **老机重启后 14/21 容器不会自动恢复**（#51，第三批待办）。**注意仓库与服务端已不一致**：仓库 `docker-compose.yml` 现已有 **11 个 `on-failure` + 1 个 `unless-stopped`**（后续补的），但**尚未部署到服务器** → 部署服务器 compose 即可把 14 降到 3。这也是"容器 restart 策略"仍未收口的原因。
+> ⚠️ **2026-09-10 复核（#51 现状，两机实测）**：
+> - `restart` 策略在 compose 里**只给 12 个服务配了**：**11 个 `on-failure`**（老机 6：front/gateway/order/product/search/seckill；新机 5：redis-replica / 3 哨兵 / mall-seckill-2）+ **`mall-resource` 的 `unless-stopped`**。**其余 14 个服务根本没配**（mysql/redis/nacos/rabbitmq/es/seata/sentinel/skywalking-oap/skywalking-ui/mall-sso/mall-ums/mall-ams/mall-ai/frontend）。
+> - 老机实测运行中 21 容器 = **6 个 `on-failure`** + **1 个 `unless-stopped`** + **14 个 `no`** → **与 compose 文件完全一致**（那 5 个多出来的 `on-failure` 属于**新机**，不在老机运行）。
+> - ✅ **所以"#51"的真实含义是"这 14 个服务压根没配 restart 策略"（设计缺失），不是"配了但没部署"**。老机重启后这 14 个不会自动恢复（当时记载的"20/21"是更早的数字，**现为 14/21**）。修法是给这 14 个补 `restart: unless-stopped`（中间件尤其需要）。
+> - 🔎 **顺带纠正一个容易犯的比较错误**：`deploy/docker/docker-compose.yml` 是**两机合并的单一文件**（26 服务 = 老机 21 + 新机 5），两台机器的 `/data/csmall/docker-compose.yml` 就是这同一份（实测两机容器 label 的 `config_files` 都指向它）。**拿"文件里的总数"和"某一台在跑的服务数"比会得出错误结论**——我第一轮就因此误判成"仓库 11 个 vs 服务器 6 个 = 未部署"。
 
 ### 9.4 坑 ③：redis.conf 挂载权限（容器 redis 用户读不了 600 属主文件）
 

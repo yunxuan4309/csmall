@@ -520,9 +520,11 @@ Web 前端：正常走 /ai/search → AI 失败/超时 → fallback 调 /search
 3. ✅ 部署 mall-search/mall-ai/mall-product 新 jar（含 mall-search 的 `CUSTOM_FILE_UPLOAD_RESOURCE_HOST` env）
 4. ✅ 降级演练：`docker stop csmall-ai` → 前端搜索 fallback 出结果 → start 恢复
 
-> ⭐ **2026-09-10 复核（#21 模型名仍然有效，但底层已换代）**：官方更新日志（2026-04-24）曾公告 `deepseek-chat` / `deepseek-reasoner` 将于 **2026-07-24 停止使用**，但实测（向 `api.deepseek.com` 发 `max_tokens=1` 的最小请求）**5 个别名全部 HTTP 200**：`deepseek-chat`→返回 `"model":"deepseek-flash"` 且**无 reasonning**（非推理，行为与本节结论一致）；`deepseek-v4-flash` / `deepseek-reasoner` / `deepseek-flash`→返回 `"model":"deepseek-flash"` **带 `reasoning_content`**（推理）；`deepseek-v4-pro`→返回 `"model":"deepseek-v4-pro"`。
-> ⚠️ **含义**：① 文档"JSON 任务用非推理 `deepseek-chat`、SSE 用推理 `deepseek-v4-flash`"的**分工结论依然成立**（两者行为确实不同）；② 但 `deepseek-chat` 已被官方宣告停用、只是仍在兼容期，**底层两者现在都映射到同一个 `deepseek-flash`**——名字靠兼容层活着，**存在随时失效的风险**，属已知隐患（建议后续改为官方现役模型名）。
-> ℹ️ 另：`GET /models` 只列出 `deepseek-flash` 与 `deepseek-v4-pro` 两个 id，**不含** `deepseek-chat`/`deepseek-v4-flash`/`deepseek-v4-flash-vision-exp` —— 该端点不是权威清单，**不能据它判断可用性**。
+> ⭐ **2026-09-10 复核（#21 模型名仍然有效，但底层已换代）**：
+> **① 生产实际生效值（最权威，实测解包生产 jar）**：`/app/app.jar` 内 `BOOT-INF/classes/application.yml` 第 26 行 = **`chat-model: deepseek-chat`**、第 27 行 = `compare-model: deepseek-v4-flash`、第 41 行 = `embedding-model: BAAI/bge-m3`；`application-prod.yml` **未定义** `cooxiao.ai` 段 → 直接继承 → **生产确实在跑 `deepseek-chat`**。（改动来源：commit `c0d7209`「fix(ai): AI 重排偶发降级/超时根治 - reasoning 模型分工」2026-09-08 13:08，把 `chat-model: deepseek-v4-flash` 改成 `deepseek-chat`；镜像构建于同日 22:08，**已包含该改动**）
+> **② 官方公告与实测不一致**：官方更新日志（2026-04-24）曾公告 `deepseek-chat` / `deepseek-reasoner` 将于 **2026-07-24 停止使用**，但 2026-09-10 实测（向 `api.deepseek.com` 发 `max_tokens=1` 最小请求）**5 个别名全部 HTTP 200**：`deepseek-chat`→返回 `"model":"deepseek-flash"` 且**无 reasoning**（非推理，与本节结论一致）；`deepseek-v4-flash` / `deepseek-reasoner` / `deepseek-flash`→返回 `"model":"deepseek-flash"` **带 `reasoning_content`**（推理）；`deepseek-v4-pro`→`"model":"deepseek-v4-pro"`。
+> ⚠️ **③ 含义**：文档"JSON 任务用非推理 `deepseek-chat`、SSE 用推理 `deepseek-v4-flash`"的**分工结论依然成立**（两者行为确实不同）；但 `deepseek-chat` 已被官方宣告停用、只是仍在兼容期，**且两者现在都映射到同一个底层 `deepseek-flash`** —— 名字靠兼容层活着，**存在随时失效的风险**，属已知隐患（建议改为官方现役模型名）。
+> ℹ️ **④** `GET /models` 只列出 `deepseek-flash` 与 `deepseek-v4-pro` 两个 id，**不含** `deepseek-chat`/`deepseek-v4-flash`/`deepseek-v4-flash-vision-exp` —— 该端点不是权威清单，**不能据它判断可用性**。
 
 ### 5.5 面试话术（#33 完整故事线）
 
