@@ -695,13 +695,19 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 
 ---
 
-### 40. 【部署】微服务自身 healthcheck 缺失（2026-09-03 审计，待实施）
+### 40. 【部署】微服务自身 healthcheck（🟡 **Step 1 已完成 / Step 2 待做**，2026-09-10 复核修正）
 
 > **2026-09-03 新增（源自容器化部署企业级差距评估）**：compose 中**中间件全带 healthcheck**（mysqladmin ping/redis-cli/curl），但 **11 个微服务均无 healthcheck**、无 `/actuator/health` 暴露 → `restart: on-failure` 只能拉起"进程崩溃"，**服务起但内部不健康（连不上 Nacos/DB/Redis）时不会被重启**，Docker 认为"活着"。
-
-**方案（P2）**：
-1. 引入 `spring-boot-starter-actuator`（mall-common 一处依赖，全部生效）+ 暴露 `/actuator/health`
-2. compose 每个微服务加 `healthcheck: curl -f http://localhost:<port>/actuator/health`（依赖方可用 `depends_on: condition: service_healthy` 做服务级就绪等待，替代现在的"只等中间件"）
+>
+> ⚠️ **2026-09-10 复核修正（原标题"待实施"已过期一半）**：本条**前半已不成立** ——
+> | 步骤 | 状态 | 实测证据 |
+> |---|---|---|
+> | **Step 1**：引入 actuator + 暴露 `/actuator/health` | ✅ **已完成** | 11 个 webapi 模块 pom **全部有 ★实际依赖** `spring-boot-starter-actuator`（+ gateway 共 12 个）；11 个 `application.yml` 全部配 `management.endpoints.web.exposure.include: health,info`；**服务器实测 `/actuator/health` 返回 200**（10004/10006/10007/10010/10087）|
+> | **Step 2**：compose 每个微服务加 `healthcheck:` + 用 `depends_on: condition: service_healthy` | ❌ **仍未做** | compose 里 `healthcheck` 实测只在 6 个**中间件**（mysql/redis/nacos/rabbitmq/es/seata）；`docker ps` 里只有这 6 个显示 **`(healthy)`**，**11 个微服务全无该标记** |
+>
+> **因此本条的剩余工作 = Step 2**（P2），价值不变：让"服务起来了但连不上 Nacos/DB/Redis"这种**假活**能被 Docker 识别并按策略重启。
+>
+> **方案（P2，剩余部分）**：compose 每个微服务加 `healthcheck: curl -f http://localhost:<port>/actuator/health`（依赖方可用 `depends_on: condition: service_healthy` 做服务级就绪等待，替代现在的"只等中间件"）。⚠️ 注意：容器基础镜像需有 `curl`（或改用 `wget`/Java 侧探针），且加 healthcheck 属 compose 变更、需 recreate 相应容器。
 3. 注意：actuator 端点收窄（只开 health，避免暴露 env/beans 等敏感端点，呼应安全审计）
 
 **面试价值**：能讲"进程活着 ≠ 服务健康——我补了 actuator healthcheck，让依赖方等服务真正就绪"——容器化可观测基础课
