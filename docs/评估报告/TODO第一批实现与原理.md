@@ -451,7 +451,10 @@ redis-cli CONFIG SET appendonly yes
 > ⚠️ **2026-09-10 复核（#51 现状，两机实测）**：
 > - `restart` 策略在 compose 里**只给 12 个服务配了**：**11 个 `on-failure`**（老机 6：front/gateway/order/product/search/seckill；新机 5：redis-replica / 3 哨兵 / mall-seckill-2）+ **`mall-resource` 的 `unless-stopped`**。**其余 14 个服务根本没配**（mysql/redis/nacos/rabbitmq/es/seata/sentinel/skywalking-oap/skywalking-ui/mall-sso/mall-ums/mall-ams/mall-ai/frontend）。
 > - 老机实测运行中 21 容器 = **6 个 `on-failure`** + **1 个 `unless-stopped`** + **14 个 `no`** → **与 compose 文件完全一致**（那 5 个多出来的 `on-failure` 属于**新机**，不在老机运行）。
-> - ✅ **所以"#51"的真实含义是"这 14 个服务压根没配 restart 策略"（设计缺失），不是"配了但没部署"**。老机重启后这 14 个不会自动恢复（当时记载的"20/21"是更早的数字，**现为 14/21**）。修法是给这 14 个补 `restart: unless-stopped`（中间件尤其需要）。
+> - ✅ **"#51"的含义（2026-09-10 经官方文档核实）**：`restart` 策略确实配在 compose 里（12 个服务），**但对"宿主机/Docker 重启"只有 `unless-stopped` 才有效**。[Docker 官方文档](https://docs.docker.com/engine/containers/start-containers-automatically/) 原文：**"`on-failure` only prompts a restart if the container exits with a failure. It doesn't restart the container if the daemon restarts."** → 老机重启后**只有 `csmall-resource`（`unless-stopped`）会自己回来，其余 20/21 不会**。⚠️ **我第一轮把这里写成"14/21"是错的**（只数了 `no`，漏了 `on-failure` 同样不恢复）—— 项目原记载的 **20/21 才是对的**。
+> - 🔴 **新机同样中招（当时文档未记）**：新机 5 个容器**全部是 `on-failure`**（redis-replica / 3 哨兵 / mall-seckill-2）→ **新机重启后 5/5 全不恢复**。**连锁风险更严重**：从库与哨兵都不在 → 老机 Redis 主库因 `min-replicas-to-write 1` **拒绝所有写**（`NOREPLICAS`）→ 秒杀/登录 token 等全挂；且哨兵全没，无法故障转移。
+> - ℹ️ 两台 `LiveRestoreEnabled=false`（老机 `daemon.json` 无该配置）→ `systemctl restart docker` 会**停掉全部容器**再按策略恢复；两台 docker 均为 `enabled`（开机自启 daemon），**没有任何 systemd 单元 / cron 兜底**（实测查过）→ 重启后必须人工 `docker compose up -d`。
+> - 修法：14 个 `no` + 6 个 `on-failure` 统一改 `restart: unless-stopped`（新机 5 个同样要改），逐个 `up -d --force-recreate`（改变更窗口事项）。
 > - 🔎 **顺带纠正一个容易犯的比较错误**：`deploy/docker/docker-compose.yml` 是**两机合并的单一文件**（26 服务 = 老机 21 + 新机 5），两台机器的 `/data/csmall/docker-compose.yml` 就是这同一份（实测两机容器 label 的 `config_files` 都指向它）。**拿"文件里的总数"和"某一台在跑的服务数"比会得出错误结论**——我第一轮就因此误判成"仓库 11 个 vs 服务器 6 个 = 未部署"。
 
 ### 9.4 坑 ③：redis.conf 挂载权限（容器 redis 用户读不了 600 属主文件）

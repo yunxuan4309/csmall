@@ -68,3 +68,9 @@ CLAUDE.md
 ### 个人简历（解除跟踪，本地保留）###
 resume.docx
 resume_text.txt
+
+### 文档工作副本（本地对照用，不入库）###
+*-副本.md
+
+### 本地临时工作目录（验证脚本 / 日志 / 临时 compose）###
+work/
