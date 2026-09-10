@@ -1,7 +1,7 @@
 # TODO 第三批实现与原理 · 补册 1（AI 导购 Agent + Python 模拟数据）
 
 > **创建日期**: 2026-09-10
-> **状态**: 🚧 **选型与设计已定稿，且部分已进入实施并上线**（2026-09-10 更新）—— **#58 已完成并部署生产**、**#32-P0 已完成并部署生产、两阶段验证通过（⚠️ 生产开关当前为 `true`）**、**#48 仍待实施**、**#60 仅评估**
+> **状态**: 🚧 **选型与设计已定稿；P0 已上线，P1 代码已完成（待部署）**（2026-09-10 更新）—— **#58 已完成并部署生产**、**#32-P0 已完成并部署生产、两阶段验证通过（生产开关当前 `true`）**、**#32-P1 代码已完成（50 项测试全绿，含流式 Agent + 两个新工具 + Redis 审计）待部署**、**#48 仍待实施**、**#60 仅评估**
 > **📖 本册同时是"AI 模块升级"的执行记录**：**§三·6** 记录 P0 的**真实实现**（与 §3.4「计划骨架」的差异已如实标注）；**§八 小插曲**记录两次**非计划内**的生产事件（nginx 全站 502 抢修 / 前端 conf 双向漂移）
 > **为什么另开一册**: 原 [[TODO第三批实现与原理]] 已 946 行、以跨机集群为主；按用户要求把 **Agent 与模拟数据**这两块"新东西"单独成册，**原册不动**，两册互链
 > **用途**: 与三个「实现与原理」正册格式对齐 —— 「**选型/原理 → 本项目设计 → 实测证据 → 疑惑点 → 面试话术**」；**本册的特色是"技术选型过程"被完整记录**（为什么不跟风上框架）
@@ -14,7 +14,7 @@
 | 编号 | 事项 | 本质 | 状态 |
 |---|---|---|---|
 | **#58** | 模型名停用风险 + `thinking` 开关改造 | **前置**：给 Agent 一个稳定的模型契约 | ✅ **已完成并部署生产**（2026-09-10，见 [[TODO已完成]] §十四）|
-| **#32** | AI 导购升级 Agent（Function Calling + ReAct） | 让 LLM 有"动作决策权"，而非只当解析器 | ✅ **P0 已完成并部署生产、验证通过**（`09d22b1` 代码 + `0fe1a1e` 开关注入；⚠️ **生产开关当前 `true`**）；⏳ P1 未开始（见 §三·5 / §三·6）|
+| **#32** | AI 导购升级 Agent（Function Calling + ReAct） | 让 LLM 有"动作决策权"，而非只当解析器 | ✅ **P0 已上线并验证**（`09d22b1` + `0fe1a1e`；生产开关 `true`）；🚧 **P1 代码已完成（待部署）**：流式 Agent + `compare_products`/`get_stock` + Redis 动作审计 + 50 项离线测试全绿（见 §三·5 / §三·6 / §三·7）|
 | **#48** | Python 模拟数据 + AI 并发测试 | 造运营数据 + 验证 AI 承载 | 📋 规范设计定稿；待实施 |
 | **#60** | Spring AI 引入评估 | **结论：暂不引入**（前置 = Boot 全站升级） | ✅ 评估完成，仅记录 |
 | **插曲** | nginx 静态上游 IP → 全站 502 / 前端 conf 漂移 | **非计划内**：调用方持有"过期地址" | ✅ 已抢修并复盘（见 **§八**）|
@@ -349,7 +349,7 @@ public ToolRound chatWithTools(List<Map<String,Object>> messages) {
 | ② | `agent-enabled: false` 写死 | 改为 **`${AI_AGENT_ENABLED:false}` + compose 注入** | 让开关"**改 `.env` + recreate 即生效，不用重编译 jar**"；回滚更快（三级：关开关 ~45s / 换回 jar / 连 compose 一起回）|
 | ③ | `spec()` 返回 schema，`execute` 返回 String | `parameters()` + `execute → AiToolResult` | 见上表（回灌与出前端是两条数据流，混在 String 里迟早出错）|
 
-> 📋 部署指令：`work/部署指令-step2-agent-p0.md`（**阶段 A 只换 jar 验"零回归" → 阶段 B 开开关验 Agent**；jar MD5 `5193b258f0725fd729d261c482659b19`）
+> 📋 **P0 部署指令**：`work/部署指令-step2-agent-p0.md`（**阶段 A 只换 jar 验"零回归" → 阶段 B 开开关验 Agent**；jar MD5 `5193b258f0725fd729d261c482659b19`）
 
 #### ✅ P0 生产部署与验证（2026-09-10 当晚完成，两阶段）
 
@@ -366,6 +366,21 @@ public ToolRound chatWithTools(List<Map<String,Object>> messages) {
 **同时确认（避免误判为本次引入）**：启动日志里有 1 条 Dubbo ERROR（`Failed register interface application mapping for …ISpuSyncService`，error code 5-10 = 配置中心未接）—— 这是**项目既有特征**：**未改动**的 `csmall-product` 里有 **7 次**、`csmall-order` 1 次（09-09 启动即有），且 mall-product 已成功发现 mall-ai 的 provider（`Available Invokers : 172.18.0.9:20880`）、TCP 直连通 → **无功能影响**，只是启动噪声。
 
 **预算**：`ai:daily_cost:2026-09-10` 正常累加（多次往返测试后 0.010946 元，TTL 到次日零点）；**Agent 单次约为旧路径 2~2.5 倍**（工具轮 + 收敛轮）。**回滚**：改 `.env` 为 `false` + `docker compose up -d mall-ai`（~45s，**无需换 jar**）。
+
+### 3.7 🛠 P1 实际实现（2026-09-10 代码完成，待部署）
+
+| 部件 | 做法 | 关键取舍 |
+|---|---|---|
+| **`AiClient.streamChatWithTools(messages, tools, onContentChunk)`** | 抽出 **SSE 公共管道** `openSseStream(body, onData)`（取流/断连/记账/容错只写一处），`doStream` 与它共用；正文实时回调，`tool_calls` **按 index 拼接连缀** `arguments`，最后组装成 `AiToolRound` | 依据**实验 K**：arguments 被切成 19 段；首片才带 `id`/`name` |
+| **`compare_products` 工具** | 走 **Dubbo** `IForFrontSpuService.getSpuById`，只返回事实（价格/品牌/分类/销量/库存/标签/标题），并把 SPU 映射成 **ES 文档形状**塞进 `hits` → **对比也能出前端商品卡片** | ⭐ **没有复用 `ProductCompareServiceImpl.compare(...)`**：它内部会再调一次 LLM 生成总结 → 一次工具调用变两次计费 + 多占一个并发闸门槽，且违反"工具只给事实、判断留给收敛轮" |
+| **`get_stock` 工具** | 走 **Dubbo** `IForFrontSkuService.getSkusBySpuId`，返回 SKU 级库存 + 总库存；⚠️ 说明与 observation 都写明"**只含常规库存、不含秒杀库存**" | 库存是事务数据，**不能信 ES**（异步同步不准）；不返回 hits（卡片由检索/对比工具负责） |
+| **`AgentActionAuditor`（Redis 审计）** | `ai:agent:action:{sessionId}` List：`LPUSH` 一条 `{ts,round,tool,args,hits,costMs,ok}` → `LTRIM 0 49` → `EXPIRE 7d`；**写失败只记 WARN** | mall-ai 无数据库栈 → 落 Redis；审计"尽力而为"，绝不因审计把对话搞挂 |
+| **流式 Agent（`sendStreamWithAgent`）** | 事件顺序**与旧流水线完全一致**（thinking → products → sessionId → chunk* → done）→ **前端零改动**；`products` 发出前**先缓冲正文**，之后实时转发；每轮工具调用发一条 `thinking` 进度文案（前端已有卡片） | 依据**实验 K 的 preamble**；常见路径（1 轮工具 + 1 轮作答）里作答正文是**真正逐字流式**的 |
+| **降级策略（分层）** | ① 未写出任何内容就失败 → **降级到旧流水线**；② 已写出内容后失败 → **如实报错收尾，绝不降级**（否则两段回答拼接）；③ 工具异常/未知工具 → 转 observation 让模型自己决定 | 单测把两种情况都钉死（见下） |
+
+**测试（离线，零成本）**：`ChatServiceImplAgentTest` 扩到 **15 项**（新增流式：products 早于 chunk、无工具也发空 products、缓冲未写出可安全降级、已写出后失败不降级、轮数用尽流式收口、thinking 进度文案）；新增 `CompareProductsToolTest` 8 项、`GetStockToolTest` 7 项（含**参数不可信**：非法/负数/字符串 id、去重封顶、provider down 不炸链路）。**mall-ai 模块 50 项测试全绿**。
+
+> 📋 **P1 部署指令**：见 `work/部署指令-step3-agent-p1.md`（阶段 A 开关关验零回归 → 阶段 B 开开关验流式 Agent + 审计）。**生产开关已是 `true`**，所以阶段 B 只是把它改回来。
 
 ---
 
@@ -425,7 +440,9 @@ CREATE TABLE cs_mall_sim.sim_entity ( id PK, batch_id, db_name, table_name, pk_v
 
 ---
 
-## 五、实测实验总表（10 格，全部在服务器直连 DeepSeek 跑，成本可忽略）
+## 五、实测实验总表（12 格，全部在服务器直连 DeepSeek 跑，成本可忽略）
+
+> 前 10 格是 **#58 / P0** 阶段做的（模型契约、tools 可行性、互斥规则）；**K/L 两格是 P1 阶段补的**（流式 + tools 契约），用来在写代码前确认"流式下 `tool_calls` 到底怎么到达"。
 
 | 实验 | 输入 | 结果 | 结论 |
 |---|---|---|---|
@@ -439,8 +456,11 @@ CREATE TABLE cs_mall_sim.sim_entity ( id PK, batch_id, db_name, table_name, pk_v
 | **H** | **完整两轮循环**（工具轮 disabled）：round1 → 追加工具结果 → round2 | round1 `finish=tool_calls`；**round2 `finish=stop`、`content_len=272`、输出真实推荐表格** | ✅ **P0 的循环端到端会收敛、会出最终答案** |
 | **I** | `thinking: enabled` + `reasoning_effort=low/high` | 均 **200**（接受该参数）；但 `max_tokens=120` 时 **reasoning 183/174、content 均为 0** | ⚠️ **参数可用，但思考极耗 token → `max_tokens` 必须留足** |
 | **J** | **SSE 流式 + `thinking: enabled`** + `include_usage` | 129 行：**content 分片 38 / reasoning 分片 88** / usage chunk **有** / `[DONE]` **有** | ✅ **现有解析器只读 `delta.content` 与 `usage` → reasoning 分片被安全忽略，SSE 改造无破坏** |
+| **K** | **SSE 流式 + `tools` + `thinking: disabled`**（P1 前夜补测） | `finish_reason=tool_calls`；`tool_calls` **20 行分片**，`arguments` 被切成 **19 段**（`""`→`{`→`"`→`keywords`→`"`→…→`}`）；首片带 `id`+`name`，后续只有 `arguments`；**同一响应里先有 13 个 `content` 分片（英文 preamble）再出现 tool_calls** | ✅ 流式工具调用可行的**唯一正确姿势**是"按 `index` 拼接连缀 arguments"（实现依据）；⭐ preamble 的存在证明"**products 之前先缓冲正文**"是必需的，否则前端会先收正文、后收商品 |
+| **L** | **K 之后回灌 `role:"tool"` 结果，继续流式** | `content` **112 个分片**（真正逐字）；`tool_calls`=**0**；`finish_reason=stop`；`usage` 1 行 | ✅ 收敛轮天然流式、不再调工具；✅ usage 可记账 |
 
 **实验带来的 3 个方案修正**：① 工具轮不能与 `response_format` 共存；② SSE 的 `max_tokens: 2000` 应改读配置（思考占大头，实测 J 中 reasoning 分片是 content 的 2.3 倍）；③ `DeepSeekAiClient.embed` 是死代码。
+**P1 阶段（实验 K/L）又带来 2 条修正**：④ 流式下 `tool_calls` 的 `arguments` 是**按 index 分段到达**的，必须拼接（不能假设一条分片就是完整 JSON）；⑤ 工具轮会**先吐 preamble 正文**再吐 tool_calls → 流式 Agent 必须**缓冲正文**直到商品列表发出，否则前端事件顺序错乱。
 
 ---
 
@@ -455,7 +475,7 @@ CREATE TABLE cs_mall_sim.sim_entity ( id PK, batch_id, db_name, table_name, pk_v
         ↓ 验证：JSON 任务无 reasoning / SSE 正常 / 主链路无降级 / 预算记账正常   ✅ 全部实测通过
 【Step 2】#32-P0 Function Calling（在 Step 1 的模型契约之上）     ✅ 已完成并部署生产（09d22b1 + 0fe1a1e）｜⚠️ 开关当前 true
         ↓ 验证：curl 触达工具调用 + 两轮收敛（实验 H 已验证可行）    ✅ 生产实测通过（工具命中 4 条 → 第 2 轮收敛；另验兜底不编造）
-【Step 3】#32-P1 完整单 Agent（单独排期，不塞进同一窗口）           ⏳ 未开始
+【Step 3】#32-P1 完整单 Agent（单独排期，不塞进同一窗口）           🚧 代码已完成（含流式 Agent/两工具/Redis 审计，50 项测试全绿）｜⏳ 部署待执行
 【并行/下游】#48 模拟数据（独立；造的商品数据可反哺 #32 演示）        📋 设计定稿，待实施
 【不做】#60 Spring AI（前置 = Boot 全站升级）                      — 仅评估记录
 【插曲】nginx 全站 502 抢修 + 前端 conf 漂移（非计划内）            ✅ 已完成（见 §八）

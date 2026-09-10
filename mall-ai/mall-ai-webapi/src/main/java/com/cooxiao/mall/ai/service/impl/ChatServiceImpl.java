@@ -8,6 +8,7 @@ import com.cooxiao.mall.ai.client.AiToolRound;
 import com.cooxiao.mall.ai.config.AiProperties;
 import com.cooxiao.mall.ai.config.AiTask;
 import com.cooxiao.mall.ai.model.SearchIntent;
+import com.cooxiao.mall.ai.service.AgentActionAuditor;
 import com.cooxiao.mall.ai.service.SearchPipeline;
 import com.cooxiao.mall.ai.service.PreferenceExtractor;
 import com.cooxiao.mall.ai.service.SessionManager;
@@ -52,6 +53,7 @@ public class ChatServiceImpl {
     @Autowired private AiClient aiClient;
     @Autowired private AiProperties aiProperties;
     @Autowired private ToolRegistry toolRegistry;
+    @Autowired private AgentActionAuditor agentActionAuditor;
 
     /** 创建新会话 */
     public ChatResultVO createSession(Long userId) {
@@ -134,23 +136,11 @@ public class ChatServiceImpl {
     // ================================================================
 
     /**
-     * 让模型自己决定"查什么、查几次、够不够"：模型发起 {@code search_products} → 本地执行检索
-     * → 回灌 observation → 下一轮；模型不再请求工具时那一轮的正文就是最终回答。
-     *
-     * <p>本方法<b>不写 SSE</b>（流式 + 工具的收敛是 P1 的事），只服务同步接口 {@code /ai/chat/send}。
+     * 同步 Agent（{@code /ai/chat/send}）：让模型自己决定"查什么、查几次、够不够"，
+     * 模型不再请求工具时那一轮的正文就是最终回答。
      */
     private ChatResultVO sendWithAgent(ChatSession session, String message) {
-        List<Map<String, Object>> messages = new ArrayList<>();
-        messages.add(msg("system", buildAgentSystemPrompt(session.getPreferences())));
-
-        // 历史只回放 role/content 正文：工具调用过程不跨轮持久化（上一步的工具结果没必要在下一步重放）
-        List<ChatMessage> history = session.getMessages();
-        for (int i = Math.max(0, history.size() - AGENT_HISTORY_LIMIT); i < history.size(); i++) {
-            ChatMessage hist = history.get(i);
-            messages.add(msg(hist.getRole(), hist.getContent()));
-        }
-        messages.add(msg("user", message));
-
+        List<Map<String, Object>> messages = agentMessages(session, message);
         List<Map<String, Object>> tools = toolRegistry.toolSchemas();
         List<Map<String, Object>> hits = List.of();
         int maxRounds = Math.max(1, aiProperties.getAgentMaxRounds());
@@ -171,10 +161,7 @@ public class ChatServiceImpl {
             // 模型要工具：assistant 消息（含 tool_calls）必须原样入栈，否则回灌的 tool 消息无处挂靠
             messages.add(toolRound.assistantMessage());
             for (AiToolCall call : toolRound.toolCalls()) {
-                AiTool tool = toolRegistry.find(call.name());
-                AiToolResult result = tool == null
-                        ? AiToolResult.error("未知工具 " + call.name())
-                        : tool.execute(call.args());
+                AiToolResult result = executeToolCall(session, round, call);
                 if (result.hits() != null && !result.hits().isEmpty()) {
                     hits = result.hits();   // 取"最近一次真正有命中"的结果给前端（模型可能多次调用）
                 }
@@ -186,6 +173,210 @@ public class ChatServiceImpl {
         // ⛔ 轮数用尽：摘掉 tools 逼它用已有信息作答，而不是把"超出轮数"这种内部细节抛给用户
         log.warn("Agent 达到最大轮数 {}，强制收口", maxRounds);
         return buildAgentResult(session, message, finalAnswerWithoutTools(messages), hits);
+    }
+
+    // ================================================================
+    // Agent 公共部件（同步 / 流式共用）
+    // ================================================================
+
+    /** 组装 Agent 初始消息：system + 最近若干轮历史（只回放 role/content，工具过程不跨轮持久化）+ 本轮用户消息 */
+    private List<Map<String, Object>> agentMessages(ChatSession session, String message) {
+        List<Map<String, Object>> messages = new ArrayList<>();
+        messages.add(msg("system", buildAgentSystemPrompt(session.getPreferences())));
+        List<ChatMessage> history = session.getMessages();
+        for (int i = Math.max(0, history.size() - AGENT_HISTORY_LIMIT); i < history.size(); i++) {
+            ChatMessage hist = history.get(i);
+            messages.add(msg(hist.getRole(), hist.getContent()));
+        }
+        messages.add(msg("user", message));
+        return messages;
+    }
+
+    /**
+     * 执行一次工具调用（同步 / 流式共用）：**计时 → 写动作审计 → 兜住一切异常**。
+     * <p>未知工具、工具抛异常，都转成可读 observation 回灌给模型（让它自己决定改参数重试还是如实告知），
+     * 绝不让工具的问题打断整个循环 —— 这是 Agent 相对"写死流水线"最实在的鲁棒性差异。
+     */
+    private AiToolResult executeToolCall(ChatSession session, int round, AiToolCall call) {
+        long start = System.currentTimeMillis();
+        AiTool tool = toolRegistry.find(call.name());
+        AiToolResult result;
+        boolean ok = true;
+        if (tool == null) {
+            ok = false;
+            result = AiToolResult.error("未知工具 " + call.name());
+        } else {
+            try {
+                result = tool.execute(call.args());
+            } catch (Exception e) {
+                ok = false;
+                log.warn("工具 {} 执行异常：{}", call.name(), e.getMessage(), e);
+                result = AiToolResult.error(e.getMessage());
+            }
+        }
+        long cost = System.currentTimeMillis() - start;
+        int hitCount = result.hits() == null ? 0 : result.hits().size();
+        // 审计"尽力而为"：写失败只记 WARN，不影响对话（见 AgentActionAuditor）
+        agentActionAuditor.record(session.getSessionId(), round, call.name(),
+                call.argumentsJson(), hitCount, cost, ok);
+        return result;
+    }
+
+    /** 把工具调用翻译成用户能看懂的进度文案（前端渲染成 thinking 卡片，无需改前端） */
+    private String describeTool(AiToolCall call, AiToolResult result) {
+        int hits = result.hits() == null ? 0 : result.hits().size();
+        String name = call.name() == null ? "未知工具" : call.name();
+        String label = switch (name) {
+            case "search_products" -> "🔎 商品检索";
+            case "compare_products" -> "📊 商品对比";
+            case "get_stock" -> "📦 库存查询";
+            default -> "🔧 " + name;
+        };
+        if (hits > 0) {
+            return label + "完成：拿到 " + hits + " 条数据";
+        }
+        String observation = result.observation() == null ? "" : result.observation();
+        if (observation.contains("失败") || observation.contains("未知工具")) {
+            return label + "没成功，正在换个方式…";
+        }
+        return label + "完成：这次没查到匹配结果";
+    }
+
+    // ================================================================
+    // 流式 Agent（TODO #32-P1）
+    // ================================================================
+
+    /**
+     * 流式 Agent：模型"边想边吐"，工具轮穿插其间。
+     *
+     * <p><b>事件顺序刻意与旧流水线保持一致</b>（thinking → products → sessionId → chunk* → done），前端**零改动**。
+     * 真正的难点是：工具轮里模型可能先吐一段正文（preamble），而那时商品列表还没拿到。
+     * 处理办法是在 products 发出之前**先把正文缓冲**，等 products/sessionId 发完再补发；products 之后正文实时转发。
+     * 于是常见路径（1 轮工具 + 1 轮作答）里的作答正文是**真正逐字流式**的，事件顺序也没被破坏。
+     *
+     * @return true = 已完整处理（含已报错收尾）；false = 一个字都没写出去就失败，调用方可以降级到旧流水线
+     */
+    private boolean sendStreamWithAgent(ChatSession session, String message, java.io.OutputStream out) {
+        List<Map<String, Object>> messages = agentMessages(session, message);
+        List<Map<String, Object>> tools = toolRegistry.toolSchemas();
+        List<Map<String, Object>> hits = List.of();
+        int maxRounds = Math.max(1, aiProperties.getAgentMaxRounds());
+
+        boolean[] productsSent = {false};
+        boolean[] anythingWritten = {false};
+        StringBuilder reply = new StringBuilder();
+
+        try {
+            for (int round = 1; round <= maxRounds; round++) {
+                writeSSE(out, "thinking", "🔧 第 " + round + " 轮：判断是否需要查询商品…");
+
+                List<String> buffered = new ArrayList<>();
+                AiToolRound toolRound = aiClient.streamChatWithTools(messages, tools, chunk -> {
+                    if (productsSent[0]) {
+                        anythingWritten[0] = true;
+                        reply.append(chunk);
+                        writeSSE(out, "chunk", chunk);      // products 已发 → 正文实时转发
+                    } else {
+                        buffered.add(chunk);                // 否则先缓冲，保证 products 排在 chunk 之前
+                    }
+                });
+
+                if (!toolRound.hasToolCalls()) {
+                    // ✅ 收敛：本轮正文即最终回答
+                    if (!productsSent[0]) {
+                        emitProductsAndSession(out, session, hits);
+                        productsSent[0] = true;
+                    }
+                    flushBuffered(out, buffered, reply, anythingWritten);
+                    finishAgentStream(out, session, message, reply);
+                    return true;
+                }
+
+                messages.add(toolRound.assistantMessage());
+                for (AiToolCall call : toolRound.toolCalls()) {
+                    AiToolResult result = executeToolCall(session, round, call);
+                    if (result.hits() != null && !result.hits().isEmpty()) {
+                        hits = result.hits();
+                    }
+                    writeSSE(out, "thinking", describeTool(call, result));
+                    messages.add(toolMessage(call.id(), result.observation()));
+                }
+                log.info("Agent(流式) 第 {} 轮：调用工具 {} 次，累计命中 {} 条",
+                        round, toolRound.toolCalls().size(), hits.size());
+
+                if (!productsSent[0]) {
+                    emitProductsAndSession(out, session, hits);
+                    productsSent[0] = true;
+                }
+                flushBuffered(out, buffered, reply, anythingWritten);
+            }
+
+            // ⛔ 轮数用尽：摘掉工具、流式收口
+            log.warn("Agent(流式) 达到最大轮数 {}，强制收口", maxRounds);
+            if (!productsSent[0]) {
+                emitProductsAndSession(out, session, hits);
+                productsSent[0] = true;
+            }
+            writeSSE(out, "thinking", "💬 信息已足够，正在生成回答…");
+            messages.add(msg("user", "请立即基于以上工具返回的真实商品信息给出最终推荐，不要再请求调用工具。"));
+            aiClient.streamChat(messages, chunk -> {
+                anythingWritten[0] = true;
+                reply.append(chunk);
+                writeSSE(out, "chunk", chunk);
+            });
+            finishAgentStream(out, session, message, reply);
+            return true;
+        } catch (Exception e) {
+            log.warn("流式 Agent 失败：{}", e.getMessage(), e);
+            if (anythingWritten[0]) {
+                // 已经吐过内容 → 不能悄悄改走旧流水线（用户会看到两段拼接），如实报错收尾
+                writeSSE(out, "error", "AI 服务暂时不可用，请稍后重试。");
+                writeSSE(out, "done", "");
+                closeQuietly(out);
+                return true;
+            }
+            return false;   // 一个字都没写 → 调用方降级到旧流水线
+        }
+    }
+
+    /** 发商品列表 + sessionId（顺序与旧流水线一致：都在 chunk 之前） */
+    private void emitProductsAndSession(java.io.OutputStream out, ChatSession session, List<Map<String, Object>> hits) {
+        writeSSE(out, "products", JSON.toJSONString(ragService.buildRelatedProducts(hits)));
+        writeSSE(out, "sessionId", session.getSessionId());
+        writeSSE(out, "thinking", "💬 AI 正在生成回答…");
+    }
+
+    /** 补发"products 之前"缓冲下来的正文分片 */
+    private void flushBuffered(java.io.OutputStream out, List<String> buffered,
+                               StringBuilder reply, boolean[] anythingWritten) {
+        for (String chunk : buffered) {
+            anythingWritten[0] = true;
+            reply.append(chunk);
+            writeSSE(out, "chunk", chunk);
+        }
+        buffered.clear();
+    }
+
+    /** 收尾：空答复给降级话术；非空则先关流、再在后台落会话（不阻塞连接释放） */
+    private void finishAgentStream(java.io.OutputStream out, ChatSession session, String message, StringBuilder reply) {
+        String text = reply == null ? "" : reply.toString();
+        if (text.isBlank()) {
+            log.warn("流式 Agent 最终回答为空，返回降级话术");
+            writeSSE(out, "error", "很抱歉，AI 服务暂时不可用，请稍后重试。");
+            writeSSE(out, "done", "");
+            closeQuietly(out);
+            return;
+        }
+        writeSSE(out, "done", "");
+        closeQuietly(out);
+        saveSession(session, message, text);
+    }
+
+    private void closeQuietly(java.io.OutputStream out) {
+        try {
+            out.close();
+        } catch (Exception ignored) {
+        }
     }
 
     /** 最后一次调用不带工具：把已有 observation 压成最终回答（也用于"既不调工具又没正文"的兜底） */
@@ -263,44 +454,13 @@ public class ChatServiceImpl {
 
             writeSSE(outputStream, "thinking", "🤖 AI 正在理解您的需求...");
 
-            SearchIntent intent = extractSearchIntent(message, session);
-            log.info("AI 提取搜索意图: {}", JSON.toJSONString(intent));
-
-            SearchPipeline.PipelineResult pipelineResult = searchPipeline.run(
-                    intent, message, SEARCH_TOP_K,
-                    thinking -> writeSSE(outputStream, "thinking", thinking));
-
-            if (intent.getBudgetMin() != null) {
-                session.getPreferences().put("budget", intent.getBudgetMin().intValue());
+            // TODO #32-P1：开启 Agent 时走"流式工具循环"（模型边想边吐，工具轮穿插其间）。
+            // ⚠️ 只有"一个字都还没写出去"的失败才允许降级到旧流水线 —— 否则两段回答会拼在一起。
+            if (aiProperties.isAgentEnabled() && sendStreamWithAgent(session, message, outputStream)) {
+                return;
             }
 
-            writeSSE(outputStream, "products", JSON.toJSONString(pipelineResult.getProducts()));
-
-            if (pipelineResult.getProductCount() == 0 && !pipelineResult.getAvailableCategories().isEmpty()) {
-                writeSSE(outputStream, "categories",
-                        JSON.toJSONString(pipelineResult.getAvailableCategories()));
-            }
-
-            writeSSE(outputStream, "sessionId", session.getSessionId());
-            writeSSE(outputStream, "thinking", "💬 AI 正在生成回答...");
-
-            String preferenceContext = buildPreferenceContext(session.getPreferences());
-            List<Map<String, Object>> allMessages = buildMessages(session, message,
-                    preferenceContext, pipelineResult.getSearchContext());
-
-            StringBuilder fullResponse = new StringBuilder();
-            // 模型 / 思考模式 / 温度 / max_tokens 全部由 AiClient 按任务类型决定（含并发闸门与预算记账）
-            aiClient.streamChat(allMessages, chunk -> {
-                fullResponse.append(chunk);
-                writeSSE(outputStream, "chunk", chunk);
-            });
-
-            // 先关闭 SSE 流，避免 saveSession 阻塞导致连接不释放
-            writeSSE(outputStream, "done", "");
-            outputStream.close();
-
-            // 后台保存会话（不阻塞 SSE 响应）
-            saveSession(session, message, fullResponse.toString());
+            sendStreamWithPipeline(session, message, outputStream);
         } catch (Exception e) {
             log.error("SSE 流式对话失败", e);
             try {
@@ -309,6 +469,49 @@ public class ChatServiceImpl {
                 outputStream.close();
             } catch (Exception ignored) {}
         }
+    }
+
+    /** 旧流水线（意图提取 → 多路召回 → 生成），也是 Agent 不可用时的兜底 */
+    private void sendStreamWithPipeline(ChatSession session, String message,
+                                        java.io.OutputStream outputStream) throws Exception {
+        SearchIntent intent = extractSearchIntent(message, session);
+        log.info("AI 提取搜索意图: {}", JSON.toJSONString(intent));
+
+        SearchPipeline.PipelineResult pipelineResult = searchPipeline.run(
+                intent, message, SEARCH_TOP_K,
+                thinking -> writeSSE(outputStream, "thinking", thinking));
+
+        if (intent.getBudgetMin() != null) {
+            session.getPreferences().put("budget", intent.getBudgetMin().intValue());
+        }
+
+        writeSSE(outputStream, "products", JSON.toJSONString(pipelineResult.getProducts()));
+
+        if (pipelineResult.getProductCount() == 0 && !pipelineResult.getAvailableCategories().isEmpty()) {
+            writeSSE(outputStream, "categories",
+                    JSON.toJSONString(pipelineResult.getAvailableCategories()));
+        }
+
+        writeSSE(outputStream, "sessionId", session.getSessionId());
+        writeSSE(outputStream, "thinking", "💬 AI 正在生成回答...");
+
+        String preferenceContext = buildPreferenceContext(session.getPreferences());
+        List<Map<String, Object>> allMessages = buildMessages(session, message,
+                preferenceContext, pipelineResult.getSearchContext());
+
+        StringBuilder fullResponse = new StringBuilder();
+        // 模型 / 思考模式 / 温度 / max_tokens 全部由 AiClient 按任务类型决定（含并发闸门与预算记账）
+        aiClient.streamChat(allMessages, chunk -> {
+            fullResponse.append(chunk);
+            writeSSE(outputStream, "chunk", chunk);
+        });
+
+        // 先关闭 SSE 流，避免 saveSession 阻塞导致连接不释放
+        writeSSE(outputStream, "done", "");
+        outputStream.close();
+
+        // 后台保存会话（不阻塞 SSE 响应）
+        saveSession(session, message, fullResponse.toString());
     }
 
     /** 直接写 OutputStream 字节 + flush，穿越所有缓冲层 */

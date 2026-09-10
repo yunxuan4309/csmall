@@ -1,7 +1,7 @@
 # AI 导购 Agent 升级方案
 
 > **状态**: ✅ **已敲定实施（2026-09-10 用户拍板：做）** —— 按 **P0 → P1** 分期推进（P2 可选）；**实施前必读「〇、决策记录 + 实施前代码校正」**（其中 6 条校正来自读码实测，照原稿做会踩空）
-> **进度（2026-09-10）**：**P0 代码已完成**（提交 `09d22b1`）**并已部署生产、两阶段验证通过**（提交 `0fe1a1e` 的开关注入 + `work/部署指令-step2-agent-p0.md`）。**⚠️ 生产当前 `AI_AGENT_ENABLED=true`（开关是开的）**。**⚠️ 与原计划的偏差**：P0 的 Agent 只覆盖**同步** `/ai/chat/send`，SSE 仍走旧流水线（原 S5「最后一轮复用 SSE」顺延 P1）。
+> **进度（2026-09-10）**：**P0 代码已完成并已部署生产、两阶段验证通过**；**P1 代码已完成（50 项测试全绿）待部署**。**⚠️ 生产当前 `AI_AGENT_ENABLED=true`**（P0 已上线）。**⚠️ 与原计划的偏差**：P0 的 Agent 当时只覆盖同步接口，**P1 已把 SSE 也接进 Agent**（流式工具轮）；`compare_products` 未复用 `ProductCompareServiceImpl`（原因见 §八 P1 清单）。
 > **关联**: [[TODO文件]]#32、[[面试准备/09-AI模块]] Q0/Q12、**[[AI模型名停用风险与thinking参数改造方案]]（#58，与本项强相关，见校正⑥）**
 > **定位**: 技术演示增强 + 面试素材(业务收益为零——生产 0 调用,简历未投)
 
@@ -308,14 +308,18 @@ answer = streamChat(messages)                          // ⑥ 最后一轮流式
 
 > 📋 **P0 实施记录（2026-09-10）**：提交 `09d22b1`；新增 6 个类（`AiToolCall` / `AiToolRound` / `AiTool` / `AiToolResult` / `ToolRegistry` / `SearchProductsTool`）+ 改 4 个类（`AiClient` / `DeepSeekAiClient` / `ChatServiceImpl` / `AiTask`）+ 3 个测试类；**mall-ai 模块 26 项测试全绿**；`agent-enabled` 默认 `false` → 开启前对生产零影响。部署指令：`work/部署指令-step2-agent-p0.md`（jar MD5 `5193b258…`，两阶段 A/B + 三级回滚）。
 
-### P1 完整单 Agent（~2~3 天）
+### P1 完整单 Agent（~2~3 天）—— ✅ **代码已完成（2026-09-10），待部署**
 
-- [ ] **S8 工具扩展**：`compare_products`（复用 `ProductCompareServiceImpl`）、`get_stock`（Dubbo 调 `mall-product` / `mall-seckill` 既有接口）
-- [ ] **S9 动作审计（Redis 版，校正①）**：`ai:agent:action:{sessionId}` List + `LTRIM 0 49` + `EXPIRE 7d`，记 `{ts, tool, args 摘要, 结果条数, 耗时, 轮次}`；**不做 DB / Flyway**
-- [ ] **S10 思考可视化**：每轮工具调用发 SSE `thinking` 事件（前端 thinking 卡片已有，**无需改前端**）
-- [ ] **S11 预算/闸门回归**：确认 3 轮循环下 `ai:daily_cost` 正常累加；闸门满时降级为 RAG 而非 500
-- [ ] **P1 验证**：多轮对话触发多次工具调用；`redis-cli LRANGE ai:agent:action:<sid> 0 -1` 看到动作轨迹；**停 `mall-product` 后 Agent 工具失败 → 自动降级 RAG 仍能回答**
-- [ ] **边界验收**：写操作不自动执行（本期不暴露写工具）/ 参数越界被拦 / 轮数超限停止 / 预算超限拒绝
+- [x] **S8 工具扩展**：`compare_products` + `get_stock` 都已落地，且**都走真实 Dubbo**（`IForFrontSpuService.getSpuById` / `IForFrontSkuService.getSkusBySpuId`）。
+  **⚠️ 与原计划的偏差**：原写 `compare_products` **复用 `ProductCompareServiceImpl`** —— 实际**没有复用**：那个方法内部会再调一次 LLM 生成对比总结，会让"一次工具调用"变成两次计费 + 多占一个并发闸门槽，且违反"工具只提供事实、判断留给收敛轮"。改成只查库摆事实（并把 SPU 映射成 ES 文档形状，使**对比也能出前端商品卡片**）。另外 `get_stock` **只覆盖常规库存**（`pms_sku`），秒杀库存不在其中 —— 已在工具说明与 observation 里明确标注，避免模型把"没货"答成"永远买不到"
+- [x] **S9 动作审计（Redis 版，校正①）**：`AgentActionAuditor` → `ai:agent:action:{sessionId}` List，`LPUSH` `{ts,round,tool,args,hits,costMs,ok}` + `LTRIM 0 49` + `EXPIRE 7d`；**不做 DB / Flyway**（mall-ai 无数据库栈）。⚠️ 审计"尽力而为"：写失败只记 WARN，绝不因审计把对话搞挂
+- [x] **S10 思考可视化**：每轮工具调用发 SSE `thinking` 事件（`describeTool()` 输出"🔎 商品检索完成：拿到 4 条数据"这类文案；前端 thinking 卡片直接渲染，**未改前端**）
+- [x] **流式 Agent（原计划的空白项，本次补上）**：`AiClient.streamChatWithTools(...)` —— 抽出 SSE 公共管道，正文实时回调，`tool_calls` **按 index 拼接连缀 `arguments`**；`sendStreamWithAgent` 让事件顺序与旧流水线完全一致（thinking → products → sessionId → chunk* → done），**products 之前先缓冲正文**（依据实测 K：工具轮会先吐 preamble）
+- [x] **S11 预算/闸门回归（离线部分）**：每轮流式调用都走 `checkBudget()` + `usage` 记账 + 并发闸门（acquire/release 在客户端内成对，**工具执行期间不持有闸门** → 不存在嵌套占用）
+- [ ] **P1 验证（待部署执行）**：多轮对话触发多次工具调用；`redis-cli LRANGE ai:agent:action:<sid> 0 -1` 看到动作轨迹；**停 `mall-product` 后 Agent 工具失败 → 自动降级 RAG 仍能回答**（⚠️ 这条要在维护窗口做）
+- [x] **边界验收（代码/测试层）**：写操作不暴露（本期只有 3 个只读工具）/ 参数越界被拦（非法 id、负数、超量都拦在工具内，且有专门测试）/ 轮数超限停止（摘掉 tools 强制收口）/ 预算超限拒绝（沿用既有 `checkBudget`）。**在线验收**待部署后执行
+
+> 📋 **P1 实施记录（2026-09-10）**：新增 4 个类（`CompareProductsTool` / `GetStockTool` / `AgentActionAuditor` + `AiClient.streamChatWithTools` 接口方法）+ 改 2 个类（`DeepSeekAiClient` 抽出 SSE 公共管道并实现流式工具轮 / `ChatServiceImpl` 抽出同步流式共用的工具轮与降级分层）；**测试 26 → 50 项全绿**；另补 **2 格实测实验（K/L）**确证"流式 `tool_calls` 分片 + preamble"契约。部署指令：`work/部署指令-step3-agent-p1.md`。
 
 ### 部署与回滚
 

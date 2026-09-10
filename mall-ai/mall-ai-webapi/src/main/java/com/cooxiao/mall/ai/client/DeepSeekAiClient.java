@@ -174,16 +174,24 @@ public class DeepSeekAiClient implements AiClient {
             }
         }
 
-        // 回灌用的 assistant 消息：tool_calls 必须原样带回（OpenAI 协议要求 id/type/function 齐全）。
-        // reasoning_content 刻意不带 —— 工具轮 thinking=disabled 本就没有；若开思考则必须回传，否则接口 400。
+        return new AiToolRound(content, calls, assistantMessage(content, calls));
+    }
+
+    /**
+     * 组装"可直接回灌"的 assistant 消息 —— 同步与流式两条工具轮路径共用（结构错一处就是 400）。
+     * <p>{@code tool_calls} 必须原样带回（OpenAI 协议要求 {@code id/type/function} 齐全）；
+     * ⚠️ <b>刻意不带 {@code reasoning_content}</b> —— 工具轮 {@code thinking=disabled} 本就没有，
+     * 若哪天改成开思考则必须回传，否则接口 400。
+     */
+    private Map<String, Object> assistantMessage(String content, List<AiToolCall> calls) {
         Map<String, Object> assistant = new HashMap<>();
         assistant.put("role", "assistant");
         assistant.put("content", content == null ? "" : content);
-        if (!calls.isEmpty()) {
+        if (calls != null && !calls.isEmpty()) {
             List<Map<String, Object>> rawCalls = new ArrayList<>();
             for (AiToolCall call : calls) {
                 rawCalls.add(Map.of(
-                        "id", call.id(),
+                        "id", call.id() == null ? "" : call.id(),
                         "type", "function",
                         "function", Map.of(
                                 "name", call.name() == null ? "" : call.name(),
@@ -191,7 +199,78 @@ public class DeepSeekAiClient implements AiClient {
             }
             assistant.put("tool_calls", rawCalls);
         }
-        return new AiToolRound(content, calls, assistant);
+        return assistant;
+    }
+
+    @Override
+    public AiToolRound streamChatWithTools(List<Map<String, Object>> messages,
+                                           List<Map<String, Object>> tools,
+                                           Consumer<String> onContentChunk) throws Exception {
+        checkBudget();
+        AiTask task = AiTask.AGENT;
+        Map<String, Object> body = buildToolBody(task, messages, tools);
+
+        // 正文实时回吐给前端；tool_calls 按 index 累积（⚠️ arguments 是**分片到达**的字符串，必须拼接）
+        StringBuilder content = new StringBuilder();
+        Map<Integer, String> ids = new HashMap<>();
+        Map<Integer, String> names = new HashMap<>();
+        Map<Integer, StringBuilder> args = new HashMap<>();
+
+        concurrencyGuard.acquire("chat:" + task.key());
+        try {
+            openSseStream(body, data -> {
+                JSONObject delta = deltaOf(data);
+                if (delta == null) {
+                    return;
+                }
+                String chunk = delta.getString("content");
+                if (chunk != null && !chunk.isEmpty()) {
+                    content.append(chunk);
+                    onContentChunk.accept(chunk);
+                }
+                JSONArray toolCalls = delta.getJSONArray("tool_calls");
+                if (toolCalls == null) {
+                    return;
+                }
+                for (int i = 0; i < toolCalls.size(); i++) {
+                    JSONObject tc = toolCalls.getJSONObject(i);
+                    int index = tc.getIntValue("index");
+                    if (tc.getString("id") != null) {
+                        ids.put(index, tc.getString("id"));       // id/name 只在首个分片出现
+                    }
+                    JSONObject function = tc.getJSONObject("function");
+                    if (function == null) {
+                        continue;
+                    }
+                    if (function.getString("name") != null) {
+                        names.put(index, function.getString("name"));
+                    }
+                    String fragment = function.getString("arguments");
+                    if (fragment != null) {
+                        args.computeIfAbsent(index, k -> new StringBuilder()).append(fragment);
+                    }
+                }
+            });
+        } finally {
+            concurrencyGuard.release();
+        }
+
+        List<AiToolCall> calls = new ArrayList<>();
+        java.util.TreeSet<Integer> indexes = new java.util.TreeSet<>();
+        indexes.addAll(ids.keySet());
+        indexes.addAll(names.keySet());
+        indexes.addAll(args.keySet());
+        for (Integer index : indexes) {
+            StringBuilder buf = args.get(index);
+            calls.add(new AiToolCall(
+                    ids.getOrDefault(index, "call_" + index),
+                    names.get(index),
+                    buf == null ? null : buf.toString()));
+        }
+
+        log.debug("流式工具轮结束：正文 {} 字，tool_calls {} 个", content.length(), calls.size());
+        return new AiToolRound(content.length() == 0 ? null : content.toString(),
+                calls, assistantMessage(content.toString(), calls));
     }
 
     // ================================================================
@@ -211,7 +290,24 @@ public class DeepSeekAiClient implements AiClient {
         }
     }
 
+    /** 纯流式对话：只关心 {@code delta.content}（旧流水线的最终作答轮用它） */
     private void doStream(Map<String, Object> body, Consumer<String> onChunk) throws Exception {
+        openSseStream(body, data -> {
+            String content = contentOf(data);
+            if (content != null && !content.isEmpty()) {
+                onChunk.accept(content);
+            }
+            // 说明：思考模式下 delta 里还有 reasoning_content（实测分片数约为 content 的 2.3 倍）。
+            // 前端不展示思考过程 → 此处天然忽略，不影响 SSE 解析（2026-09-10 实测验证）。
+        });
+    }
+
+    /**
+     * SSE 公共管道：把每个 {@code data:} 分片解析成 JSON，usage 分片就地记账，其余交给回调。
+     * <p>{@link #doStream} 与 {@link #streamChatWithTools} 共用 —— 两条流式路径只有"怎么解读分片"不同，
+     * 取流/断连/记账/容错这些易错细节只写一次。
+     */
+    private void openSseStream(Map<String, Object> body, Consumer<JSONObject> onData) throws Exception {
         body.put("stream", true);
         // 预算修复：请求返回 usage，否则流式调用无法记账（2 元/日预算形同虚设）
         body.put("stream_options", Map.of("include_usage", true));
@@ -240,21 +336,12 @@ public class DeepSeekAiClient implements AiClient {
                     }
                     try {
                         JSONObject data = JSON.parseObject(line.substring(6));
-
                         // 末尾 chunk 携带 usage（stream_options.include_usage=true 时返回）
                         if (data.getJSONObject("usage") != null) {
                             recordUsage(data);
                             continue;
                         }
-
-                        JSONObject delta = data.getJSONArray("choices")
-                                .getJSONObject(0).getJSONObject("delta");
-                        String content = delta == null ? null : delta.getString("content");
-                        if (content != null && !content.isEmpty()) {
-                            onChunk.accept(content);
-                        }
-                        // 说明：思考模式下 delta 里还有 reasoning_content（实测分片数约为 content 的 2.3 倍）。
-                        // 前端不展示思考过程 → 此处天然忽略，不影响 SSE 解析（2026-09-10 实测验证）。
+                        onData.accept(data);
                     } catch (Exception ignored) {
                         // 单个 chunk 解析失败不中断整条流
                     }
@@ -263,6 +350,21 @@ public class DeepSeekAiClient implements AiClient {
         } finally {
             conn.disconnect();
         }
+    }
+
+    /** 取 {@code choices[0].delta}（流式分片） */
+    private JSONObject deltaOf(JSONObject data) {
+        JSONArray choices = data.getJSONArray("choices");
+        if (choices == null || choices.isEmpty()) {
+            return null;
+        }
+        return choices.getJSONObject(0).getJSONObject("delta");
+    }
+
+    /** 取流式分片里的正文 */
+    private String contentOf(JSONObject data) {
+        JSONObject delta = deltaOf(data);
+        return delta == null ? null : delta.getString("content");
     }
 
     // ================================================================

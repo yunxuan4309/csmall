@@ -67,4 +67,17 @@ public interface AiClient {
      * 没有工具调用就收敛到最终答案。轮数上限由调用方控制（{@code cooxiao.ai.agent-max-rounds}）。
      */
     AiToolRound chatWithTools(List<Map<String, Object>> messages, List<Map<String, Object>> tools);
+
+    /**
+     * 带工具的<b>流式</b>调用（SSE）—— 流式 Agent 的一拍。
+     *
+     * <p>与 {@link #chatWithTools} 的区别：模型"边想边吐"的正文会**实时**通过 {@code onContentChunk} 回调出去，
+     * 而 {@code tool_calls} 是**分片到达**的（{@code delta.tool_calls[].function.arguments} 需要按 index 拼接），
+     * 实现里已累积成完整的 {@link AiToolRound} 返回。
+     *
+     * <p>因此调用方可以：正文直接转发给前端（用户看到逐字输出），工具调用按轮执行后继续下一拍。
+     */
+    AiToolRound streamChatWithTools(List<Map<String, Object>> messages,
+                                    List<Map<String, Object>> tools,
+                                    Consumer<String> onContentChunk) throws Exception;
 }
