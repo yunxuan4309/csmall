@@ -112,7 +112,7 @@
 > | `AI智能导购模块开发计划` | 它是**开发计划/设计文档**（与 `问题解决/` 其余 30 篇性质不同）；**四阶段已 100% 完成**；文内"当前配置/接口清单"**已漂移 5 处** | 加头注：**清单类内容一律以代码为准** + 逐项列出漂移对照 |
 > | `Docker部署审计报告` | **一次性基线快照**，核心结论「不能直接 Docker 部署」已完全过时（21 容器在跑）；8 项发现 5 项已解决、1 项失效（systemd）、2 项转 TODO（#40 Step2 / #22）| 加**「归档时现状对照表」**（逐项实测），并确认 #44 🔴 等活待办在 TODO 里仍活着 |
 
-> 🔴 **归档这份审计报告时的重要复核发现**：其"问题 5（真实 API Key 泄露）"**未完全收口** —— 硅基流动 embedding key `sk-pffsuuah…` **已随 commit `719ff6f` push 进公开仓库历史 = 已公开泄露**，对应 **#44 仍未处理**；而 DeepSeek 的两个 key（`sk-0ac9a54…`、当前生产 `sk-de931f…`）实测**均未进 git 历史**（`git ls-files deploy` 21 个被跟踪文件全为模板/配置，无真 Key）。
+> 🔴 **归档这份审计报告时的重要复核发现**：其"问题 5（真实 API Key 泄露）"**未完全收口** —— 硅基流动 embedding key `sk-***（已吊销 2026-09-10）…` **已随 commit `719ff6f` push 进公开仓库历史 = 已公开泄露**，对应 **#44 ✅ 已于 2026-09-10 吊销并轮换**（详见下方 §44）；而 DeepSeek 的两个 key（`sk-0ac9a54…`、当前生产 `sk-de931f…`）实测**均未进 git 历史**（`git ls-files deploy` 21 个被跟踪文件全为模板/配置，无真 Key）。
 
 ### ✅ C. 本次一并修正的「状态头过期」7 个（另一种文档漂移，已全部修正）
 
@@ -782,17 +782,58 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 
 ---
 
-### 44. 【安全】吊销已泄露的硅基流动 Embedding Key（2026-09-08 记录，待处理）🔴
+### 44. 【安全】吊销已泄露的硅基流动 Embedding Key ✅ **已完成（2026-09-10 吊销 + 轮换）**
 
-> **2026-09-08 发现**：`mall-ai-webapi/src/main/resources/application-test.yml` 曾硬编码硅基流动 embedding key（`sk-pffsuu...`），该文件已被 commit **719ff6f** 提交并 **push 到公开 GitHub 仓库**——**key 已公开泄露**（即使本地已改占位符，历史提交里仍可查到）。
+> **2026-09-08 发现**：`mall-ai-webapi/src/main/resources/application-test.yml` 曾硬编码硅基流动 embedding key（`sk-***（已吊销）`），该文件已被 commit **719ff6f** 提交并 **push 到公开 GitHub 仓库**——**key 已公开泄露**（即使本地已改占位符，历史提交里仍可查到）。
 
-**处理（尽快）**：
-1. 登录硅基流动控制台（siliconflow.cn）→ API 密钥管理 → **吊销/删除** `sk-pffsuu...` 开头的旧 key
-2. 生成新 key → 配到本地环境变量 `EMBEDDING_API_KEY`（.env 不入库 / IDE Run Configuration）
-3. 服务器 `.env` 的 `EMBEDDING_API_KEY` 同步换新值 → 重启 mall-ai
-4. 验证：本地 `embedding-enabled: true` 向量检索正常（/ai/syncAll 能向量化）
+**✅ 处理结果（2026-09-10，用户执行吊销 + AI 完成全量轮换评估与配置）**：
 
-> **教训**：API key 绝不硬编码进 yml/代码；test 环境也要用占位符 + 环境变量注入。已改占位符见 commit c0d7209。
+| # | 动作 | 状态 |
+|---|---|---|
+| 1 | 硅基流动控制台**吊销旧 key** | ✅ 用户已执行（旧 key 从此失效，故 git 历史里那串**已无害**）|
+| 2 | 生成新 key（`sk-loo****sask`，51 字符） | ✅ 用户已生成 |
+| 3 | **全仓库评估**「换 key 要改哪些地方」（含 1 次循环检查） | ✅ 已完成，结论见下 |
+| 4 | 本地 `.env` 换新值 | ✅ `deploy/docker/.env`（替换）＋ `mall-ai/.env`、`deploy/systemd/csmall.env`、`deploy/csmall.env`（**原本就缺这行，已补齐**）|
+| 5 | 服务器 `/data/csmall/.env` 换新值 | ⏳ **待用户执行**（属主 `ecs-user`，AI 账号无写权限）|
+| 6 | recreate `csmall-ai` | ⏳ **待用户执行**（env 是创建时快照，**必须 recreate 不能 restart**）|
+
+**评估结论（改哪些 / 不改哪些）**：
+
+| 位置 | 结论 |
+|---|---|
+| `deploy/docker/.env` | ✅ **要改**（compose 从这里取 `${EMBEDDING_API_KEY}` 注入 mall-ai）|
+| `mall-ai/mall-ai-webapi/.env`、`deploy/systemd/csmall.env`、`deploy/csmall.env` | ✅ **补齐**（这三个文件原本**只有 `AI_API_KEY`、没有 `EMBEDDING_API_KEY`** —— 属发现并修掉的配置缺口）|
+| `deploy/docker/.env.example` | ❌ **不改**（模板必须保持 `sk-placeholder`）|
+| 3 个 `application*.yml` | ❌ **不改** —— 都是 `${EMBEDDING_API_KEY:sk-placeholder}` 占位符，**设计正确**（密钥不进代码）|
+| **git 历史里的旧 key** | ❌ **无需重写历史** —— key 已吊销即无害；公开仓库已被克隆，改写历史收益为负 |
+| 服务器 `/data/csmall/.env` | ⏳ 要改（AI 无写权限，命令见下方"给用户的执行块"）|
+
+**⚠️ 重要澄清（避免误判影响面）**：生产 `application-prod.yml` 的 **`embedding-enabled: false`**（本地实测确认），服务器 `.env` 与容器 env 实测 **`EMBEDDING_API_KEY=sk-placeholder`** → **生产从没配过真 embedding key**，因此**本次轮换对线上功能零影响**；但它是 **#31（生产启用向量检索）的前置** —— 不先配好新 key，将来一开启就会 401。
+
+**🔁 循环检查（1 遍）额外发现**：
+- ⚠️ **`.idea/workspace.xml:407` 硬编码了另一个旧 DeepSeek key（`sk-8f73ae…`）** —— 这是 **IDE Run Configuration 的经典坑**（IDE 环境变量优先级最高、会覆盖 `.env`，本项目 2026-09-08 就因此排查过 401）。**与 #44 无关但同类风险**，建议清理（见下方）。
+- ✅ 本机**没有**持久化的 `EMBEDDING_API_KEY` / `EMBEDDING_API_KEY_LOCAL` 用户级/系统级环境变量（`application-test.yml` 的 fallback 会落到 `sk-placeholder`）。
+- ✅ 前端仓库、`work/` 临时目录、其它 compose 文件均无 key 命中。
+
+**给用户的执行块（服务器侧，AI 无写权限）**：
+
+```bash
+# 【老机 ecs-user】1) 改 .env（把 <新key> 替换为桌面 txt 里的值）
+sed -i 's|^EMBEDDING_API_KEY=.*|EMBEDDING_API_KEY=<新key>|' /data/csmall/.env
+grep -n 'EMBEDDING_API_KEY' /data/csmall/.env   # 核对（只显示行号+前缀即可）
+
+# 【老机 ecs-user 或 AI 均可】2) recreate mall-ai（不是 restart！env 是创建时快照）
+cd /data/csmall && docker compose up -d mall-ai
+
+# 3) 验证：容器 env 已换新值
+docker inspect csmall-ai --format '{{range .Config.Env}}{{println .}}{{end}}' | grep EMBEDDING_API_KEY
+```
+
+> **注**：当前 `embedding-enabled: false`，所以**功能上不验证也不会报错**；等 #31 决定开启时再验"向量化成功"即可。
+
+**建议顺手做（IDE 旧 key）**：`D:\java\csmall\.idea\workspace.xml` 第 407 行 `<env name="AI_API_KEY" value="sk-8f73ae…" />` 是**已被替换的旧 DeepSeek key**，建议删除该 env 项（`.idea/` 已 gitignore，不入库；但会**静默覆盖**系统变量与 `.env`，是排查"配置不生效"的头号嫌疑）。
+
+> **教训**：API key 绝不硬编码进 yml/代码；test 环境也要用占位符 + 环境变量注入。已改占位符见 commit c0d7209。**另外：`.env` 类文件要"整族同步"** —— 本次发现 3 个 env 文件缺 `EMBEDDING_API_KEY`，说明"只改一个 `.env`"的做法会留下静默缺口。
 
 ---
 
