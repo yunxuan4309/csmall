@@ -567,7 +567,7 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 | **#58**（前置：模型契约 + 配置可配化）| ✅ **已完成并部署生产** | 见 [[TODO已完成]] §十四 |
 | **P0 代码**（Function Calling）| ✅ **已完成**（2026-09-10，提交 `09d22b1`）| `chatWithTools` + `AiTool/AiToolResult/ToolRegistry/SearchProductsTool` + `AiToolCall/AiToolRound` + `ChatServiceImpl` Agent 分支（开关默认关）；**离线测试 26 项全绿**（工具轮请求体规则 8 / 工具注册 2 / 检索工具边界 7 / 配置绑定 3 / **Agent 循环 6**：一轮收敛、轮数用尽强制收口、正文空兜底、未知工具、异常降级、开关关闭不走 Agent）|
 | **P0 部署** | ✅ **已完成并验证（2026-09-10）** | 两阶段执行：**A 阶段**（开关=false）零回归通过（`/ai/search` 返回商品、`/ai/ask` 返回完整推荐、`content 为空`=0、真实 4xx=0、开关日志 =false）→ **B 阶段**开启后问"我想买 5000 以内的手机"：`工具 search_products … 命中 4 条` → `Agent 第 1 轮：调用工具 1 次` → **`Agent 第 2 轮收敛`**（413 字、带表格推荐，并**主动排除误召回的台式机**）；**兜底路径复验**（问"1000 以内的单反相机" → `已放宽=true`，回答**诚实说明库里无此类目、不编造**）。预算 `ai:daily_cost:2026-09-10` 正常累加、21 容器全 Up。**⚠️ 生产当前开关为 `true`**（回滚：改 `.env` 为 false + `docker compose up -d mall-ai`，~45s）|
-| **P1 完整单 Agent** | 🚧 **代码已完成（2026-09-10），待部署** | 新增 **流式 Agent**（`streamChatWithTools`：SSE 公共管道 + `tool_calls` 按 index 拼接连缀；事件顺序与旧流水线一致、products 前先缓冲正文）+ **两个新工具**（`compare_products` / `get_stock`，**都走真实 Dubbo**）+ **Redis 动作审计**（`ai:agent:action:{sid}`，LTRIM 50 / TTL 7d）+ 每轮 `thinking` 进度事件（前端零改动）+ 分层降级（未写出→降级流水线；已写出→如实报错不降级）；**测试 26 → 50 项全绿**；补 **2 格实测实验 K/L**（流式 `tool_calls` 分片 + preamble）。部署指令：`work/部署指令-step3-agent-p1.md` |
+| **P1 完整单 Agent** | ✅ **已部署并复验（2026-09-10）** | 新增 **流式 Agent**（`streamChatWithTools`：SSE 公共管道 + `tool_calls` 按 index 拼接连缀；事件顺序与旧流水线一致、products 前先缓冲正文）+ **两个新工具**（`compare_products` / `get_stock`，**都走真实 Dubbo**）+ **Redis 动作审计**（`ai:agent:action:{sid}`，LTRIM 50 / TTL 7d）+ 每轮 `thinking` 进度事件（前端零改动）+ 分层降级（未写出→降级流水线；已写出→如实报错不降级）。**部署后验证挖出并修掉 3 个真问题**：①商品类问题**首轮 `tool_choice=required`**（防"凭历史作答→商品卡片为空"，依据实验 M）②system 提示词防凭历史作答 ③`get_stock` 回传 **`spuName`**（防张冠李戴）。**测试 26 → 50 → 56 项全绿**；补 **3 格实验 K/L/M**。复验：products 4 件非空、`首轮强制调用工具` 日志命中、`get_stock` 带商品名、模型编造的 spuId 被优雅拒绝、**客户端连续 18 次全 200**。部署指令：`work/部署指令-step3/step4`；**实现说明书见 [[AI导购Agent实现详解]]** |
 
 > ⚠️ **实施与原计划的偏差（如实记录）**：方案 S5 原写"最后一轮复用现有 `streamDeepSeek` 输出"，实际 P0 只做**非流式** Agent（`/ai/chat/send`），SSE（`/ai/chat/stream`）**仍走旧流水线** —— 因为"流式 + 工具轮"要处理"工具调用发生在流里"的复杂情形，放到 P1 更稳。
 
@@ -715,24 +715,34 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 
 ---
 
-### 62. 【观察】mall-ai 偶发 500：`AccessDeniedException`（响应已提交）🟡 P2（2026-09-10 P1 验证时 1 次观测）
+### 62. 【观察】mall-ai 偶发 500：`AccessDeniedException`（响应已提交）🟡 P2（2026-09-10 观测并已定性）
 
-> **现象**：2026-09-10 P1 验证期间，`POST /ai/chat/send`（经网关）返回 **500**（网关日志 `500 Server Error for HTTP POST "/ai/chat/send"`），mall-ai 侧日志：
+> **现象**：2026-09-10 P1 验证与加固验证期间，`POST /ai/chat/send`（经网关）返回 **500**（网关日志 `500 Server Error for HTTP POST "/ai/chat/send"`），mall-ai 侧日志：
 
 ```
 ERROR o.a.c.c.C.[.[.[.[dispatcherServlet] - Servlet.service() for servlet [dispatcherServlet] threw exception
 org.springframework.security.access.AccessDeniedException: Access Denied
-	at org.springframework.security.web.access.intercept.AuthorizationFilter.doFilter(AuthorizationFilter.java:98)
-ERROR ... threw exception [Unable to handle the Spring Security Exception because the response is
-       already committed]
-ERROR o.s.b.a.w.s.e.ErrorMvcAutoConfiguration$StaticView - Cannot render error page ... response has already been committed
+	at org.springframework.security.web.access.ExceptionTranslationFilter.doFilter(ExceptionTranslationFilter.java:126)
+ERROR ... threw exception [Unable to handle the Spring Security Exception because the response is already committed]
+ERROR o.s.b.a.w.s.e.ErrorMvcAutoConfiguration$StaticView - Cannot render error page for request [null] as the response has already been committed.
 ```
 
-**已知事实（证据）**：① **同一次脚本里紧邻的另外两个请求都 200**；② 该次请求到 mall-ai 时是**匿名**的（同一时间窗内另一条请求能正常打印 `JwtTokenUtils 获取载荷`，即 Authorization 头**没丢**的那条）；③ **重跑同一问题 2/2 均 200**（`compare_products` 正常触发）→ **与本项目 Agent 逻辑无关**，属 Security 层 + "Authorization 头在某次转发中丢失"。
+**已定性（共 3 次观测 + 3 组定量实验）**
 
-**待查方向**：① 网关是否**重发了请求**（连接池/幂等重试）且重发时未带原始头；② mall-ai 的 JWT 过滤器在**并发/复用连接**下是否有竞态；③ 与 **#53（网关重试/优雅下线）** 是否同源。
+| 证据 | 结论 |
+|---|---|
+| 失败请求到 mall-ai 时**没有任何 `JwtTokenUtils 解析` 日志**（同窗口其他请求都有） | 该次请求在 Security 层是**匿名**的 |
+| **经网关连打 8 次 + 直连 4 次 = 12/12 全 200**；再做"SSE 流传输中并发 6 次同步请求" = **6/6 全 200** | 客户端成功率高，**与 Agent 逻辑无关** |
+| ⭐ **并发实验期间客户端 6/6 全成功，日志里却仍出现 2 次 `AccessDeniedException`** | AccessDenied **不是**客户端失败引起的 → 是**内部 ERROR 派发的次生现象** |
+| 栈里同时有 `ErrorReportValve.invoke` + "response has already been committed" | 某请求先失败（响应已提交，**典型是 SSE 流**）→ Tomcat 转 `/error` → Spring Security 在 **ERROR 派发**上再跑一遍过滤器链，而 **JWT 过滤器是 `OncePerRequestFilter`（默认跳过 ERROR 派发）** → 匿名 → `AuthorizationFilter` 拒绝 `/error` → 刷出这条 ERROR |
 
-**优先级**：P2（**只观测到 1 次**，且重跑稳定；下次出现时先抓 `docker logs csmall-ai | grep -A20 AccessDenied` 与该时刻的网关日志）。
+**影响**：以日志噪声为主；确有少量客户端可见 500（约 3/40 次观测），**重试即成功**。
+
+**两条候选修法（未实施，需单独变更窗口）**：
+1. **放行 ERROR 派发**（`ResourceWebSecurityConfiguration`）：`requestMatchers("/error").permitAll()` + 允许 `DispatcherType.ERROR`（或用 `dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()`）→ 让 `/error` 能正常渲染，客户端拿到**规范的 401/5xx JSON** 而非"响应已提交"噪声。⚠️ 属 **mall-common / Security 公共配置，影响所有服务**，必须单独窗口 + 回归。
+2. **SSE 收尾容错**：配合 ① 才完整（`writeSSE`/`closeQuietly` 已 catch 应用层异常，但容器 flush 阶段的失败在应用之外）。
+
+**优先级**：P2（修 ① 之前，表现为"偶发 500 + 日志噪声"）。**可能与 #53（网关重试/优雅下线）同源，建议同窗口一起看。**
 
 ---
 

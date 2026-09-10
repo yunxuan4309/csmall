@@ -386,21 +386,22 @@ public ToolRound chatWithTools(List<Map<String,Object>> messages) {
 
 | 验证项 | 结果 |
 |---|---|
-| 流式 Agent | **249 个 chunk** 逐字流式；event: products（行 7）**早于**第一个 event: chunk（行 16）✓ 事件顺序与旧契约一致 |
-| compare_products | 请求 2 个，取到 2 个（缺失 0）；重跑 2/2 均 200 ✓ |
-| get_stock | spuId=3（小米 14 Pro）→ 2 个 SKU，总库存 100 ✓ |
-| Redis 审计 | LRANGE ai:agent:action:{sid} 0 -1 有 {ts,round,tool,args,hits,costMs,ok}，TTL 7 天量级 ✓ |
-| 预算 | i:daily_cost 正常累加（多次往返后 ≈0.03 元）✓ |
+| 流式 Agent | **249 个 chunk** 逐字流式；`event: products`（行 7）**早于**第一个 `event: chunk`（行 16）✓ 事件顺序与旧契约一致 |
+| `compare_products` | `请求 2 个，取到 2 个（缺失 0）`；重跑 2/2 均 200 ✓ |
+| `get_stock` | `spuId=3（小米 14 Pro）→ 2 个 SKU，总库存 100` ✓ |
+| Redis 审计 | `LRANGE ai:agent:action:{sid} 0 -1` 有 `{ts,round,tool,args,hits,costMs,ok}`，TTL 7 天量级 ✓ |
+| 预算 | `ai:daily_cost` 正常累加（多次往返后 ≈0.03 元）✓ |
 
-**本轮挖出的 3 个真问题（已修，56 项测试全绿）**
+**本轮挖出的 3 个真问题（已修并复验，56 项测试全绿）**
 
-| # | 现象 | 根因 | 修复 |
-|---|---|---|---|
-| 1 | 部署后立刻打接口 **503** No servers available for service: mall-ai | sleep 45 早于实际启动（44.7s 启动 + 注册）→ 落在"反注册 ↔ 重注册"空窗 | 部署手册改为**轮询 Started MallAiWebApiApplication**（不是 Agent 代码问题） |
-| 2 | 某轮回答正确但 **products: []**（前端没卡片） | 模型遇到与历史相似的问题**直接引用历史商品作答**，本轮没调工具 → 没有 hits | ①system 提示词加"即使与历史相似也要重新核对 / 没有工具数据不要给具体商品"；②**首轮 	ool_choice=required**（商品意图关键词命中时，实验 M） |
-| 3 | 库存回答存在**张冠李戴风险** | get_stock 只回 SKU 数据、**不带商品名** → 模型先猜 spuId 再按提问里的商品名作答 | 工具先 getSpuById 确认，observation 增加 **spuName**；SPU 不存在直接报错 |
+| # | 现象 | 根因 | 修复 | 复验证据 |
+|---|---|---|---|---|
+| 1 | 部署后立刻打接口 **503** `No servers available for service: mall-ai` | `sleep 45` 早于实际启动（44.7s 启动 + 注册）→ 落在"反注册 ↔ 重注册"空窗 | 部署手册改为**轮询 `Started MallAiWebApiApplication`**（不是 Agent 代码问题） | 第 4 轮部署按新写法执行，全程无 503 ✓ |
+| 2 | 某轮回答正确但 **`products: []`**（前端没卡片） | 模型遇到与历史相似的问题**直接引用历史商品作答**，本轮没调工具 → 没有 hits | ①system 提示词加"即使与历史相似也要重新核对 / 没有工具数据不要给具体商品"；②**首轮 `tool_choice=required`**（商品意图关键词命中时，实验 M） | 日志 `Agent 首轮强制调用工具（命中商品意图关键词「买」）`；`products` **4 件、首项"小米 14 Pro"**（不再为空）✓；反向验证 `你好，你能做什么` **不触发** ✓ |
+| 3 | 库存回答存在**张冠李戴风险** | `get_stock` 只回 SKU 数据、**不带商品名** → 模型先猜 spuId 再按提问里的商品名作答 | 工具先 `getSpuById` 确认，observation 增加 **`spuName`**；SPU 不存在直接报错 | 日志 `工具 get_stock：spuId=3（小米 14 Pro）→ 2 个 SKU，总库存 100` ✓；模型编造的 `spuId=1001` 被优雅拒绝（审计 `ok=false`，循环继续）✓ |
 
-> 另有 1 次**偶发 500**（AccessDeniedException + "响应已提交"）——已定位为"该次请求到 mall-ai 时是匿名的、Authorization 丢失"，**重跑 2/2 正常**，登记为待观察项 **[[TODO文件]] #62**。
+> **另有偶发 500**（`AccessDeniedException` + "响应已提交"）—— 经 3 次观测 + 3 组定量实验**已定性**：**不是 Agent 逻辑问题**（经网关 8 次 + 直连 4 次 + 流式并发 6 次 = **18/18 客户端全 200**；且并发实验里客户端全成功、日志仍出现 2 次 AccessDenied → 它是**内部 ERROR 派发的次生现象**）。
+> 完整证据与两条候选修法见 **[[TODO文件]] #62**，逐类说明见 [[AI导购Agent实现详解]] §10.3。
 
 ---
 

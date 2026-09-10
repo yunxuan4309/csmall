@@ -474,13 +474,14 @@ Agent 的正确性主要在 **循环控制 / 事件顺序 / 降级策略**，这
 | **P1 新工具** | `compare_products：请求 2 个，取到 2 个（缺失 0）` ✓（重跑 2/2 均 200）；`get_stock：spuId=3（小米 14 Pro）→ 2 个 SKU，总库存 100` ✓ |
 | **P1 审计** | `LRANGE ai:agent:action:{sid} 0 -1` 有记录、TTL 7 天量级 ✓ |
 | **生产细节** | 模型**主动剔除误召回**（ES 把"联想天逸510S 台式机"召回到手机结果，模型自己注明"它是台式机，已帮你排除"）—— 工具只给候选、判断交给模型 |
+| **加固后复测** | ① 流式：`products`(行 10) 早于第一个 `chunk`(行 22)，**241 个 chunk**，**products 4 件、首项"小米 14 Pro"（不再是空数组）** ✓；② 日志 `Agent 首轮强制调用工具（命中商品意图关键词「买」）` ✓；③ `工具 get_stock：spuId=3（小米 14 Pro）→ 2 个 SKU，总库存 100`（**自报家门生效**）✓；④ 模型编造的 `spuId=1001` 被工具优雅拒绝（`查询SPU详情失败…数据不存在` → 审计 `ok=false`，循环继续）✓；⑤ **客户端连续 18 次请求（含流式并发）全部 200** ✓；⑥ 反向验证：`你好，你能做什么` **不触发**强制工具 ✓ |
 
 ### 10.3 生产踩坑（4 条，全部已定位/已修）
 
 | # | 现象 | 根因 | 处置 |
 |---|---|---|---|
 | 1 | 部署后立刻打接口 **503 `No servers available`** | `sleep 45` 早于实际启动（44.7s 启动 + 注册）→ 落在"反注册↔重注册"空窗 | **改为轮询 `Started MallAiWebApiApplication`**；写进部署手册 |
-| 2 | 偶发 **500**（`AccessDeniedException` + "响应已提交"） | 该次请求到 mall-ai 时是**匿名**的（Authorization 丢失）；重跑 2/2 正常 → **非 Agent 逻辑问题** | 登记为待观察项 **#62**（需要时抓包/看网关是否重发） |
+| 2 | 偶发 **500**（`AccessDeniedException` + "响应已提交"） | ⭐ **已定性（3 次观测 + 3 组定量实验）**：① 失败请求到 mall-ai 时**没有 JWT 解析日志**（匿名）；② **经网关连打 8 次 + 直连 4 次 + 流式并发 6 次 = 18/18 客户端全 200**；③ **并发实验里客户端 6/6 全成功，日志却仍出现 2 次 `AccessDenied`** → 它是**内部 ERROR 派发的次生现象**：某请求先失败（响应已提交，**典型是 SSE 流**）→ Tomcat 转 `/error` → Spring Security 在 **ERROR 派发**上再跑一遍过滤器链，而 **JWT 过滤器是 `OncePerRequestFilter`（默认跳过 ERROR 派发）** → 匿名 → `AuthorizationFilter` 拒绝 `/error` → "响应已提交"噪声 | 登记 **#62**（P2）：候选修法 = **放行 `DispatcherType.ERROR`**（属 mall-common/Security 公共配置，需单独窗口 + 全服务回归）+ SSE 收尾容错；**与 #53 可能同源，建议同窗口** |
 | 3 | Agent 回答正确但 **`products: []`**（前端没卡片） | 模型遇到与历史相似的问题时**直接引用历史商品作答**，本轮没调工具 → 没有 hits | ①system 提示词加规则 6/7；②**首轮 `tool_choice=required`**（实验 M） |
 | 4 | 库存回答有**张冠李戴风险**（模型先猜 spuId 去查） | `get_stock` 的 observation **没带商品名** | 工具先 `getSpuById` 确认，observation 增加 **`spuName`**；SPU 不存在直接报错 |
 
