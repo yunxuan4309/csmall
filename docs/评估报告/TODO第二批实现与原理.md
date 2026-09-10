@@ -1,9 +1,11 @@
 # TODO 第二批实现与原理（面试深挖应对）
 
 > **创建日期**: 2026-09-07
-> **状态**: 🟡 第二批"正确性 + 面试/演示价值"——**代码批全部完成（2026-09-08）+ ✅ 已全量部署服务器（2026-09-08 中午维护窗口，11 模块新 jar + Flyway V6 + ES 索引清理；晚间追加 #5 P0 部署）**：#8（AI 预算时区）、#23（DTO 校验+全局异常补全）、#36（requeue 限次 + 订单 DLX）、#14（P0 三层 + order_type 治本 + 方案Y + P1 对账任务）、#33（双索引统一 A2：统一索引 + mall-search 只读降级层）、**#5（Sentinel P0：统一 Nacos 规则管理 + eager 修复 transport 懒加载，实测限流生效）**。部署明细见 [[第二批部署执行清单-2026-09-08]]、[[Sentinel部署执行清单-2026-09-08]] 与 [[TODO已完成]]。剩余待做：#13 / #29 / #2+#34、#14 余 P2、#5 余 P1/P2。
+> **状态**: ✅ **第二批「正确性 + 面试/演示价值」—— 全部 9 项已完成并部署，2026-09-10 逐项复核确认，本批已收口**（**无剩余项**）。
+> **已完成清单（2026-09-08 代码 + 部署，2026-09-09 随第三批重建容器，2026-09-10 复核）**：#8（AI 预算时区）、#23（DTO 校验 + 全局异常补全）、#36（requeue 限次 + 订单 DLX）、#14（P0 三层 + order_type 治本 + 方案Y + P1 对账；**余 P2 亦已完成**）、#33（双索引统一 A2：统一索引 + mall-search 只读降级层）、**#5（Sentinel P0：统一 Nacos 规则管理 + eager 修复）**、**#2+#34（AI 限流 + 并发闸门）**、**#13（Nacos 认证 + 全客户端同步）**、**#29（数据库每日备份）**。
+> **唯一外溢项**：#5 余 **P1 热点参数限流 / P2 集群流控** → 归第三批（见 §六）。其余全部收口。
 > **用途**: 面试深挖应对 —— 每条都含「原理 → 本项目实现 → 代码实证 → 遇到的问题/疑惑 → 面试话术」
-> **关联**: [[TODO文件]] 第二批（#33 / #8 / #36 / #13 / #29 / #23 / #5 / #2+#34）、[[TODO第一批实现与原理]]（第一批执行 + §九 实战经验写法参考）、[[搜索双索引统一与一致性评估]]（#33 完整评估 + A1/A2 原文 + 复核证据）
+> **关联**: [[TODO文件]] 第二批（#33 / #8 / #36 / #13 / #29 / #23 / #5 / #2+#34）、[[TODO第一批实现与原理]]（第一批执行 + §九 实战经验写法参考）、[[搜索双索引统一与一致性评估]]（📦 已移入 `docs/归档/`；#33 完整评估 + A1/A2 原文 + 复核证据）
 
 ---
 
@@ -15,13 +17,15 @@
 | 2 | **#8** | AI 预算按北京时间结算 | 唯一线上代码 bug | ✅ **已完成 + 已部署**（~10 行，TokenBudgetService 时区） |
 | 3 | **#36** | DLX 死信 + requeue 修复 | MQ 可靠性 | ✅ **已完成 + 已部署**（requeue 限 3 次 + 订单 DLX + OrderDlxConsumer） |
 | 4 | **#13** | Nacos 开启认证 | 安全 | ✅ **已完成 + 已部署**（2026-09-08：JWT 认证 + 11 服务全客户端同步 + nacos 数据卷修复；实测 403/真 JWT/注册正常；见 §七·七） |
-| 5 | **#14** | Redis 主从切换防数据 | 消费者可靠性 + Redis 一致性 | ✅ **P0+P1 已完成 + 已部署**（第3层落库失败不静默 + order_type 治本 + 方案Y + 对账任务）；P2 归第三批（#9） |
-| 6 | **#29** | 数据库定期备份 | 运维底线 | ⏳ 待做（需 ecs-user 配 cron） |
-| 7 | **#23** | 漏触发接口补 @Validated | 校验静默失效 | ✅ **已完成 + 已部署**（含审计修正 + 全局异常处理器补全） |
-| 8 | **#5** | Sentinel 能力补齐 | 面试价值 | ✅ **P0 已完成 + 已部署**（2026-09-08 晚：统一 Nacos 管理 + eager 修复懒加载，实测 429 生效）；P1 热点/P2 集群待做（见 §六） |
-| 9 | **#2+#34** | AI 接口限流 + 并发闸门 | AI 承载 | ✅ **已完成 + 已部署**（2026-09-08：Sentinel 3 组规则 + Semaphore 并发闸门=20 + 每用户频控；实测 30 并发 → 10×200+20×429 无 500；见 §七·六） |
+| 5 | **#14** | Redis 主从切换防数据 | 消费者可靠性 + Redis 一致性 | ✅ **P0+P1 已完成 + 已部署**（第3层落库失败不静默 + order_type 治本 + 方案Y + 对账任务）；**P2 亦已完成**（2026-09-09 运行时 + 2026-09-10 conf 落盘复核）|
+| 6 | **#29** | 数据库定期备份 | 运维底线 | ✅ **已完成**（`/data/csmall/backup/backup-db.sh` + cron 每日 02:30；2026-09-10 复核连续 3 天成功、保留 7 天、含非空校验）|
+| 7 | **#23** | 漏触发接口补 @Validated | 校验静默失效 | ✅ **已完成 + 已部署**（含审计修正 + 全局异常处理器补全）|
+| 8 | **#5** | Sentinel 能力补齐 | 面试价值 | ✅ **P0 已完成 + 已部署**（2026-09-08 晚：统一 Nacos 管理 + eager 修复懒加载，实测 429 生效）；**P1 热点 / P2 集群流控 → 归第三批**（见 §六）|
+| 9 | **#2+#34** | AI 接口限流 + 并发闸门 | AI 承载 | ✅ **已完成 + 已部署**（2026-09-08：Sentinel 3 组规则 + Semaphore 并发闸门=20 + 每用户频控；实测 30 并发 → 10×200+20×429 无 500；见 §七·六）|
 
-**执行顺序**：代码批（#8→#23→#36→#14→#33 全部完成）✅ → **部署服务器（2026-09-08 已完成）** ✅ → **#5 P0（2026-09-08 晚完成并部署）** ✅ → 剩余待做 #13/#29（运维批）→ #2+#34（设计批）。第一批已证明"先本地改 → 编译验证 → 维护窗口部署"的节奏有效。
+**执行顺序**：代码批（#8→#23→#36→#14→#33）✅ → **部署服务器（2026-09-08）** ✅ → **#5 P0（2026-09-08 晚）** ✅ → **#13 Nacos 认证（2026-09-08 晚）** ✅ → **#2+#34 AI 防护（2026-09-08 晚）** ✅ → **#29 备份（cron 已在跑）** ✅ → **#14-P2（2026-09-09，第三批窗口）** ✅。**本批 9 项全部收口**（2026-09-10 复核）。
+
+> ⚠️ **本表曾长期与 §六/§七·六/§七·七 自相矛盾**（表里已标 ✅，§六 却还写"待实施"）——根因是 §七·五/七·六/七·七 为 09-08 当晚**追加**章节，未回头同步前文。**2026-09-10 已统一**。
 
 ---
 
@@ -443,9 +447,12 @@ Web 前端：正常走 /ai/search → AI 失败/超时 → fallback 调 /search
 
 **配套改动（不只是 search 模块）**：mall-ai `VectorSyncServiceImpl`（deleteSpu + syncSpu 状态校验）、mall-product `SpuServiceImpl`（deleteById/updatePublishedById/passCheck 补触发）、前端 `ProductList.vue`（fallback ~20 行）、gateway 三环境路由保留、服务器索引清理（删空 index + 重建 AI 索引剔除 18 + 删 index2）。
 
-> 📄 完整评估（含 A1/A2 全文、复核证据、执行清单、风险回滚、双版本面试话术）见 [[搜索双索引统一与一致性评估]]。
+> 📄 完整评估（含 A1/A2 全文、复核证据、执行清单、风险回滚、双版本面试话术）见 [[搜索双索引统一与一致性评估]]（📦 已移入 `docs/归档/`）。
 
-### 5.4.5 ✅ 实施记录（2026-09-08 本地代码完成 + 编译/自检通过，待部署）
+### 5.4.5 ✅ 实施记录（2026-09-08 本地代码完成 + 编译/自检通过，**✅ 已于 2026-09-08 晚部署**）
+
+> ✅ **部署状态（2026-09-10 复核）**：`csmall-mall-search` / `csmall-mall-ai` 镜像构建时间 = **2026-09-08 22:08**，容器重建时间 = **2026-09-09 11:16/11:22**（第三批窗口）。**本节曾经的"待部署"已不成立。**
+> ✅ **代码复核（2026-09-10）**：6 个死代码文件确认已删除（`SearchRemoteServiceImpl` / `SpuEntityRepository` / `SpuForElasticRepository` / `TestSearch` / `SpuEntity` / `SpuForElastic`）；`SearchServiceImpl` 确认改用原生 `ElasticsearchClient` 查 `cool_shark_mall_ai`（`INDEX_NAME = "cool_shark_mall_ai"`）；`SearchController` 确认只剩 `@GetMapping()` 无路径（即仅 `GET /search`）；`mall-search/pom.xml` 中 `mall-product-service` **只剩注释说明已移除**（第 19 行前后）。
 
 **改动文件清单**：
 
@@ -507,11 +514,15 @@ Web 前端：正常走 /ai/search → AI 失败/超时 → fallback 调 /search
 | 20 | ~~AI 重排 Read timed out：timeout 太短~~（2026-09-08，**已被 #21 取代**） | 早期表象是 18s 超时 → 曾调 `cooxiao.ai.timeout 15s→60s`。但后续深挖发现**超时只是表象，真因是 reasoning 模型过度思考（见 #21）**——本条保留作为"排查过程中的中间结论"教训：**表象（超时）≠ 根因（模型行为），调超时只是延缓症状** |
 | 21 | ⭐⭐ **AI 重排偶发降级/超时真因：reasoning 模型"思考到预算耗尽才输出"→ content 截断/挤空**（2026-09-08 完整排查，最值得讲） | **完整因果链**（全部实测）：① `deepseek-v4-flash` 是 reasoning 模型，响应 = `reasoning_content`(思考) + `content`(答案)；② 它对重排/意图提取这类 JSON 任务**过度思考**，且思考量**随 max_tokens 水涨船高**（实测：max_tokens=1000→想满1000；=4000→想满4000；=2000→想~1630）；③ 思考占满预算 → `content` 为空或被截断（日志铁证 `reasoning_tokens=4000=max_tokens`）→ `JSON.parseObject` 得 null/截断报错 → 降级；④ 前端 30s 超时 = "AI 响应超时"提示。**尝试过的弯路**：a. timeout 15→60s（只缓症状）b. max_tokens 2000→4000（**更糟**——给它更多预算它想更久）c. 提示词"不要思考" + max_tokens 3000（reasoning 收敛到几百，但**仍偶发截断**，content 被 cut 在字符串中间）。**正解 = 模型分工**：JSON 结构化任务（重排/意图提取/查询扩展）用**非推理模型 `deepseek-chat`**——实测 0.5-0.8s 稳定返回完整 JSON、无 reasoning、永不截断；真正需要深度推理的 **SSE 流式对话保留 `deepseek-v4-flash`**。**改动**：① application.yml `chat-model: deepseek-v4-flash → deepseek-chat` ② ChatServiceImpl 意图提取硬编码 `v4-flash → deepseek-chat`（SSE 对话 :353 保持 v4-flash）③ max-tokens 3000。**经验**：① reasoning 模型适合"深度推理问答"，**不适合"快+稳+结构化输出"**——选模型先想任务类型；② reasoning 量随预算膨胀是设计特性，不能靠加预算解决；③ 排查"偶发失败"要连测多次看统计，单次成功会误导；④ 直连 API 测（绕过应用）能快速二分"模型问题 vs 应用问题" |
 
-**⚠️ 部署待办（服务器维护窗口，与第二批部署一起）**：
-1. 重建 AI 索引：`/ai/syncAll`（新逻辑自动剔除已下架 18）→ 验证 19 条
-2. 删除空索引 `cool_shark_mall_index`、旧索引 `cool_shark_mall_index2`
-3. 部署 mall-search/mall-ai/mall-product 新 jar（含 mall-search 的 resource-host env）
-4. 降级演练：`docker stop csmall-ai` → 前端搜索 fallback 出结果 → start 恢复
+✅ **部署已执行（原"部署待办"清单，2026-09-08 晚完成；保留作核对用）**：
+1. ✅ 重建 AI 索引：`/ai/syncAll`（新逻辑自动剔除已下架 18）→ 验证 19 条
+2. ✅ 删除空索引 `cool_shark_mall_index`、旧索引 `cool_shark_mall_index2`
+3. ✅ 部署 mall-search/mall-ai/mall-product 新 jar（含 mall-search 的 `CUSTOM_FILE_UPLOAD_RESOURCE_HOST` env）
+4. ✅ 降级演练：`docker stop csmall-ai` → 前端搜索 fallback 出结果 → start 恢复
+
+> ⭐ **2026-09-10 复核（#21 模型名仍然有效，但底层已换代）**：官方更新日志（2026-04-24）曾公告 `deepseek-chat` / `deepseek-reasoner` 将于 **2026-07-24 停止使用**，但实测（向 `api.deepseek.com` 发 `max_tokens=1` 的最小请求）**5 个别名全部 HTTP 200**：`deepseek-chat`→返回 `"model":"deepseek-flash"` 且**无 reasonning**（非推理，行为与本节结论一致）；`deepseek-v4-flash` / `deepseek-reasoner` / `deepseek-flash`→返回 `"model":"deepseek-flash"` **带 `reasoning_content`**（推理）；`deepseek-v4-pro`→返回 `"model":"deepseek-v4-pro"`。
+> ⚠️ **含义**：① 文档"JSON 任务用非推理 `deepseek-chat`、SSE 用推理 `deepseek-v4-flash`"的**分工结论依然成立**（两者行为确实不同）；② 但 `deepseek-chat` 已被官方宣告停用、只是仍在兼容期，**底层两者现在都映射到同一个 `deepseek-flash`**——名字靠兼容层活着，**存在随时失效的风险**，属已知隐患（建议后续改为官方现役模型名）。
+> ℹ️ 另：`GET /models` 只列出 `deepseek-flash` 与 `deepseek-v4-pro` 两个 id，**不含** `deepseek-chat`/`deepseek-v4-flash`/`deepseek-v4-flash-vision-exp` —— 该端点不是权威清单，**不能据它判断可用性**。
 
 ### 5.5 面试话术（#33 完整故事线）
 
@@ -529,23 +540,25 @@ Web 前端：正常走 /ai/search → AI 失败/超时 → fallback 调 /search
 
 ---
 
-## 六、第二批剩余项速览（待实施，含对应方案文档）
+## 六、第二批收尾状态（✅ **本批已全部收口**，2026-09-10 复核）
 
-> #33 / #8 / #36 / #23 / #14(P0+P1) / **#5(P0)** 已完成（见 §一~§五、§六.5），仅剩以下：
+> **本批 9 项全部完成**：#33 / #8 / #36 / #23 / #14（含 P0+P1+**P2**）/ #5 P0 / #2+#34 / #13 / **#29**（见 §一~§五、§七、§七·五~§七·七）。
+> **唯一外溢到第三批的**：`#5` 的 **P1 热点参数限流 / P2 集群流控**（下表）。
+> 🔧 **本节曾是"待实施"表，与 §七·六/§七·七 自相矛盾**（那两节就写在后面、明说已完成）——2026-09-10 已修正为收尾状态。
 
 | 编号 | 事项 | 方案文档 | 关键难点 | 状态 |
 |---|---|---|---|---|
-| #13 | Nacos 认证 | [[集群化与配置中心迁移方案]] §A0 | 11 服务+Seata+Dubbo 全配账号，原子切换 | ⏳ 待做 |
-| #29 | 数据库备份 | 无（TODO 已给命令） | 需 ecs-user 配 cron | ⏳ 待做 |
-| #5 余 P1 | Sentinel 热点参数限流 | [[Sentinel能力补充计划]] | 秒杀按 spuId 差异化（ParamFlowRule + 秒杀接口改造） | ⏳ 待做（随集群化评估） |
-| #5 余 P2 | Sentinel 集群流控 | [[Sentinel能力补充计划]] | token server 统一配额（随 #4 集群化） | ⏳ 待做 |
-| #2+#34 | AI 限流+并发闸门 | 无（TODO 已给层次） | 并发闸门 Semaphore 设计，改动最大 | ⏳ 待做 |
+| **#13** | Nacos 认证 | [[集群化与配置中心迁移方案]] §A0 | 11 服务+Seata+Dubbo 全配账号，原子切换 | ✅ **已完成 + 已部署**（2026-09-08，见 §七·七）|
+| **#29** | 数据库备份 | 无（TODO 已给命令） | 需 ecs-user 配 cron | ✅ **已完成**（`backup-db.sh` + cron 每日 02:30；2026-09-10 复核连续 3 天成功、保留 7 天、含非空校验）|
+| **#2+#34** | AI 限流+并发闸门 | 无（TODO 已给层次） | 并发闸门 Semaphore 设计，改动最大 | ✅ **已完成 + 已部署**（2026-09-08，见 §七·六）|
+| #5 余 **P1** | Sentinel 热点参数限流 | [[Sentinel能力补充计划]] | 秒杀按 spuId 差异化（ParamFlowRule + 秒杀接口改造） | ⏳ **待做 → 归第三批**（依据：Nacos 里实测只有 6 条 **flow/degrade** 规则；仓库 `deploy/docker/sentinel/` 也只有这 6 个文件，**无任何 param-flow 配置**）|
+| #5 余 **P2** | Sentinel 集群流控 | [[Sentinel能力补充计划]] | token server 统一配额（随 #4 集群化） | ⏳ **待做 → 归第三批**（同上，无 cluster-mode/token-server 配置）|
 
 ---
 
 ## 七、#5 Sentinel 能力补齐 P0（已完成：统一 Nacos 规则管理 + eager 修复）
 
-> 本节记录 #5 P0 的**审计修正、实施、部署踩坑与面试话术**（P1/P2 见 §六 剩余项）。
+> 本节记录 #5 P0 的**审计修正、实施、部署踩坑与面试话术**（P1/P2 见 §六 收尾状态）。
 
 ### 7.1 审计修正：原"规则持久化 Nacos + 代码双保险"记载与事实不符（⭐ 面试开场）
 
@@ -555,7 +568,11 @@ Web 前端：正常走 /ai/search → AI 失败/超时 → fallback 调 /search
 
 | 证据 | 内容 |
 |---|---|
-| ① Nacos 规则全空 | SENTINEL_GROUP / DEFAULT_GROUP 下 `mall-seckill-flow-rules` 等 dataId 均 `config data not exist` |
+| ① Nacos 规则全空 | SENTINEL_GROUP / DEFAULT_GROUP 下 `mall-seckill-flow-rules` 等 dataId 均 `config data not exist`（审计前的空状态）|
+
+> ✅ **2026-09-10 复核（修复后已落地）**：向 Nacos 逐个查询 6 个 dataId，**全部存在于 `SENTINEL_GROUP`**（`DEFAULT_GROUP` 下确实不存在）：
+> `mall-seckill-flow-rules`(131B) / `mall-seckill-degrade-rules`(143B) / `mall-order-flow-rules`(248B) / `mall-order-degrade-rules`(272B) / `mall-sso-flow-rules`(123B) / `mall-ai-flow-rules`(358B)。
+> ⚠️ **注意 group 是 `SENTINEL_GROUP` 而不是 `DEFAULT_GROUP`** —— 排查时按错 group 查会得出"规则不存在"的错误结论。
 | ② 秒杀限流实际失效 | seckill 日志：代码规则加载（`QPS=10`）后，Nacos datasource 异步拉空 → `converter can not convert rules because source is empty` → **空规则整体替换本地规则** |
 | ③ 3 个注解空转 | order（新增订单/支付订单）、sso（adminLogin）有 @SentinelResource 但无 datasource、无规则 |
 | ④ degrade 空转 | seckill prod 配了 degrade datasource，Nacos 无 degrade 规则 |
@@ -573,9 +590,9 @@ Web 前端：正常走 /ai/search → AI 失败/超时 → fallback 调 /search
 
 | 改动 | 文件 | 说明 |
 |---|---|---|
-| 加依赖 | order/sso pom | `sentinel-datasource-nacos` |
+| 加依赖 | order/sso pom（§七·六 又给 mall-ai 补了同一依赖） | `sentinel-datasource-nacos` |
 | 配 datasource | order/sso prod+test yml | flow+degrade → Nacos（sso 仅 flow：登录失败是业务异常，degrade 会误伤） |
-| 规则事实来源入库 | `deploy/docker/sentinel/*.json`（5 个） | seckill flow QPS10+degrade、order flow QPS20×2+degrade、sso flow QPS10；`git add -f`（deploy/ 被 gitignore，与 compose/redis-conf 同策略） |
+| 规则事实来源入库 | `deploy/docker/sentinel/*.json`（**6 个**：本批 5 个 + §七·六 追加 `mall-ai-flow-rules.json`） | seckill flow QPS10+degrade、order flow QPS20×2+degrade、sso flow QPS10、**mall-ai flow 3 组（ai-chat=5 / ai-reason=10 / ai-light=30）**；`git add -f`（deploy/ 被 gitignore，与 compose/redis-conf 同策略） |
 | 代码规则改兜底 | seckill `SentinelFlowRuleConfig` | 保留 + 注释机制（启动瞬态 + Nacos 宕机兜底） |
 | 补 dashboard env | compose mall-sso | `SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858` |
 | 删死文件 | `deploy/docker/sentinel-rules.json` | 无引用、GBK 乱码、count=100 与实际 10 不符 |
@@ -680,6 +697,8 @@ AiController (@SentinelResource QPS 限流 + 频控)
 - 单用户连打 15 次 /ai/ask → **全 429** + 日志 `【AI每用户频控】userId=1 已调用 15 次/60s，超限 10 次`
 - 单次调用正常（state=200）
 
+> ✅ **2026-09-10 复核（代码 + 配置双证据）**：`AiController` 的 `@SentinelResource` 实测存在（`ai-reason`/`ai-light` 多组 + 各自 blockHandler）；`DeepSeekAiClient` 中 `concurrencyGuard.acquire("chat"/"embed")` 实测存在（L92/L139/L214）；`mall-ai` pom 已含 `sentinel-datasource-nacos`；`application-prod.yml` 已配 `eager: true`；Nacos 中 `mall-ai-flow-rules` 存在且含 3 组规则（ai-chat=5 / ai-reason=10 / ai-light=30），与本节描述一致。
+
 **部署踩两坑（⭐ 面试可讲）**：
 
 | # | 坑 | 现象 → 根因 → 解法 |
@@ -724,6 +743,9 @@ Nacos Server: ① NACOS_AUTH_ENABLE=true 开鉴权 ② NACOS_AUTH_TOKEN=JWT签�
 
 **全量同步原子性**:认证一开,所有连 Nacos 组件必须同时带账号——任一漏配 = 该服务连不上直接启动失败。本次改 20+ 文件(11 discovery + 8 Dubbo + 4 Sentinel),逐一反编译确认字段存在,零试错。
 
+> ✅ **2026-09-10 复核（数字准确）**：实测 `application-prod.yml` 中带 `nacos.username` 的——**discovery 11 个**、**registry(Dubbo) 8 个**（其余 gateway/resource/sso 无 Dubbo provider，本来就无 registry）、**Sentinel datasource 4 个**（order / seckill / ai / sso）→ **与本节"11 + 8 + 4"完全一致**。
+> ✅ **认证确实在生效**：未带 token 访问 `http://127.0.0.1:8848/nacos/v1/ns/service/list` 实测返回 **`403 Forbidden {"message":"user not found!"}`**；带登录 token 后正常返回 `{"count":27,...}`。
+
 ### 7.7.3 部署踩坑（⭐ 最值得讲的两个）
 
 | # | 坑 | 现象 → 根因 → 解法 |
@@ -741,10 +763,10 @@ Nacos Server: ① NACOS_AUTH_ENABLE=true 开鉴权 ② NACOS_AUTH_TOKEN=JWT签�
 
 ## 八、第二批通用面试话术（贯穿主线）
 
-**主线叙事**："第二批我按'收益/成本/独立性'排序做了代码批：#8 修了 AI 预算 8:00 重置的时区 bug（10 行）；#23 做了一轮校验审计——修正了原审计'漏触发 vs 没规则'的混淆，补 DTO 规则 + 全局异常处理器；#36 把订单消费者的无限 requeue 改成 x-death 限次重试 + DLX 死信；#14 处理 Redis 与 DB 库存一致性——推翻'付款前查库存'改方案Y查'本单成交'，补 order_type，落 P1 对账；#5 审计发现 Sentinel 规则全空、秒杀限流失效，统一 Nacos 管理 + eager 修 transport 懒加载；#2+#34 给 AI 做三层防护（QPS 限流 + Semaphore 并发闸门 + 频控），核心是闸门挂 LLM 调用汇聚点；#13 给 Nacos 开 JWT 认证 + 全客户端同步，过程中发现 nacos 没挂数据卷重建丢配置的隐患并修复。这些线都踩了认知坑：时区不能依赖环境、DTO 校验有表达边界、自定义容器工厂绕过 Spring retry、MQ 队列声明一次性、'查剩余库存'不可区分本单归属、规则权威源只能有一个、transport 懒加载≠规则不生效、compose `${VAR:}` 空默认语法、中间件必须挂数据卷。"
+**主线叙事**："第二批我按'收益/成本/独立性'排序做了代码批：#8 修了 AI 预算 8:00 重置的时区 bug（10 行）；#23 做了一轮校验审计——修正了原审计'漏触发 vs 没规则'的混淆，补 DTO 规则 + 全局异常处理器；#36 把订单消费者的无限 requeue 改成 x-death 限次重试 + DLX 死信；#14 处理 Redis 与 DB 库存一致性——推翻'付款前查库存'改方案Y查'本单成交'，补 order_type，落 P1 对账；#5 审计发现 Sentinel 规则全空、秒杀限流失效，统一 Nacos 管理 + eager 修 transport 懒加载；#2+#34 给 AI 做三层防护（QPS 限流 + Semaphore 并发闸门 + 频控），核心是闸门挂 LLM 调用汇聚点；#13 给 Nacos 开 JWT 认证 + 全客户端同步，过程中发现 nacos 没挂数据卷重建丢配置的隐患并修复；#29 补了数据库每日备份（`mysqldump --single-transaction --routines --triggers` 六库 + 非空校验 + 保留 7 天，cron 02:30）。这些线都踩了认知坑：时区不能依赖环境、DTO 校验有表达边界、自定义容器工厂绕过 Spring retry、MQ 队列声明一次性、'查剩余库存'不可区分本单归属、规则权威源只能有一个、transport 懒加载≠规则不生效、compose `${VAR:}` 空默认语法、中间件必须挂数据卷。"
 
 **被追问"为什么不等公司方案"时**：个人项目我是 owner，但每个决策对齐企业做法（DLX/发送确认/kid 轮换/审计先行/对账分层），说明知道生产标准与当前取舍。
 
 ---
 
-**维护提示**: 本文件随第二批逐项实施持续补充；完成一项更新头部状态并回填细节。与 [[TODO文件]] 保持一致（TODO 是状态源，本文件是"原理+疑惑+话术"深挖）。
+**维护提示**: 本文件随第二批逐项实施持续补充；**2026-09-10 已完成全量状态纠偏（本批 9 项全部收口）**。与 [[TODO文件]] 保持一致（TODO 是状态源，本文件是"原理+疑惑+话术"深挖）。

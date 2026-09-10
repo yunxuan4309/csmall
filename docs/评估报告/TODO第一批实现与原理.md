@@ -1,9 +1,10 @@
 # TODO 第一批实现与原理（面试深挖应对）
 
 > **创建日期**: 2026-09-07
-> **状态**: ✅ **已执行完毕（2026-09-07 维护窗口）**——#25 JWT 随机化、R7 内存（mem_limit+Nacos/Sentinel 降堆）、#24 MySQL 强密码+端口收窄、R1~R4 Redis 加固、#38 Dockerfile 清理 全部完成并回归通过。Swap 仍待用户 sudo 执行。实战经验（Redis 数据迁移丢失、gateway 启动竞态）见文末 §九。
+> **状态**: ✅ **已执行完毕（2026-09-07 维护窗口；2026-09-10 逐项复核确认）**——#25 JWT 随机化、R7 内存（mem_limit+Nacos/Sentinel 降堆）、#24 MySQL 强密码+端口收窄、R1~R4 Redis 加固、#38 Dockerfile 清理 **全部完成并回归通过**。**Swap 2G 亦已执行**（复核实测：`swapon --show` = `/swapfile 2G`、`free -h` Swap 2.0Gi）。实战经验（Redis 数据迁移丢失、gateway 启动竞态）见文末 §九。
+> **⚠️ 阅读提示（2026-09-10 复核）**：本文件记录的是**当时的实施状态**。后续**第三批跨机集群（2026-09-09）改变了其中两处部署形态**——① MySQL/Redis 的**宿主端口绑定** `127.0.0.1:` → 宿主私网 IP `172.29.193.239:`；② redis conf **追加 4 行**（`replica-announce-ip/port` + `min-replicas-*`）。已在正文对应位置加 ⚠️ 标注；**原理与结论不受影响**。
 > **用途**: 面试深挖应对 —— 每条都含「原理 → 本项目实现 → 代码/服务器实证 → 企业演进 → 面试话术」
-> **关联**: [[TODO文件]] 第一批（#25 / R7 / #24 / R1~R4 / #38）、[[Redis配置加固与哨兵模式方案]]、[[服务器内存优化方案]]
+> **关联**: [[TODO文件]] 第一批（#25 / R7 / #24 / R1~R4 / #38）、[[Redis配置加固与哨兵模式方案]]（📦 已移入 `docs/归档/`）、[[服务器内存优化方案]]（📦 已移入 `docs/归档/`）
 
 ---
 
@@ -18,6 +19,8 @@
 | **#38** | Dockerfile 双份清理 | 运维洁癖（防踩坑） | 5 分钟低成本 | ✅ 已 git rm 11 份 | 无（纯仓库）|
 
 **执行策略**: #38 + R7 可立即做（零/低风险）；#25/#24/R1~R4 需**同一维护窗口**原子切换（全站重建一次），Swap 需用户 sudo。
+
+> 📌 **本表是"执行前"视角**（"服务器待做"列即当时的待办）。**7 项已全部执行完毕**，结果见 §九；表中 `127.0.0.1` 等细节的现状变化见 §3.3 ⚠️ 与 §六 ⚠️。
 
 ---
 
@@ -97,7 +100,8 @@ for c in csmall-sso csmall-product csmall-order csmall-seckill csmall-ums csmall
 done
 # 回归：新 token 全链路 200 + 旧 token 被拒 401
 ```
-> 2026-09-07 实测基线：11 容器 JWT_SECRET 全部一致 = `CooxiaoMall2026...`（与 .env、与 yml 默认值三相同）→ 一致性 ✅ 但等于默认值 ❌
+> 2026-09-07 **执行前**实测基线：11 容器 JWT_SECRET 全部一致 = `CooxiaoMall2026...`（与 .env、与 yml 默认值三相同）→ 一致性 ✅ 但等于默认值 ❌
+> ✅ **执行后（2026-09-10 复核）**：11 容器全部为 **64 字符随机值**且互相同一（`len=64`、去重后仅 1 个值、非默认），与 §9.1 记录一致。
 
 ### 1.6 企业怎么做？（拉开差距的加分回答）
 
@@ -204,6 +208,8 @@ docker exec csmall-mysql mysql -uroot -p'<旧密码>' -e "
 ```
 同理适用于 Redis/Nacos 等所有中间件。安全组（22/80）挡公网 + 端口 127.0.0.1 挡内网/本机 = 纵深防御两层。
 
+> ⚠️ **2026-09-10 复核（形态已变，原理不变）**：第三批跨机集群为让**新机**能访问老机 MySQL/Redis，把宿主端口绑定由 `127.0.0.1:3306/6379` 改为**宿主私网 IP** `172.29.193.239:3306/6379`（**不是 `0.0.0.0`**）。实测老机 `ss -lntp` 显示 `172.29.193.239:3306`、`172.29.193.239:6379`。本节"为什么零功能影响"的论证**完全不变**（微服务仍走 docker bridge 容器名直连，不经宿主端口映射）；改绑私网 IP 相对 127.0.0.1 是**放开给同 VPC**、相对 0.0.0.0 仍是**收敛**——公网闸门始终是安全组（阿里云公网 IP 是 NAT、不在网卡上，绑私网 IP 与绑 0.0.0.0 的公网可达性等价）。详见 [[跨机集群实施执行清单-2026-09-09]] §5.2。
+
 ### 3.4 #24 面试速答
 
 **Q: 为什么连 DB 都用 root？** A: 历史遗留（单机演示），compose 里 `MYSQL_USERNAME: root`。企业按库建最小权限账号（ams/ums/oms 各一），是后续 TODO 项。（诚实承认，不掩饰。）
@@ -235,7 +241,14 @@ maxmemory-policy volatile-lru  # 只淘汰带 TTL 的键 → 保护永久购买�
 appendonly yes          # R2: AOF
 appendfsync everysec    # 性能/安全平衡（秒杀标准做法）
 dir /data               # 与数据卷 redis_data:/data 对应
+# —— 以下 4 行为第三批跨机集群（2026-09-09）追加，本批执行时尚无 ——
+replica-announce-ip 172.29.193.239    # 哨兵用宿主私网 IP 认主（容器 IP 重建即变，不可用）
+replica-announce-port 6379
+min-replicas-to-write 1               # #14-P2：无健康从库则拒写（仅主库开，新机从库【不开】）
+min-replicas-max-lag 10
 ```
+
+> ⚠️ **2026-09-10 复核（防止误读）**：`bind 0.0.0.0` **是容器内监听地址，至今未变**（Docker 网络隔离，非裸奔）。第三批改的是**宿主侧端口绑定**（`127.0.0.1:` → `172.29.193.239:`，见 §3.3 ⚠️），**不是**这行 conf。服务器实测 conf 第 1 行仍为 `bind 0.0.0.0`，追加项在第 **11/12/15/16** 行（`replica-announce-ip`/`replica-announce-port`/`min-replicas-to-write`/`min-replicas-max-lag`）；`CONFIG GET bind` 返回 `0.0.0.0`。上表原始 10 行是第一批的成果，后 4 行属于第三批（[[Redis主从切换防数据问题方案]]，已归档）。
 
 **⚠️ 挂载不加 `:ro`**：Redis 运行时会自动 REWRITE 自身 conf（记录角色等），只读挂载会导致故障切换失败/脑裂（为哨兵铺路时的关键坑）。
 
@@ -291,13 +304,20 @@ dir /data               # 与数据卷 redis_data:/data 对应
 | `deploy/docker/.env.example` | 补充三处强密码生成说明（MYSQL/JWT/REDIS）|
 | 11 个模块目录 `Dockerfile` | 已删除（#38）|
 
+> ⚠️ **2026-09-10 复核（本表已不是完整现状）**：
+> - **① 端口**已由 `127.0.0.1:` 变为 `172.29.193.239:`（第三批跨机，见 §3.3 ⚠️）
+> - **⑤ mem_limit**：当时 21 服务；现在仓库 compose 共 **26 服务**全部带 `mem_limit`（老机 21 + 新机 5：redis-replica / 3 哨兵 / mall-seckill-2）
+> - **⑥** `SPRING_DATA_REDIS_PASSWORD` 现为 **12 处**（11 微服务 + 新机 mall-seckill-2），且 11 服务已从"直连 Redis"迁移为**哨兵客户端**（`SPRING_DATA_REDIS_SENTINEL_NODES`）
+> - **第三批新增文件**：`redis-replica.conf`；`deploy/docker/dockerfiles/` 由 11 份变 **12 份**（+ `mall-seckill-replica.Dockerfile`）
+
 **注意**：compose 中 `${REDIS_PASSWORD}`/`${MYSQL_ROOT_PASSWORD}` 已**去掉弱默认值**——若 .env 未配，compose 会警告并使用空串 → 部署时 .env 必须先配好，否则服务起不来（fail-fast，比静默弱配置好）。
 
 ---
 
-## 七、服务器部署执行清单（维护窗口，待用户确认执行）
+## 七、服务器部署执行清单（✅ **已于 2026-09-07 执行完毕**，执行结果见 §九）
 
 > AI 无写 /data/csmall 权限 + 无 sudo → 以下文件操作用 ecs-user 执行，docker 操作用 ai-deepseek 可执行。
+> ✅ **本清单 7 个 Step 均已于 2026-09-07 维护窗口执行完成**（含 Step 7 Swap，2026-09-10 复核实测 `/swapfile 2G` 已在用）。下列内容**保留作为"当时怎么做的"记录**，不是待办。
 
 ### Step 0 备份（必须）
 ```bash
@@ -318,6 +338,8 @@ echo "JWT=$(openssl rand -base64 48)"     # 记入 .env JWT_SECRET
 - 本地仓库 `deploy/docker/docker-compose.yml` → `/data/csmall/docker-compose.yml`
 - 本地 `deploy/docker/redis/redis-master.conf` → `/data/csmall/redis/redis-master.conf`（**替换 `<REDIS_PASSWORD>`**，chmod 600）
 - `.env` 更新三处密码
+
+> ⚠️ **本步的 `chmod 600` 是错的（执行时踩坑，已修正）**：conf 属主是宿主机 `ecs-user`，而容器内 redis 以 **uid 999** 运行 → 600 导致 `can't open config file: Permission denied`。**最终解法是 `chown redis:redis` + 600**（属主必须是容器内运行用户）。完整踩坑记录见 **§9.4**。
 
 ### Step 3 MySQL 改密码（docker exec，AI 可执行）
 ```bash
@@ -354,11 +376,12 @@ free -h; docker stats --no-stream | head -25
 # 业务回归：登录（新 token 200）/ 旧 token 401 / 秒杀完整流程 / 后台管理
 ```
 
-### Step 7 Swap（ecs-user sudo，独立执行）
+### Step 7 Swap（ecs-user sudo，独立执行）✅ **已执行**
 ```bash
 sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```
+> ✅ **2026-09-10 复核实测**：`swapon --show` → `/swapfile file 2G 0B -2`；`free -h` → `Swap: 2.0Gi 0B 2.0Gi`。**已落盘 fstab**（重启后仍生效）。
 
 ### 回滚
 - mem_limit: `docker update --memory -1 <容器>`
@@ -381,16 +404,16 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 ### 9.1 执行结果快照（全部验证通过）
 
-| 验证项 | 结果 |
-|---|---|
-| 21 容器 | 全部 Up，RestartCount=0，无 unhealthy |
-| 内存 | available **2.0G → 3.9G**（mem_limit + Nacos 512m 生效）|
-| MySQL | root 强密码（43 位），`127.0.0.1:3306` 收窄，ALTER USER 双 host 完成 |
-| Redis | requirepass/AOF/maxmemory 256mb/volatile-lru 全部生效，`127.0.0.1:6379` |
-| JWT | 11 容器 env 全部 = 新随机值且互相一致 |
-| 认证链路 | admin 登录 ✅、带 token 访问后台返回真实数据 ✅、无/伪造 token 401 ✅ |
-| 秒杀预热 | Redis 数据丢失后由 `SeckillInitialJob`（每分钟）自动重建，DBSIZE 0→15 |
-| Nacos | 23 服务注册正常，gateway 修复后 healthy |
+| 验证项 | 结果（2026-09-07 当时） | 2026-09-10 复核 |
+|---|---|---|
+| 21 容器 | 全部 Up，RestartCount=0，无 unhealthy | ✅ 仍 21 容器全 Up；mem_limit 全部非 0 |
+| 内存 | available **2.0G → 3.9G**（mem_limit + Nacos 512m 生效）| ✅ Nacos `JVM_XMX=512m`、Sentinel `-Xmx256m` 实测生效；available 3.5G（正常波动）|
+| MySQL | root 强密码（43 位），`127.0.0.1:3306` 收窄，ALTER USER 双 host 完成 | ✅ 密码 **44 位**；监听 **`172.29.193.239:3306`**（第三批改绑私网 IP，见 §3.3 ⚠️）；`root@localhost` + `root@%` 均在 |
+| Redis | requirepass/AOF/maxmemory 256mb/volatile-lru 全部生效，`127.0.0.1:6379` | ✅ `appendonly=yes`、`maxmemory=268435456`、`maxmemory-policy=volatile-lru`、`min-replicas-to-write=1`；宿主监听 **`172.29.193.239:6379`** |
+| JWT | 11 容器 env 全部 = 新随机值且互相一致 | ✅ 11 容器 len=64、去重后同一值、非默认 |
+| 认证链路 | admin 登录 ✅、带 token 访问后台返回真实数据 ✅、无/伪造 token 401 ✅ | 未复测（无变化）|
+| 秒杀预热 | Redis 数据丢失后由 `SeckillInitialJob`（每分钟）自动重建，DBSIZE 0→15 | 未复测 |
+| Nacos | 23 服务注册正常，gateway 修复后 healthy | ⚠️ 现为 **27 个服务名**。增量来自 Dubbo 应用名拆分的 3 个新增（`mall-seckill-dubbo` / `mall-ums-dubbo` / `mall-product-dubbo`，见 [[TODO第二批实现与原理]] §七·五）；另有原本就独立的 `mall-order-dubbo` / `mall-ai-dubbo`。各服务数据面正常 |
 
 ### 9.2 坑 ①：Redis 从 RDB 切 AOF 的数据丢失（⚠️ 最值得讲）
 
@@ -425,6 +448,8 @@ redis-cli CONFIG SET appendonly yes
 
 **经验**：① 依赖 Nacos 的服务重建时有启动竞态，`restart: on-failure` 是底线（gateway 之前漏了）；② 容器 "running" ≠ 服务可用，验证要看端口监听 + Nacos 注册 + 实际请求。
 
+> ⚠️ **2026-09-10 复核（#51 现状）**：当时 compose 里 **6 个容器**是 `on-failure`（front/gateway/order/product/search/seckill），**服务器实测至今仍是这 6 个**；另有 `csmall-resource` = `unless-stopped`；**其余 14 个为 `no`** → **老机重启后 14/21 容器不会自动恢复**（#51，第三批待办）。**注意仓库与服务端已不一致**：仓库 `docker-compose.yml` 现已有 **11 个 `on-failure` + 1 个 `unless-stopped`**（后续补的），但**尚未部署到服务器** → 部署服务器 compose 即可把 14 降到 3。这也是"容器 restart 策略"仍未收口的原因。
+
 ### 9.4 坑 ③：redis.conf 挂载权限（容器 redis 用户读不了 600 属主文件）
 
 **现象**：redis 容器启动失败 `can't open config file: Permission denied`。
@@ -440,4 +465,4 @@ docker run --rm --user root -v /data/csmall/redis:/data/redis redis:7-alpine \
 
 ---
 
-**维护提示**: TODO 文件第一批条目已全部完成（#38 → git 清理；#25/R7/#24/R1~R4 → 2026-09-07 执行），可移入"已完成"表；Swap 待用户 sudo 执行后补记。
+**维护提示**: TODO 文件第一批条目**已全部完成并复核**（#38 → git 清理；#25/R7/#24/R1~R4 → 2026-09-07 执行；**Swap → 亦已执行**）。已移入 [[TODO已完成]]。
