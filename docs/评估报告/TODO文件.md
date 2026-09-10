@@ -808,7 +808,21 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 | **git 历史里的旧 key** | ❌ **无需重写历史** —— key 已吊销即无害；公开仓库已被克隆，改写历史收益为负 |
 | 服务器 `/data/csmall/.env` | ⏳ 要改（AI 无写权限，命令见下方"给用户的执行块"）|
 
-**⚠️ 重要澄清（避免误判影响面）**：生产 `application-prod.yml` 的 **`embedding-enabled: false`**（本地实测确认），服务器 `.env` 与容器 env 实测 **`EMBEDDING_API_KEY=sk-placeholder`** → **生产从没配过真 embedding key**，因此**本次轮换对线上功能零影响**；但它是 **#31（生产启用向量检索）的前置** —— 不先配好新 key，将来一开启就会 401。
+**⚠️ 重要澄清（避免误判影响面）**：生产 `application-prod.yml` 的 **`embedding-enabled: false`**，服务器 `.env` 与容器 env 实测 **`EMBEDDING_API_KEY=sk-placeholder`** → **生产没开向量检索，所以也没配真 embedding key**，因此**本次轮换对线上功能零影响**；但它是 **#31（生产启用向量检索）的前置** —— 不先配好新 key，将来一开启就会 401。
+
+> 🔎 **别误读成"ES 瘫痪了"（2026-09-10 生产实证）**：**「向量语义检索」和「ES 全文检索」是两条独立的路**，代码里是**显式 if/else 分支**，不是"失败才降级"：
+> ```java
+> // RagServiceImpl.ask()
+> if (aiProperties.isEmbeddingEnabled()) { hits = vectorSearch(embeddingClient.embed(question), topK); }  // 需 embedding key
+> else                                   { hits = fullTextSearch(question, topK); }                      // ← 当前走这条，不需要 key
+> // VectorSyncServiceImpl:148  float[] vector = isEmbeddingEnabled() ? embed(semanticText) : null;        // 关闭时不写向量字段
+> ```
+> | 能力 | 依赖 embedding key | 生产状态（实测）|
+> |---|---|---|
+> | **ES 全文检索**（multi_match）| ❌ 不依赖 | ✅ **一直正常**：索引 `cool_shark_mall_ai` **green / 19 条**；直连查 `"手机"` 命中 **9 条**（iPhone 15 / 小米14 Pro / Redmi K70 Pro）、`"笔记本电脑"` 命中 **7 条** |
+> | **ES 向量语义检索**（向量相似度）| ✅ 依赖 | ⏸️ **关闭**（设计开关，见 #31）|
+> | **AI 重排 / 意图提取**（LLM）| ❌ 不依赖（用 `AI_API_KEY`）| ✅ 正常 |
+> **佐证"从未跑过向量"**：ES mapping 里**根本没有 `vector` 字段**、`{"exists":{"field":"vector"}}` = **0 条**；而 `{"exists":{"field":"semanticText"}}` = **19 条** → 说明**"拼语义文本"这步一直跑，"算向量"这步被开关跳过**（所以随时可无损开启）。
 
 **🔁 循环检查（1 遍）额外发现**：
 - ⚠️ **`.idea/workspace.xml:407` 硬编码了另一个旧 DeepSeek key（`sk-8f73ae…`）** —— 这是 **IDE Run Configuration 的经典坑**（IDE 环境变量优先级最高、会覆盖 `.env`，本项目 2026-09-08 就因此排查过 401）。**与 #44 无关但同类风险**，建议清理（见下方）。
