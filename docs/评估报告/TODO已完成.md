@@ -436,3 +436,38 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 **生产验证（2026-09-10）**：路由日志**恰好 1 次**（修复前 2 次）；`/ai/search` 5s 返回 AI 重排说明；`/ai/ask` 4s 返回完整推荐；预算记账 0 → **0.002492 元**；`content 为空` / `reasoning` / 4xx 告警均 **0**；jar MD5 落位校验一致；回滚 tag `csmall-mall-ai:before-step1` 就位。
 
 📄 **完整记录见 [[AI模型名停用风险与thinking参数改造方案]]**（§3.1 实验 / §4.5 模型可配化 / §4.6-4.7 Spring AI 与 Boot 升级评估 / §十一 实施与部署记录）、[[TODO第三批实现与原理-1]]（技术选型过程）
+
+---
+
+## 十五、🔥 生产故障抢修：nginx 静态解析上游 IP → 网关重建后全站 API 502（2026-09-10 发现并修复，非计划内）
+
+> **说明**：本条**不是 TODO 计划项**，是 2026-09-10 晚的**突发生产故障抢修**（用户报"登不上、全是 502"）。因其有完整排查链与一类根因价值，按纪律归档于此。
+> **原理与话术**：[[问题解决--服务注册与网关路由]] **问题 2**（与二批 #6"身份错"归为同一族"调用方持有错误地址"）
+
+**根因（一句话）**：`proxy_pass http://mall-gateway:10087` 里的主机名，nginx **只在加载配置那一刻解析一次并永久缓存**（等价写死 IP）；网关容器 **09-09 19:22(CST) 被重建**（IP `172.18.0.9` → `172.18.0.7`）后，nginx 仍把 `/user /front /ai` 全打到 `.9` —— 而 `.9` 在 **09-10 19:44 被重建的 mall-ai 占用**，其 10087 无人监听 → `connect() failed (111)` → **502**。
+
+**故障窗口**：**约 24.5 小时**（09-09 19:22 → 09-10 19:58）。
+
+**排查链（逐层排除，7 步）**：① `docker ps` 21 容器全 Up（非挂）→ ② 内存/磁盘/负载正常（非资源）→ ③ `curl 网关 /actuator/health` = **200**（网关健康）→ ④ nginx 日志 `connect() failed (111) upstream http://172.18.0.9:10087`（**502 是 nginx 报的**）→ ⑤ `docker inspect` 网关真实 IP = `172.18.0.7`，`.9` = **mall-ai**（打错容器）→ ⑥ conf 里写的是主机名，容器内 `getent hosts mall-gateway` = `172.18.0.7` **正确**（**DNS 没问题，是 nginx 缓存**）→ ⑦ frontend StartedAt `09-08 04:14 UTC` + `Restarts=0`，晚于它的网关重建 → **缓存旧值确认**。
+
+**处置（先恢复、再根治、不夹带）**
+
+1. **秒级恢复**：`docker restart csmall-frontend`（零配置改动、可重复）
+2. **隔离 A/B 验证**（临时网络 + 一次性容器，**全程未碰生产**）：
+   | 场景 | 动态解析 | 静态解析（原状） |
+   |---|---|---|
+   | 基线 | 200 | 200 |
+   | **容器重建后** | **200（自动跟随）** | **502（仍打旧 IP）** |
+   附带实证：静态写法启动时解析不到主机名 → `host not found in upstream` **直接起不来**
+3. **生产改造**：`resolver 127.0.0.11 valid=10s ipv6=off` + `upstream mall_gateway { zone …; server mall-gateway:10087 resolve; }`，6 处 `proxy_pass http://mall-gateway:10087` → `http://mall_gateway`。**刻意不用 `set $var` 变量法**（会改变 URI 处理语义，本项目有 `/api/ 剥前缀` rewrite）→ 用 `upstream` 块保证语义零变化
+4. **应用**：`docker cp` → `nginx -t` → **`nginx -s reload`（热加载、零停机、未重启容器）**
+5. **烘进镜像**：先打回滚标签 `csmall-frontend:pre-dynamic-20260910`（旧镜像 `1ed14bbc615b`），再 `docker commit`（新镜像 `917eead3…`）—— 因服务器**无 `nginx:alpine` 基础镜像**，`docker compose build` 短期不可用，不 commit 则容器重建即回退
+
+**验证（逐条路由）**：真登录 `/user/sso/login` 返回 **`tokenValue`** ✓；`/api/front/category/all`（**rewrite 剥前缀**）语义未变 ✓；`/admin/dashboard`（Accept:json → `@gateway`）✓；`/ai/chat/history` / `/seckill/spu/list` / SPA `/` 均 200 ✓；nginx **无 `[error]/[emerg]/[crit]`** ✓；镜像内 conf md5 = 修复版 `9ce6f00d…` ✓；终态 **21 容器全 Up、0 异常** ✓。
+
+**衍生待办**：**#61 外部端到端探活** —— 本次最值得记的教训是"**21 容器全 Up、网关 health 200，业务却挂了 24.5 小时**"，内部健康检查天然抓不到"路由层地址漂移"。
+
+**附带发现（已处理）**：前端 nginx conf 与仓库副本**双向漂移**且 **conf 未入版本控制**（`.gitignore` 有 `deploy/`）→ 已将修复版 `git add -f deploy/docker/frontend/nginx.conf` 纳入跟踪；漂移的两块（SSE 180s 超时 / `/seckill/:id` 的 SPA 保护，后者**生产确实坏**：`GET /seckill/123` 原返回 401 JSON 而非页面）→ **用户决策"两块都合并"并已上线**（`GET /seckill/123` 现为 `text/html`；`/seckill/spu/list`、`/seckill/sku/list/{id}`、`POST /seckill/{code}` 仍走网关 JSON，真 API 未被吃掉；`nginx -T` 确认 SSE location 内 180s），二次 `docker commit` + 回滚点 `dynamic-only-20260910`。
+**⚠️ 遗留动作（需 ecs-user）**：服务器源文件 `/data/csmall/frontend/nginx.conf` 仍是旧版（md5 `8bdd4cd2…`）→ 需把**合并版**（md5 `1382897db1b09d05bfe1aace2058fe8e`）覆盖上去，否则将来 `docker compose build frontend` 会**覆盖回退**本次修复。
+
+**镜像基线（回滚用）**：`pre-dynamic-20260910` = `1ed14bbc615b`（原始静态版）→ `dynamic-only-20260910` = `917eead35007`（仅动态解析）→ `latest` = `f8ea5dd5aab5`（**当前：动态解析 + 两块合并**）。
