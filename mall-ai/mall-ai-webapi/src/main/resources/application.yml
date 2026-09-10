@@ -96,9 +96,12 @@ cooxiao:
     user-rate-limit-enabled: true
     user-rate-limit: 10
 
-    # ===== Agent 双路径开关（TODO #32；Step 1 仅落地配置，默认关 = 走现有快速路径）=====
-    agent-enabled: false
-    agent-max-rounds: 3
+    # ===== Agent 双路径开关（TODO #32）=====
+    # ⚠️ 用**显式占位符**（#58 约定）：容器环境变量是 AI_AGENT_ENABLED（不是 COOXIAO_AI_AGENTENABLED）——
+    #    compose 里显式注入，改 .env 后 recreate 容器即生效；代码依赖 relaxed binding 隐式映射极易踩错。
+    # 默认关 = 走现有固定流水线（意图提取 → 检索 → 生成）；开 = 模型自己决定查什么、查几次。
+    agent-enabled: ${AI_AGENT_ENABLED:false}
+    agent-max-rounds: ${AI_AGENT_MAX_ROUNDS:3}
 
 knife4j:
   enable: true

@@ -1,6 +1,7 @@
 # AI 导购 Agent 升级方案
 
 > **状态**: ✅ **已敲定实施（2026-09-10 用户拍板：做）** —— 按 **P0 → P1** 分期推进（P2 可选）；**实施前必读「〇、决策记录 + 实施前代码校正」**（其中 6 条校正来自读码实测，照原稿做会踩空）
+> **进度（2026-09-10）**：**P0 代码已完成**（提交 `09d22b1`，新增 6 类 / 改 4 类 / 3 个测试类，mall-ai 模块 **26 项测试全绿**，开关默认关 → 未开启前对生产零影响）；**P0 部署待执行**（两阶段 runbook：先验"零回归"再开 `AI_AGENT_ENABLED=true`，三级回滚）。**⚠️ 与原计划的偏差**：P0 的 Agent 只覆盖**同步** `/ai/chat/send`，SSE 仍走旧流水线（原 S5「最后一轮复用 SSE」顺延 P1）。
 > **关联**: [[TODO文件]]#32、[[面试准备/09-AI模块]] Q0/Q12、**[[AI模型名停用风险与thinking参数改造方案]]（#58，与本项强相关，见校正⑥）**
 > **定位**: 技术演示增强 + 面试素材(业务收益为零——生产 0 调用,简历未投)
 
@@ -288,16 +289,19 @@ answer = streamChat(messages)                          // ⑥ 最后一轮流式
 
 ## 八、执行清单（2026-09-10 敲定版 · 分 P0 / P1）
 
-### P0 最小 Function Calling（~0.5~1 天）
+### P0 最小 Function Calling（~0.5~1 天）—— ✅ **代码已完成（2026-09-10），待部署**
 
-- [ ] **S1 配置**：`AiProperties` 加 `agentEnabled`（默认 `false`）+ `agentMaxRounds`（默认 3）；`application.yml` / `-test` / `-prod` 同步加 `agent-enabled: false`
-- [ ] **S2 消息类型加宽**（校正②）：`AiClient` 加 `chat(List<Map<String,Object>>)`，**保留** `List<Map<String,String>>` 兼容重载；`DeepSeekAiClient` 内部统一按 `Object` 处理
-- [ ] **S3 tools 支持**：`DeepSeekAiClient` 新增 `chatWithTools(systemPrompt, messages, tools)` —— 请求体带 `tools` + `tool_choice:auto`，解析 `choices[0].message.tool_calls`，返回 `{content, List<ToolCall>}`；**复用** `concurrencyGuard.acquire("chat")` + `checkBudget()` + `usage` 记账
-- [ ] **S4 工具注册**：新增 `ToolRegistry`（`Map<String,AiTool>`）+ `AiTool` 接口（`name()` / `spec()` / `execute(JSONObject args)`）；`search_products` 实现放 **`...ai.service.impl` 同包**（校正④），内部复用 `RagServiceImpl`
-- [ ] **S5 Agent 分支**：`ChatServiceImpl` 新增 `agentBranch(...)` —— 非流式跑 1~3 轮 `tool_calls`（校正③），**最后一轮复用现有 `streamDeepSeek`** 输出；`agent-enabled=false` 时完全走原快速路径（**双路径，零行为变化**）
-- [ ] **S6 边界**：轮数上限 3（超限即停并直接生成）；未知工具名忽略；工具参数按 JSON Schema 校验（越界即拒，不回灌 LLM 自由发挥）
-- [ ] **S7 降级**：`chatWithTools` 异常 / 工具执行失败 → **回退现有快速路径 RAG**（绝不能因 Agent 挂掉让搜索挂）
-- [ ] **P0 验证**：`curl /ai/chat/send` 问"推荐 5000 以内的手机" → 日志出现工具调用 + `search_products` 命中 + 答案基于工具结果；再以 `agent-enabled=false` 回归旧行为
+- [x] **S1 配置**：`AiProperties` 加 `agentEnabled`（默认 `false`）+ `agentMaxRounds`（默认 3）；yml 加 `agent-enabled` / `agent-max-rounds`。**P0 补强**：改成**显式占位符** `${AI_AGENT_ENABLED:false}` + compose 注入 → **改 `.env` 即可开关，不用重编译 jar**；启动日志新增一行 `Agent 双路径开关：agent-enabled=…`（部署验证与回滚一眼可确认）
+- [x] **S2 消息类型加宽**（校正②）：`AiClient` 加 `chat(List<Map<String,Object>>)`（Step 1 已落地，6 处调用点同步）
+- [x] **S3 tools 支持**：`AiClient.chatWithTools(messages, tools)` —— 请求体 = `buildBody(AiTask.AGENT)` + `tools` + `tool_choice:auto`，**刻意不发 `response_format`**（实测二者互斥，同时下发模型就不再触发 `tool_calls`）；解析 `choices[0].message.tool_calls`，返回 **`AiToolRound(content, List<AiToolCall>, assistantMessage)`**（`assistantMessage` 为可直接回灌的消息：含 `tool_calls` 原样结构、**不含 `reasoning_content`**）；**复用** `checkBudget()` + `usage` 记账 + 并发闸门
+- [x] **S4 工具注册**：`ToolRegistry`（`Map<String,AiTool>`，构造器注入 `List<AiTool>` 自动收集，**同名工具启动期直接抛异常**）+ `AiTool`（`name()` / `description()` / `parameters()` / `execute(Map)`）+ `AiToolResult(observation, hits)`；`search_products` 放 **`...ai.service.impl` 同包**（校正④）复用 `RagServiceImpl`；**模型给的参数一律不可信**：sortBy 白名单、负数预算丢弃、上下限颠倒自动交换、关键词/品牌截断；严格条件无命中时去掉价格/品牌兜底，并在 observation 里写明"已放宽"（免得模型以为这就是严格结果、继续误导用户）
+- [x] **S5 Agent 分支**：`ChatServiceImpl.sendWithAgent(...)` —— 非流式跑 1~`agent-max-rounds` 轮 `tool_calls`，模型不再请求工具时那一轮正文即最终答案。**⚠️ 与原计划的偏差**：原写"最后一轮复用现有 `streamDeepSeek`"，实际 P0 **只覆盖同步 `/ai/chat/send`**，SSE（`/ai/chat/stream`）仍走旧流水线（流式 + 工具顺延 P1）；`agent-enabled=false` 时**完全不进**该分支（双路径、零行为变化）
+- [x] **S6 边界**：轮数用尽 → **摘掉 tools 强制收口**（绝不把"超出轮数"抛给用户）；未知工具名 → 回灌一条可读观察后**继续循环**（不中断、不 500）；工具参数在代码层收敛（见 S4）
+- [x] **S7 降级**：`chatWithTools` 异常 → catch 后**回退固定流水线 RAG**；工具自身失败返回 `AiToolResult.error(...)`（不抛异常打断循环，让模型决定改参数重试还是如实告知）
+- [x] **离线测试（P0 补强，原计划未含）**：`ChatServiceImplAgentTest` 用**假 LLM 脚本化多轮**锁死 6 条路径 —— ①一轮工具+收敛（含**回灌内容断言**：assistant 的 `tool_calls` 与 `role=tool` 的 observation 必须真的出现在第 2 轮请求里）②轮数用尽强制收口 ③正文空兜底 ④未知工具 ⑤异常降级回流水线 ⑥开关关闭完全不碰 Agent。**为什么必须离线**：Agent 的正确性主要在"循环控制"，与真实模型无关；而真实调用不稳定、要花钱、跑得慢 → 拿它当回归测试等于没有测试
+- [ ] **P0 验证（待部署执行）**：`curl /ai/chat/send` 问"推荐 5000 以内的手机" → 日志出现 `工具 search_products ... 命中 N 条` + `Agent 第 k 轮收敛`，答案基于工具结果；再以 `AI_AGENT_ENABLED=false` 回归旧行为
+
+> 📋 **P0 实施记录（2026-09-10）**：提交 `09d22b1`；新增 6 个类（`AiToolCall` / `AiToolRound` / `AiTool` / `AiToolResult` / `ToolRegistry` / `SearchProductsTool`）+ 改 4 个类（`AiClient` / `DeepSeekAiClient` / `ChatServiceImpl` / `AiTask`）+ 3 个测试类；**mall-ai 模块 26 项测试全绿**；`agent-enabled` 默认 `false` → 开启前对生产零影响。部署指令：`work/部署指令-step2-agent-p0.md`（jar MD5 `5193b258…`，两阶段 A/B + 三级回滚）。
 
 ### P1 完整单 Agent（~2~3 天）
 

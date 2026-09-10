@@ -565,6 +565,10 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       AI_API_KEY: ${AI_API_KEY}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
+      # #32 Agent 双路径开关（默认关 = 固定流水线）。改 .env 的 AI_AGENT_ENABLED=true 后
+      # `docker compose up -d mall-ai` 即启用，**不用重编译 jar**；回滚同样只需改回 false。
+      AI_AGENT_ENABLED: ${AI_AGENT_ENABLED:-false}
+      AI_AGENT_MAX_ROUNDS: ${AI_AGENT_MAX_ROUNDS:-3}
       CUSTOM_FILE_UPLOAD_RESOURCE_HOST: http://8.156.77.197/
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
     mem_limit: 1g

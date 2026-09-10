@@ -198,6 +198,9 @@ public class AiProperties {
             sb.append("] ");
         }
         log.info("AI 模型路由（cooxiao.ai）：{}", sb.toString().trim());
+        // Agent 双路径是"高风险新链路"，启动必须能一眼看出走的是哪条（部署验证/回滚全靠这一行）
+        log.info("Agent 双路径开关：agent-enabled={}（false=固定流水线 / true=Function Calling），agent-max-rounds={}",
+                agentEnabled, agentMaxRounds);
         if (models == null || models.isEmpty()) {
             log.warn("cooxiao.ai.models 为空 —— AI 调用将失败，请在配置中定义档位（如 flash/pro）");
         }
