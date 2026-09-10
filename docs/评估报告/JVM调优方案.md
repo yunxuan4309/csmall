@@ -253,14 +253,14 @@ mall-resource      ████ 0.43           ███ 0.33
 
 ### 6.1 docker-compose.yml 同步
 
-调优后的 `docker-compose.yml` 已上传到服务器 `/home/ai-claude/docker-compose.yml` (本地同步: `deploy/docker/docker-compose.yml`)。
+调优后的 `docker-compose.yml` 已上传到服务器 `/home/<AI账号>/docker-compose.yml` (本地同步: `deploy/docker/docker-compose.yml`)。
 
-微服务重建已通过 `docker compose -f /home/ai-claude/docker-compose.yml --project-directory /data/csmall up -d` 完成。但 `/data/csmall/docker-compose.yml` 仍是旧版本。
+微服务重建已通过 `docker compose -f /home/<AI账号>/docker-compose.yml --project-directory /data/csmall up -d` 完成。但 `/data/csmall/docker-compose.yml` 仍是旧版本。
 
 **需手动执行**(以 ecs-user 登录, 下次方便时):
 
 ```bash
-sudo cp /home/ai-claude/docker-compose.yml /data/csmall/docker-compose.yml
+sudo cp /home/<AI账号>/docker-compose.yml /data/csmall/docker-compose.yml
 ```
 
 此后在 `/data/csmall/` 直接运行 `docker compose up -d` 即可使用调优后的配置。
@@ -286,7 +286,7 @@ sudo cp /home/ai-claude/docker-compose.yml /data/csmall/docker-compose.yml
 | 2026-08-04 23:33 | 编辑 docker-compose.yml: Seata 添加 JVM_XMX/XMS/Metaspace/DirectMemory 环境变量 | 已保存 |
 | 2026-08-04 23:33 | 编辑 docker-compose.yml: OAP JAVA_OPTS -Xms512m→256m, -Xmx1024m→512m | 已保存 |
 | 2026-08-04 23:33 | 编辑 docker-compose.yml: 11 个微服务添加 JAVA_TOOL_OPTIONS | 已保存 |
-| 2026-08-04 23:35 | 上传 compose 至服务器 `/home/ai-claude/` | 已上传 |
+| 2026-08-04 23:35 | 上传 compose 至服务器 `/home/<AI账号>/` | 已上传 |
 | 2026-08-04 23:35 | `docker compose -f ... up -d seata` | 重建成功, 新 JVM 已生效 |
 | 2026-08-04 23:35 | `docker compose -f ... up -d skywalking-oap` | 重建成功, 新 JVM 已生效 |
 | 2026-08-04 23:47 | 逐个重建 11 个微服务 (--no-deps 跳过 RabbitMQ 健康检查超时) | 全部重建成功 |

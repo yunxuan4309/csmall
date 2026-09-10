@@ -97,10 +97,10 @@ because "Dictionary.singleton._StopWords" is null
 
 ```bash
 # 本地 → 服务器
-scp -r plugins/analysis-ik/config ai-claude@8.156.77.197:/home/ai-claude/ik-config
+scp -r plugins/analysis-ik/config <AI账号>@8.156.77.197:/home/<AI账号>/ik-config
 
 # 服务器上
-sudo cp -r /home/ai-claude/ik-config /tmp/ik-config
+sudo cp -r /home/<AI账号>/ik-config /tmp/ik-config
 docker cp /tmp/ik-config/. csmall-es:/usr/share/elasticsearch/plugins/analysis-ik/config/
 sudo cp -r /tmp/ik-config /data/csmall/es-plugins/analysis-ik/config  # 持久化
 docker restart csmall-es

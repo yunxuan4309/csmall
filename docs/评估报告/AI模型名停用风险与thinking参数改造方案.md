@@ -517,7 +517,7 @@ AI 模型路由（cooxiao.ai）：chat[flash→deepseek-v4-flash,thinking=on]
 | 预算记账 | `ai:daily_cost:2026-09-10`：0 → **0.002492 元**（`usage` 记账链路正常） |
 | **#58 目标告警** | `content 为空` **0** 次、`reasoning` 相关 **0** 次、`invalid_request`/4xx **0** 次 |
 | Nacos | `172.18.0.9:10010` enabled + healthy |
-| 容器 env | `SPRING_PROFILES_ACTIVE=prod`、`AI_API_KEY=sk-de93…`、`EMBEDDING_API_KEY=sk-looj…`（#44 轮换后的新 key） |
+| 容器 env | `SPRING_PROFILES_ACTIVE=prod`、`AI_API_KEY=sk-****…`、`EMBEDDING_API_KEY=sk-****…`（#44 轮换后的新 key） |
 
 > ⚠️ **冒烟测试在生产留下的痕迹（透明说明）**：1 条管理员登录日志（`ams_login_log`）、`ai:daily_cost` 记了 **0.0025 元**；未创建 AI 会话键（`/ai/ask` 不建会话）。其余无副作用。
 

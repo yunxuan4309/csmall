@@ -25,10 +25,10 @@ config.addAllowedOrigin("http://8.156.77.197");
 
 **现象**：`意图提取失败 → 401 Authorization Required`，最终所有 AI 调用失败，返回"抱歉，AI服务暂时不可用"。
 
-**根因**：服务器 `.env` 中 `AI_API_KEY=sk-placeholder`（占位符），真实 Key 从未配置。且 `deploy/csmall.env` 中的 Key `sk-8f73ae...5a4c` 已过期。
+**根因**：服务器 `.env` 中 `AI_API_KEY=sk-placeholder`（占位符），真实 Key 从未配置。且 `deploy/csmall.env` 中的 Key `sk-****...5a4c` 已过期。
 
 **修复**：
-1. 从 `deploy/systemd/csmall.env` 找到有效 Key `sk-0ac9a...2179`
+1. 从 `deploy/systemd/csmall.env` 找到有效 Key `sk-****...2179`
 2. 写入 `deploy/docker/.env` 并上传到服务器
 3. 在 `deploy/csmall.env` 中注释过期 Key，标注日期
 

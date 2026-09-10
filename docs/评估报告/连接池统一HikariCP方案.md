@@ -44,7 +44,7 @@
 ### Step 0 — 备份
 
 ```bash
-# 服务器上备份（ai-deepseek 可执行 docker 操作）
+# 服务器上备份（<AI账号> 可执行 docker 操作）
 cp /data/csmall/docker-compose.yml /data/csmall/docker-compose.yml.bak.$(date +%Y%m%d)
 ```
 
@@ -114,8 +114,8 @@ mvn clean package -DskipTests
 
 ```bash
 # 每个服务切换后：
-scp jars/mall-xxx.jar ai-deepseek@8.156.77.197:/data/csmall/jars/
-ssh ai-deepseek@8.156.77.197 "cd /data/csmall && docker compose up -d mall-xxx"
+scp jars/mall-xxx.jar <AI账号>@8.156.77.197:/data/csmall/jars/
+ssh <AI账号>@8.156.77.197 "cd /data/csmall && docker compose up -d mall-xxx"
 ```
 
 验证清单（每个服务）：
@@ -157,7 +157,7 @@ curl -s http://127.0.0.1:<端口>/actuator/health                               
 ```bash
 # 1. 恢复旧 JAR（git 回退该模块 pom/yml 改动 → 重新构建）
 # 2. 重新部署
-scp jars/mall-xxx.jar（旧版） ai-deepseek@8.156.77.197:/data/csmall/jars/
+scp jars/mall-xxx.jar（旧版） <AI账号>@8.156.77.197:/data/csmall/jars/
 docker compose up -d mall-xxx
 ```
 > 回滚粒度：单服务独立回滚，不影响其他已切换服务。

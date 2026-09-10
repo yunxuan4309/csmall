@@ -461,7 +461,7 @@ java.lang.IllegalStateException: Could not initialize plugin: interface org.mock
 | 2 | 守卫里写 `exit 1` → 粘贴到**交互式 SSH 会话**直接退出登录、连接断开 | 命令块**禁止 `exit`**，改用 `if/else` 或子 shell |
 | 3 | 多机器命令块混贴 3 次（`scp`、`tar` 解压贴错机器） | 每个代码块标注 `【老机】`/`【新机】` |
 | 4 | 服务器 `redis-master.conf` 属主 `dnsmasq`、权限 600、**容器内实际只有 9 行**（仓库模板 21 行）= 历史漂移且 AI 读不到 | 窗口里改为**幂等追加两行**（`grep -q … \|\| tee -a`），不覆盖、不碰密码 |
-| 5 | 新机 `.env` 设 600 → **AI 跑不了 `docker compose`**（compose 启动时要读 `.env`）；两台机器都没装 `setfacl` | 改 `chown ecs-user:ai-deepseek` + `chmod 640`（比老机的 664 更严） |
+| 5 | 新机 `.env` 设 600 → **AI 跑不了 `docker compose`**（compose 启动时要读 `.env`）；两台机器都没装 `setfacl` | 改 `chown ecs-user:<AI账号>` + `chmod 640`（比老机的 664 更严） |
 | 6 | compose 变量未解析时满屏 `WARN variable is not set` | 那是**缺 .env 的正常提示**，不是配置错误；`.env` 到位即消失 |
 | 7 | **Redis Sentinel 启动即退出**：`config file ... is not writable: Permission denied` | 容器内 redis 进程是 **uid 999**，而 conf 属 `ecs-user(1000)` → `chown 999:1000 <conf>`（顺带 644→600，防密码被本机其他用户读到） |
 | 8 | 修完权限仍报 `Could not create tmp config file` | conf 挂载点 `/usr/local/etc/redis/` 在容器内属 **root** → 改挂到属 999 的 `/data` |

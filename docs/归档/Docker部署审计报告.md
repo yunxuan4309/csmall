@@ -17,7 +17,7 @@
 | 2 | 前端 `nginx.conf` 12 条 API 路径仅 1 条被代理（+ SSE 缓冲未关） | ✅ **已修**：已有 `/ai/chat/stream` 精确匹配 + `proxy_buffering off`；`location ~ ^/(admin\|sso\|oms\|front\|seckill\|ai\|search\|user\|ums\|pms\|resource\|ams)/` 全路径代理 + `/upload/` + 静态资源直供 | 已解决 |
 | 3 | 11 个微服务**没有健康检查端点** | ✅ **端点侧已解决**：11 个 webapi 模块 pom **全部引入** `spring-boot-starter-actuator`，11 个 `application.yml` **全部配置** `management.endpoints.web.exposure.include: health,info`；服务器实测 `/actuator/health` 返回 **200**<br>⏳ **但"容器级 healthcheck"仍未做**（compose 里 11 个微服务仍无 `healthcheck:`，`docker ps` 里只有 6 个中间件显示 `(healthy)`）→ **见 TODO #40（Step 1 已完成 / Step 2 待做）** | 已解决（**留一半给 #40**）|
 | 4 | JWT 签名密钥硬编码在 10 个模块 | ✅ **已修**（TODO #25）：11 容器 `JWT_SECRET` 实测为 **64 位随机值且互相同一**、非默认值 | 已解决 |
-| 5 | **真实 API Key 泄露在源码** | ✅ **已完全收口（2026-09-10 吊销旧 key + 轮换新值）**：<br>· DeepSeek key `sk-0ac9a54…` → **未进 git 历史** ✅<br>· 当前生产 DeepSeek key `sk-de931f…` → **未进 git 历史**（仅在被 gitignore 的本地 `.env`）✅<br>· **硅基流动 embedding key `sk-***（已吊销 2026-09-10）…` → 已随 commit `719ff6f` push 进"公开"仓库历史 = 已公开泄露** → **已于 2026-09-10 吊销并轮换新 key → TODO #44 ✅ 已完成**<br>· `git ls-files deploy` 复核：**21 个被跟踪文件全是模板/配置（只有 `.env.example`），无真 Key** ✅ | ✅ **已收口（2026-09-10 吊销+轮换）** |
+| 5 | **真实 API Key 泄露在源码** | ✅ **已完全收口（2026-09-10 吊销旧 key + 轮换新值）**：<br>· DeepSeek key `sk-****…` → **未进 git 历史** ✅<br>· 当前生产 DeepSeek key `sk-****…` → **未进 git 历史**（仅在被 gitignore 的本地 `.env`）✅<br>· **硅基流动 embedding key `sk-***（已吊销 2026-09-10）…` → 已随 commit `719ff6f` push 进"公开"仓库历史 = 已公开泄露** → **已于 2026-09-10 吊销并轮换新 key → TODO #44 ✅ 已完成**<br>· `git ls-files deploy` 复核：**21 个被跟踪文件全是模板/配置（只有 `.env.example`），无真 Key** ✅ | ✅ **已收口（2026-09-10 吊销+轮换）** |
 | 6 | CORS 域名硬编码 | ❌ **仍未做**：`mall-gateway-server/.../CorsConfig.java` 实测仍是 `addAllowedOrigin("http://…")` 硬编码 3 处 | 活待办 → **#22** |
 | 7 | systemd JAR 文件名不一致 | ⚪ **已失效**：项目已全量 Docker 化，systemd 部署方式弃用 | 过时 |
 | 8 | 前端遗留：明文密码日志 / 硬编码 IP | ✅ `console.log(password)` 实测**已清理**；⚪ 旧 IP `8.156.85.160` 仍散落在 5 份文档与 `deploy/*.env`（历史遗留，无功能影响）| 基本解决 |
@@ -196,7 +196,7 @@ Docker 中通过环境变量注入随机强密钥。
 ### 🟡 问题 5：真实 API Key 泄露在源码中
 
 **位置**：
-- `mall-ai/mall-ai-webapi/src/main/resources/application-test.yml` — DeepSeek API Key (`sk-0ac9a54...`) 和硅基流动 Key (`sk-***（已吊销 2026-09-10）...`)
+- `mall-ai/mall-ai-webapi/src/main/resources/application-test.yml` — DeepSeek API Key (`sk-****...`) 和硅基流动 Key (`sk-***（已吊销 2026-09-10）...`)
 - `deploy/systemd/csmall.env` — MySQL/Redis/RabbitMQ 密码 + DeepSeek Key
 
 **风险**：虽被 `.gitignore` 排除，但 Key 存在于本地文件系统和 Git 历史中。

@@ -188,7 +188,7 @@ D:\浏览器下载\elasticsearch-analysis-ik-8.6.0.zip
 
 ```bash
 # 1. 上传到服务器
-scp elasticsearch-analysis-ik-8.6.0.zip ai-claude@8.156.77.197:/tmp/
+scp elasticsearch-analysis-ik-8.6.0.zip <AI账号>@8.156.77.197:/tmp/
 
 # 2. 复制到容器并安装
 docker cp /tmp/elasticsearch-analysis-ik-8.6.0.zip csmall-es:/tmp/

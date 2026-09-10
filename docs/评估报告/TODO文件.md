@@ -142,7 +142,7 @@
 | **#55** | **SSH 暴露面：允许密码登录 + 允许 root 登录（两台）** | 🔴 **P1（2026-09-09 推送前安全审查发现）**：两台 `sshd_config` 均为 `PermitRootLogin yes` + `PasswordAuthentication yes`（无 drop-in 覆盖），而安全组 **22 端口对 `0.0.0.0/0` 开放** → 公网可**直接暴力破解**（阿里云 ECS 是扫描最密集的目标之一）。**方案**：① `PasswordAuthentication no`（`ecs-user` / `ai-*` 均已配置密钥登录，不影响使用）；② `PermitRootLogin prohibit-password`；③ 可选：安全组把 22 收紧到固定来源 IP。**⚠️ 操作顺序**：先确认密钥登录可用（`ssh -i <key> ecs-user@<ip>`）→ `sshd -t` 校验语法 → `systemctl reload sshd`（**reload 不断开现有连接**，比 restart 安全）。 |
 | **#56** | **公开仓库的信息暴露（服务器 IP / 拓扑 / 弱凭据事实）** | 🟡 **P3（2026-09-09 审查发现）**：`github.com/yunxuan4309/csmall` 是**公开仓库**（`private: false`），而文档系统性地记录了：两台服务器的**公网 + 私网 IP、主机名、端口拓扑、安全组放行清单**，以及"生产 RabbitMQ 用 `guest`"等事实。**风险**：攻击者无需扫描即可拿到完整攻击面（缓解：公网端口已被 SG 挡住、**真实密码未入库**、已实测生产 JWT/MySQL/Redis 值均未出现在仓库）。**方案（择一）**：① 仓库转私有；② 文档脱敏（IP → 占位符，但削弱可读性）；③ **接受**（学习项目、无真实凭据泄露、SG 是边界）—— **当前选择 ③，已记录在案**，待以后需要投简历/公开时再评估。 |
 | **#57** | **数据库 Schema 漂移：服务器是否已执行 ALTER 待核实** | 🟡 **P3（2026-09-10 文档核查发现，来源 [[数据库Schema漂移审计]]）**：该审计（2026-08-04；本地 MySQL 39 表 × mall-pojo 32 实体 × `database/` 34 个 SQL 三方对比）结论是"**本地已全部修复**（企业级升级过程中已补列），但**服务器部署前需执行 [[本次修改部署指南--2026-08-04]] 同款 ALTER**"。**待办**：① 用报告里的对比清单在服务器 `information_schema` 上做**一次只读核对**；② 若有差异 → 生成 ALTER 并在低峰执行；③ 核对完回填两份文档状态。 |
-| **#59** | **硅基流动账户余额不足（embedding 调用 402）→ 待充值** | 🟡 **P3（2026-09-10 换 key 时实测发现）**：新 key（`sk-loo****sask`）**认证有效**（`GET /v1/models` = **200**），但 `POST /v1/embeddings` 返回 **HTTP 402 `{"code":30001,"message":"Sorry, your account balance is insufficient"}`** → **`BAAI/bge-m3` 调用被拒**。项目文档曾记"BGE-M3 免费（2000 万 tokens）"，实测该免费额度当前**不足以调用**（可能已耗尽或政策变化）。<br>**影响**：生产 **`embedding-enabled: false`** → **线上功能零影响**（走 ES 全文检索，19 条商品照常可搜）；本地若开 `embedding-enabled: true` 会 402。<br>**🟢 用户决定（2026-09-10）：生产不开，之后充值** → 本项作为 **#31（生产启用向量检索）的前置条件**保留。<br>**待办**：① 硅基流动充值（小额即可，bge-m3 单价很低）② 充值后实测 `POST /v1/embeddings` 返回 200 + **1024 维**向量 → 再评估 #31。 |
+| **#59** | **硅基流动账户余额不足（embedding 调用 402）→ 待充值** | 🟡 **P3（2026-09-10 换 key 时实测发现）**：新 key（`sk-****`）**认证有效**（`GET /v1/models` = **200**），但 `POST /v1/embeddings` 返回 **HTTP 402 `{"code":30001,"message":"Sorry, your account balance is insufficient"}`** → **`BAAI/bge-m3` 调用被拒**。项目文档曾记"BGE-M3 免费（2000 万 tokens）"，实测该免费额度当前**不足以调用**（可能已耗尽或政策变化）。<br>**影响**：生产 **`embedding-enabled: false`** → **线上功能零影响**（走 ES 全文检索，19 条商品照常可搜）；本地若开 `embedding-enabled: true` 会 402。<br>**🟢 用户决定（2026-09-10）：生产不开，之后充值** → 本项作为 **#31（生产启用向量检索）的前置条件**保留。<br>**待办**：① 硅基流动充值（小额即可，bge-m3 单价很低）② 充值后实测 `POST /v1/embeddings` 返回 200 + **1024 维**向量 → 再评估 #31。 |
 | **#60** | **Spring AI 引入评估（结论：暂不引入，前置 = Boot 全站升级）** | 🟡 **P3（2026-09-10 评估，源自"模型配置能否适应更名/下架"的架构提问）**：<br>**诉求**：模型配置要能适应**未来模型更名 / 下架**（改名不改代码、不重编译）。<br>**现状实测**：**半可配** —— Key / API 地址已占位符化 ✅；但**模型名是字面量**（`chat-model: deepseek-chat`）+ **2 处硬编码在代码里**（`ChatServiceImpl:316` / `:367`）；prod **未覆盖** `cooxiao.ai` 段 → 生产模型名来自 jar 内 yml → **换模型必须重编译**。<br>**🟢 决策（2026-09-10）：本次不引入 Spring AI**，改为"**手写 + 模型配置可配化**"落地（随 #58 Step 1，第 1+2 层：占位符外置 + 能力档位层 `models`/`tasks`，代码永不出现模型名）→ 改名 = 改 `.env` + 重建 `mall-ai` 一个容器。<br>🔴 **不引入的硬理由**：Spring AI 官方支持代际为 **Boot 3.4.x→1.0.x / 3.5.x→1.1.x / 4.x→2.x**，**Boot 3.3 及更早不在支持范围** → 本项目 **Boot 3.2.5 低于支持下限**，接入必须先升 Boot ≥3.4，连带 **Spring Cloud 2023.0.3→2024.0.x + SCA 2023.0.1.2→新一代**，**11 个服务 + 跨机集群全量回归** = **全站框架升级项目**（非 AI 功能项目）。<br>**未来口子**：第 2 层"档位 + 任务映射"是**框架无关抽象**，将来迁到 Spring AI `ChatClient`/`ChatOptions` 可直接映射，本次投入不浪费。Spring AI 保留为 #32 的 **P2（框架化）**，触发条件 = 有 Boot 升级窗口。<br>📄 评估详见 [[AI模型名停用风险与thinking参数改造方案]] §4.5 / §4.6 / **§4.7（升级 Boot 影响面实测：Boot 版本在根 pom → 13 个模块全体继承，"只影响 AI 模块"不成立；连带 Spring Cloud 2023.0.3→2024.0.x + SCA 同代际 + springdoc/MP/Dubbo 等全套迁移 + 两台机器 12 个服务回归）** |
 
 > ✅ **#58 已完成并部署（2026-09-10）** —— AI 模型名停用风险 + `thinking` 开关 + **模型配置可配化**（含「双 bean 重复注册」隐患修复）。生产验证：路由日志恰好 1 次 / JSON 重排 5s / CHAT 4s / 预算记账正常 / 告警 0。详见 [[TODO已完成]] §十四 与 [[AI模型名停用风险与thinking参数改造方案]] §十一。
@@ -776,7 +776,7 @@ ERROR o.s.b.a.w.s.e.ErrorMvcAutoConfiguration$StaticView - Cannot render error p
 | # | 动作 | 状态 |
 |---|---|---|
 | 1 | 硅基流动控制台**吊销旧 key** | ✅ 用户已执行（旧 key 从此失效，故 git 历史里那串**已无害**）|
-| 2 | 生成新 key（`sk-loo****sask`，51 字符） | ✅ 用户已生成 |
+| 2 | 生成新 key（`sk-****`，51 字符） | ✅ 用户已生成 |
 | 3 | **全仓库评估**「换 key 要改哪些地方」（含 1 次循环检查） | ✅ 已完成，结论见下 |
 | 4 | 本地 `.env` 换新值 | ✅ `deploy/docker/.env`（替换）＋ `mall-ai/.env`、`deploy/systemd/csmall.env`、`deploy/csmall.env`（**原本就缺这行，已补齐**）|
 | 5 | 服务器 `/data/csmall/.env` 换新值 | ⏳ **待用户执行**（属主 `ecs-user`，AI 账号无写权限）|
@@ -810,7 +810,7 @@ ERROR o.s.b.a.w.s.e.ErrorMvcAutoConfiguration$StaticView - Cannot render error p
 > **佐证"从未跑过向量"**：ES mapping 里**根本没有 `vector` 字段**、`{"exists":{"field":"vector"}}` = **0 条**；而 `{"exists":{"field":"semanticText"}}` = **19 条** → 说明**"拼语义文本"这步一直跑，"算向量"这步被开关跳过**（所以随时可无损开启）。
 
 **🔁 循环检查（1 遍）额外发现**：
-- ⚠️ **`.idea/workspace.xml:407` 硬编码了另一个旧 DeepSeek key（`sk-8f73ae…`）** —— 这是 **IDE Run Configuration 的经典坑**（IDE 环境变量优先级最高、会覆盖 `.env`，本项目 2026-09-08 就因此排查过 401）。**与 #44 无关但同类风险**，建议清理（见下方）。
+- ⚠️ **`.idea/workspace.xml:407` 硬编码了另一个旧 DeepSeek key（`sk-****…`）** —— 这是 **IDE Run Configuration 的经典坑**（IDE 环境变量优先级最高、会覆盖 `.env`，本项目 2026-09-08 就因此排查过 401）。**与 #44 无关但同类风险**，建议清理（见下方）。
 - ✅ 本机**没有**持久化的 `EMBEDDING_API_KEY` / `EMBEDDING_API_KEY_LOCAL` 用户级/系统级环境变量（`application-test.yml` 的 fallback 会落到 `sk-placeholder`）。
 - ✅ 前端仓库、`work/` 临时目录、其它 compose 文件均无 key 命中。
 
@@ -818,9 +818,9 @@ ERROR o.s.b.a.w.s.e.ErrorMvcAutoConfiguration$StaticView - Cannot render error p
 
 | # | 验证项 | 结果 |
 |---|---|---|
-| 1 | 旧 key 是否真吊销 | ✅ **已吊销**：实测 `POST /v1/embeddings` 与 `GET /v1/models` 均返回 **HTTP 401 `{"code":30014,"message":"Token is invalid."}`**（旧 key `sk-pffsuu****nllw`，从 commit `719ff6f` 取出验证）|
+| 1 | 旧 key 是否真吊销 | ✅ **已吊销**：实测 `POST /v1/embeddings` 与 `GET /v1/models` 均返回 **HTTP 401 `{"code":30014,"message":"Token is invalid."}`**（旧 key `sk-****`，从 commit `719ff6f` 取出验证）|
 | 2 | 新 key 认证是否有效 | ✅ **有效**：`GET /v1/models` 返回 **HTTP 200** + 模型列表 |
-| 3 | 服务器 `.env` 是否已换 | ✅ 已换（`EMBEDDING_API_KEY=sk-loo****sask`），**属主/权限原样保留** `ecs-user:ecs-user 664`，备份 `.env.bak.20260910_150217`；原文件 950B → 987B（**+37B 与密钥长度差完全吻合**，证明只改了目标行）；`docker compose config` 解析通过 |
+| 3 | 服务器 `.env` 是否已换 | ✅ 已换（`EMBEDDING_API_KEY=sk-****`），**属主/权限原样保留** `ecs-user:ecs-user 664`，备份 `.env.bak.20260910_150217`；原文件 950B → 987B（**+37B 与密钥长度差完全吻合**，证明只改了目标行）；`docker compose config` 解析通过 |
 | 4 | 容器是否已生效 | ✅ `docker compose up -d --no-deps mall-ai` 重建成功；容器 env 实测已是新 key；**health 200 @ 50s**、Nacos 注册完成、老机仍 **21 容器**（只动了 mall-ai）|
 | 5 | ⚠️ **新 key 能否真正调用 embedding** | 🔴 **不能 —— HTTP 402 `{"code":30001,"message":"Sorry, your account balance is insufficient"}`** |
 
@@ -843,7 +843,7 @@ docker inspect csmall-ai --format '{{range .Config.Env}}{{println .}}{{end}}' | 
 
 > **注**：当前 `embedding-enabled: false`，所以**功能上不验证也不会报错**；等 #31 决定开启时再验"向量化成功"即可。
 
-**建议顺手做（IDE 旧 key）**：`D:\java\csmall\.idea\workspace.xml` 第 407 行 `<env name="AI_API_KEY" value="sk-8f73ae…" />` 是**已被替换的旧 DeepSeek key**，建议删除该 env 项（`.idea/` 已 gitignore，不入库；但会**静默覆盖**系统变量与 `.env`，是排查"配置不生效"的头号嫌疑）。
+**建议顺手做（IDE 旧 key）**：`D:\java\csmall\.idea\workspace.xml` 第 407 行 `<env name="AI_API_KEY" value="sk-****…" />` 是**已被替换的旧 DeepSeek key**，建议删除该 env 项（`.idea/` 已 gitignore，不入库；但会**静默覆盖**系统变量与 `.env`，是排查"配置不生效"的头号嫌疑）。
 
 > **教训**：API key 绝不硬编码进 yml/代码；test 环境也要用占位符 + 环境变量注入。已改占位符见 commit c0d7209。**另外：`.env` 类文件要"整族同步"** —— 本次发现 3 个 env 文件缺 `EMBEDDING_API_KEY`，说明"只改一个 `.env`"的做法会留下静默缺口。
 
@@ -870,7 +870,7 @@ docker inspect csmall-ai --format '{{range .Config.Env}}{{println .}}{{end}}' | 
 - k3s 仅作为第三阶段"编排概念"锦上添花，不是双实例的前提
 
 **硬件评估**：新服务器 **2核8G 同地域同 VPC**（成都，内网互通）足够——Redis 从 ~100M + 秒杀副本(-Xmx256m) ~500M，8G 富余。老机需先做 R7 腾内存（前提铁律）。
-> ✅ **2026-09-09 已按此规格开通**：`csmall-node2` 47.109.70.197 / 私网 172.29.193.240（2C8G 经济型 e，同 VPC 同安全组，内网实测 0.43ms），Docker + ai-deepseek 账号就绪。
+> ✅ **2026-09-09 已按此规格开通**：`csmall-node2` 47.109.70.197 / 私网 172.29.193.240（2C8G 经济型 e，同 VPC 同安全组，内网实测 0.43ms），Docker + <AI账号> 账号就绪。
 
 **分阶段（每步可独立演示/回滚/不碰其他容器）**：
 1. A：跨机 Redis 主从+哨兵 → kill 主演示切换（~半天）
@@ -929,7 +929,7 @@ docker inspect csmall-ai --format '{{range .Config.Env}}{{println .}}{{end}}' | 
 | 阶段 | 内容 | 前置 | 风险 | 状态 |
 |---|---|---|---|---|
 | **0** | **代码改造**：`MessageRetryTask` + `SeckillReconcileTask` 加 Redis 分布式锁（SETNX+TTL，可复用 `IdempotentAspect`/`SeckillServiceImpl` 已有 `setIfAbsent` 写法）→ 本地编译验证（不部署） | 无（纯本地，**可立即开工**） | 🟢 低 | ✅ **完成（2026-09-09）**：`RedisLockUtils`（SETNX+Lua CAS）+ 2 任务包锁；**9/9 单测 + 本地双实例联调全通过**（4 次漂移恰好 4 次修正、无重复执行、锁无残留）→ 见 [[本地双实例锁验证报告-2026-09-09]]；待阶段 4 部署到服务器复验 |
-| 1 | 新机就绪：采购 + ssh 打通 + Docker 安装 | — | 🟢 | ✅ 已完成（2026-09-09：Docker 29.8.0 + Compose v5.5.1 + ai-deepseek 账号） |
+| 1 | 新机就绪：采购 + ssh 打通 + Docker 安装 | — | 🟢 | ✅ 已完成（2026-09-09：Docker 29.8.0 + Compose v5.5.1 + <AI账号> 账号） |
 | **A** | **新机铺路**：compose 新增 5 服务 + 4 个 Redis/哨兵配置 + `.env` + agent 就位 | 阶段 1 | 🟢 | ✅ **已完成（2026-09-09）**：新机实测验证（文件齐/agent 23972028B/conf 密码行 2-1-1-1/compose exit=0/容器数 0）；见 [[跨机集群实施执行清单-2026-09-09]] §四·五 |
 | 2 | 老机端口放行：2a MySQL 3306 / Redis 6379 改绑 `172.29.193.239`；2b product/order Dubbo 端口发布 + 注册宿主 IP | **维护窗口** | 🟡 中 | ✅ **已完成（2026-09-09 窗口 A）**：3306/6379 绑私网 IP、product/order 注册 `172.29.193.239:20880/20881`；跨机 4 端口全通、消费方动态切换成功、Dubbo 错误 0 条、21 容器零重启 → 见 [[跨机集群实施执行清单-2026-09-09]] §4.5 |
 | 3 | 新机起 Redis 从 + 3 哨兵 → 验证主从复制 + kill 主演练自动切换 | 阶段 2 | 🟡 中 | ✅ **已完成（2026-09-09）**：副本 `master_link_status:up`、主从 21 键一致、副本只读拒写、3 哨兵 `quorum=2` 视角一致、配置持久化修通（踩坑 3 层：权限/目录/单文件挂载无法 rename）→ 见 [[跨机集群实施执行清单-2026-09-09]] §5.5 |
@@ -1018,7 +1018,7 @@ docker inspect csmall-ai --format '{{range .Config.Env}}{{println .}}{{end}}' | 
 > | `AI智能导购模块开发计划` | 它是**开发计划/设计文档**（与 `问题解决/` 其余 30 篇性质不同）；**四阶段已 100% 完成**；文内"当前配置/接口清单"**已漂移 5 处** | 加头注：**清单类内容一律以代码为准** + 逐项列出漂移对照 |
 > | `Docker部署审计报告` | **一次性基线快照**，核心结论「不能直接 Docker 部署」已完全过时（21 容器在跑）；8 项发现 5 项已解决、1 项失效（systemd）、2 项转 TODO（#40 Step2 / #22）| 加**「归档时现状对照表」**（逐项实测），并确认 #44 等活待办在 TODO 里仍活着（**#44 已于 2026-09-10 完成**）|
 
-> 🔴 **归档这份审计报告时的重要复核发现**：其"问题 5（真实 API Key 泄露）"**未完全收口** —— 硅基流动 embedding key `sk-***（已吊销 2026-09-10）…` **已随 commit `719ff6f` push 进公开仓库历史 = 已公开泄露**，对应 **#44 ✅ 已于 2026-09-10 吊销并轮换**（详见上方 §44）；而 DeepSeek 的两个 key（`sk-0ac9a54…`、当前生产 `sk-de931f…`）实测**均未进 git 历史**（`git ls-files deploy` 21 个被跟踪文件全为模板/配置，无真 Key）。
+> 🔴 **归档这份审计报告时的重要复核发现**：其"问题 5（真实 API Key 泄露）"**未完全收口** —— 硅基流动 embedding key `sk-***（已吊销 2026-09-10）…` **已随 commit `719ff6f` push 进公开仓库历史 = 已公开泄露**，对应 **#44 ✅ 已于 2026-09-10 吊销并轮换**（详见上方 §44）；而 DeepSeek 的两个 key（`sk-****…`、当前生产 `sk-****…`）实测**均未进 git 历史**（`git ls-files deploy` 21 个被跟踪文件全为模板/配置，无真 Key）。
 
 ### ✅ C. 本次一并修正的「状态头过期」7 个（另一种文档漂移，已全部修正）
 
