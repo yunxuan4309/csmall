@@ -3,6 +3,10 @@ package com.cooxiao.mall.ai.service.impl;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.cooxiao.mall.ai.client.AiClient;
+import com.cooxiao.mall.ai.client.AiToolCall;
+import com.cooxiao.mall.ai.client.AiToolRound;
+import com.cooxiao.mall.ai.config.AiProperties;
+import com.cooxiao.mall.ai.config.AiTask;
 import com.cooxiao.mall.ai.model.SearchIntent;
 import com.cooxiao.mall.ai.service.SearchPipeline;
 import com.cooxiao.mall.ai.service.PreferenceExtractor;
@@ -33,6 +37,8 @@ import java.util.concurrent.Executors;
 public class ChatServiceImpl {
 
     private static final int SEARCH_TOP_K = 10;
+    /** Agent 回放的历史消息条数上限：工具轮请求体最大（含 tools schema + observation），历史必须封顶 */
+    private static final int AGENT_HISTORY_LIMIT = 8;
     private static final ExecutorService SSE_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     @PreDestroy
@@ -44,6 +50,8 @@ public class ChatServiceImpl {
     @Autowired private RagServiceImpl ragService;
     @Autowired private SearchPipeline searchPipeline;
     @Autowired private AiClient aiClient;
+    @Autowired private AiProperties aiProperties;
+    @Autowired private ToolRegistry toolRegistry;
 
     /** 创建新会话 */
     public ChatResultVO createSession(Long userId) {
@@ -65,6 +73,20 @@ public class ChatServiceImpl {
         ChatSession session = loadOrCreate(userId, sessionId);
         if (budgetExceeded(sessionId)) return budgetExceededVO(session);
 
+        // TODO #32 P0：Agent 分支（开关默认关）。任何异常都降级回固定流水线 ——
+        // 新链路的探索成本不能转嫁给用户，最差也要给出与升级前完全一致的答案。
+        if (aiProperties.isAgentEnabled()) {
+            try {
+                return sendWithAgent(session, message);
+            } catch (Exception e) {
+                log.warn("Agent 流程异常，降级为固定流水线：{}", e.getMessage(), e);
+            }
+        }
+        return sendWithPipeline(session, message);
+    }
+
+    /** 固定流水线：AI 意图提取 → ES 结构化检索 → 拼接上下文 → 生成回答（Agent 关闭时的唯一路径） */
+    private ChatResultVO sendWithPipeline(ChatSession session, String message) {
         // 1. AI 提取搜索意图（替代正则猜预算）
         SearchIntent intent = extractSearchIntent(message, session);
         log.info("AI 提取搜索意图: {}", JSON.toJSONString(intent));
@@ -105,6 +127,121 @@ public class ChatServiceImpl {
         vo.setPreferences(session.getPreferences());
         vo.setRelatedProducts(relatedProducts);
         return vo;
+    }
+
+    // ================================================================
+    // Agent 分支（TODO #32 P0：Function Calling）
+    // ================================================================
+
+    /**
+     * 让模型自己决定"查什么、查几次、够不够"：模型发起 {@code search_products} → 本地执行检索
+     * → 回灌 observation → 下一轮；模型不再请求工具时那一轮的正文就是最终回答。
+     *
+     * <p>本方法<b>不写 SSE</b>（流式 + 工具的收敛是 P1 的事），只服务同步接口 {@code /ai/chat/send}。
+     */
+    private ChatResultVO sendWithAgent(ChatSession session, String message) {
+        List<Map<String, Object>> messages = new ArrayList<>();
+        messages.add(msg("system", buildAgentSystemPrompt(session.getPreferences())));
+
+        // 历史只回放 role/content 正文：工具调用过程不跨轮持久化（上一步的工具结果没必要在下一步重放）
+        List<ChatMessage> history = session.getMessages();
+        for (int i = Math.max(0, history.size() - AGENT_HISTORY_LIMIT); i < history.size(); i++) {
+            ChatMessage hist = history.get(i);
+            messages.add(msg(hist.getRole(), hist.getContent()));
+        }
+        messages.add(msg("user", message));
+
+        List<Map<String, Object>> tools = toolRegistry.toolSchemas();
+        List<Map<String, Object>> hits = List.of();
+        int maxRounds = Math.max(1, aiProperties.getAgentMaxRounds());
+
+        for (int round = 1; round <= maxRounds; round++) {
+            AiToolRound toolRound = aiClient.chatWithTools(messages, tools);
+
+            if (!toolRound.hasToolCalls()) {
+                // ✅ 收敛：模型认为信息够了，本轮的正文就是最终回答
+                String reply = (toolRound.content() == null || toolRound.content().isBlank())
+                        ? finalAnswerWithoutTools(messages)   // 罕见：既不调工具又没正文 → 再问一次要答案
+                        : toolRound.content();
+                log.info("Agent 第 {} 轮收敛：命中商品 {} 条，回答 {} 字", round, hits.size(),
+                        reply == null ? 0 : reply.length());
+                return buildAgentResult(session, message, reply, hits);
+            }
+
+            // 模型要工具：assistant 消息（含 tool_calls）必须原样入栈，否则回灌的 tool 消息无处挂靠
+            messages.add(toolRound.assistantMessage());
+            for (AiToolCall call : toolRound.toolCalls()) {
+                AiTool tool = toolRegistry.find(call.name());
+                AiToolResult result = tool == null
+                        ? AiToolResult.error("未知工具 " + call.name())
+                        : tool.execute(call.args());
+                if (result.hits() != null && !result.hits().isEmpty()) {
+                    hits = result.hits();   // 取"最近一次真正有命中"的结果给前端（模型可能多次调用）
+                }
+                messages.add(toolMessage(call.id(), result.observation()));
+            }
+            log.info("Agent 第 {} 轮：调用工具 {} 次，累计命中 {} 条", round, toolRound.toolCalls().size(), hits.size());
+        }
+
+        // ⛔ 轮数用尽：摘掉 tools 逼它用已有信息作答，而不是把"超出轮数"这种内部细节抛给用户
+        log.warn("Agent 达到最大轮数 {}，强制收口", maxRounds);
+        return buildAgentResult(session, message, finalAnswerWithoutTools(messages), hits);
+    }
+
+    /** 最后一次调用不带工具：把已有 observation 压成最终回答（也用于"既不调工具又没正文"的兜底） */
+    private String finalAnswerWithoutTools(List<Map<String, Object>> messages) {
+        List<Map<String, Object>> finalMessages = new ArrayList<>(messages);
+        finalMessages.add(msg("user", "请立即基于以上工具返回的真实商品信息给出最终推荐，不要再请求调用工具。"));
+        return aiClient.chat(AiTask.AGENT, finalMessages);
+    }
+
+    private ChatResultVO buildAgentResult(ChatSession session, String message, String reply,
+                                          List<Map<String, Object>> hits) {
+        List<RelatedProductVO> relatedProducts = ragService.buildRelatedProducts(hits);
+        if (reply == null || reply.isBlank()) {
+            log.warn("Agent 最终回答为空，返回降级话术");
+            return errorVO(session, relatedProducts);
+        }
+        saveSession(session, message, reply);
+
+        ChatResultVO vo = new ChatResultVO();
+        vo.setSessionId(session.getSessionId());
+        vo.setReply(reply);
+        vo.setPreferences(session.getPreferences());
+        vo.setRelatedProducts(relatedProducts);
+        return vo;
+    }
+
+    private String buildAgentSystemPrompt(Map<String, Object> preferences) {
+        return """
+                你是CoolShark电商平台的智能导购助手，可以调用工具查询真实的商品库。
+
+                工作方式：
+                1. 用户想找商品时，必须先调用 search_products 工具取真实数据，不要凭记忆回答
+                2. 一次调用只表达一组条件；条件不同（不同价位/不同品类）就分多次调用
+                3. 工具返回 count=0 时，可放宽条件（去掉品牌或价格）再试一次；仍为空才如实告知用户暂无匹配商品
+                4. 推荐必须基于工具返回的商品，不得编造名称、价格、销量；不要罗列全部商品，挑最合适的 2~4 个并说明理由
+                5. 信息足够时直接给出最终回答，不要再调用工具
+
+                用户历史偏好（仅供理解需求，不是硬约束）：
+                %s
+                """.formatted(preferences.isEmpty() ? "暂无" : buildPreferenceContext(preferences));
+    }
+
+    /** 构造消息：统一 null 兜底（{@code Map.of} 遇到 null 值会直接 NPE，而历史里确实可能出现 null 正文） */
+    private static Map<String, Object> msg(String role, String content) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("role", role == null ? "user" : role);
+        m.put("content", content == null ? "" : content);
+        return m;
+    }
+
+    private static Map<String, Object> toolMessage(String toolCallId, String observation) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("role", "tool");
+        m.put("tool_call_id", toolCallId == null ? "" : toolCallId);
+        m.put("content", observation == null ? "" : observation);
+        return m;
     }
 
     // ================================================================

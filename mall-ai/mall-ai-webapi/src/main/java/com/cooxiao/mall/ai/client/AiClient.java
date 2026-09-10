@@ -55,4 +55,16 @@ public interface AiClient {
      * <p>并发闸门与预算记账均在实现内完成，调用方不需要重复处理。
      */
     void streamChat(List<Map<String, Object>> messages, Consumer<String> onChunk) throws Exception;
+
+    /**
+     * 带工具的一次调用（Function Calling，{@link AiTask#AGENT}）—— Agent 循环的"一拍"。
+     *
+     * <p>请求体固定为：{@code tools} + {@code tool_choice=auto} + <b>{@code thinking=disabled}</b>，
+     * 且 <b>绝不携带 {@code response_format}</b>（实测：二者同时出现则模型不返回 {@code tool_calls}，
+     * 见 [[AI导购Agent升级方案]] §〇 校正⑦）。
+     *
+     * <p>调用方拿到 {@link AiToolRound} 后：有工具调用就执行并回灌 {@code assistantMessage} + {@code role=tool} 结果，
+     * 没有工具调用就收敛到最终答案。轮数上限由调用方控制（{@code cooxiao.ai.agent-max-rounds}）。
+     */
+    AiToolRound chatWithTools(List<Map<String, Object>> messages, List<Map<String, Object>> tools);
 }

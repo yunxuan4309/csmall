@@ -1,6 +1,7 @@
 package com.cooxiao.mall.ai.client;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.cooxiao.mall.ai.config.AiConcurrencyGuard;
 import com.cooxiao.mall.ai.config.AiProperties;
@@ -112,6 +113,85 @@ public class DeepSeekAiClient implements AiClient {
         } finally {
             concurrencyGuard.release();
         }
+    }
+
+    // ================================================================
+    // Function Calling（TODO #32 P0）
+    // ================================================================
+
+    @Override
+    public AiToolRound chatWithTools(List<Map<String, Object>> messages, List<Map<String, Object>> tools) {
+        checkBudget();
+        AiTask task = AiTask.AGENT;
+        Map<String, Object> body = buildToolBody(task, messages, tools);
+        log.debug("调用 AI（带工具）：task={}, model={}, tools={}",
+                task.key(), body.get("model"), tools == null ? 0 : tools.size());
+
+        concurrencyGuard.acquire("chat:" + task.key());
+        try {
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                    aiProperties.getBaseUrl() + CHAT_COMPLETIONS_PATH,
+                    new HttpEntity<>(body, buildHeaders()),
+                    String.class);
+
+            JSONObject json = JSON.parseObject(response.getBody());
+            recordUsage(json);
+            return parseToolRound(json);
+        } finally {
+            concurrencyGuard.release();
+        }
+    }
+
+    /**
+     * 工具轮请求体 = {@link #buildBody} 的结果 + {@code tools} + {@code tool_choice=auto}。
+     * <p>复用 {@code buildBody} 保证"模型/思考/温度/max_tokens 只有一处定义"；
+     * 又因为 {@link AiTask#AGENT} 不是 JSON 任务，{@code buildBody} <b>天然不会加 response_format</b> ——
+     * 这正是必需的行为（实测二者共存时模型不再返回 tool_calls，见 TODO #32 校正⑦）。
+     */
+    private Map<String, Object> buildToolBody(AiTask task, List<Map<String, Object>> messages,
+                                             List<Map<String, Object>> tools) {
+        Map<String, Object> body = buildBody(task, messages);
+        body.put("tools", tools == null ? List.of() : tools);
+        body.put("tool_choice", "auto");
+        return body;
+    }
+
+    /** 解析 {@code choices[0].message} → {@link AiToolRound}（含可回灌的 assistant 消息） */
+    private AiToolRound parseToolRound(JSONObject json) {
+        JSONObject message = json.getJSONArray("choices").getJSONObject(0).getJSONObject("message");
+        String content = message.getString("content");
+
+        List<AiToolCall> calls = new ArrayList<>();
+        JSONArray rawToolCalls = message.getJSONArray("tool_calls");
+        if (rawToolCalls != null) {
+            for (int i = 0; i < rawToolCalls.size(); i++) {
+                JSONObject call = rawToolCalls.getJSONObject(i);
+                JSONObject function = call.getJSONObject("function");
+                calls.add(new AiToolCall(
+                        call.getString("id"),
+                        function == null ? null : function.getString("name"),
+                        function == null ? null : function.getString("arguments")));
+            }
+        }
+
+        // 回灌用的 assistant 消息：tool_calls 必须原样带回（OpenAI 协议要求 id/type/function 齐全）。
+        // reasoning_content 刻意不带 —— 工具轮 thinking=disabled 本就没有；若开思考则必须回传，否则接口 400。
+        Map<String, Object> assistant = new HashMap<>();
+        assistant.put("role", "assistant");
+        assistant.put("content", content == null ? "" : content);
+        if (!calls.isEmpty()) {
+            List<Map<String, Object>> rawCalls = new ArrayList<>();
+            for (AiToolCall call : calls) {
+                rawCalls.add(Map.of(
+                        "id", call.id(),
+                        "type", "function",
+                        "function", Map.of(
+                                "name", call.name() == null ? "" : call.name(),
+                                "arguments", call.argumentsJson() == null ? "{}" : call.argumentsJson())));
+            }
+            assistant.put("tool_calls", rawCalls);
+        }
+        return new AiToolRound(content, calls, assistant);
     }
 
     // ================================================================

@@ -30,6 +30,19 @@ public enum AiTask {
     /** 查询扩展：输出空格分隔的关键词（纯文本）—— 思考模式<b>关</b>，但<b>不下发</b> {@code response_format} */
     EXPAND("expand"),
 
+    /**
+     * Agent 工具选择轮（Function Calling，TODO #32）—— 思考模式<b>关</b>、<b>不带</b> {@code response_format}。
+     *
+     * <p>⚠️ 两条实测结论决定了它必须这样配（2026-09-10，见 [[AI模型名停用风险与thinking参数改造方案]] §3.1）：
+     * <ol>
+     *   <li><b>必须关思考</b>：思考模式 + {@code tools} 时，历史 assistant 消息必须回传 {@code reasoning_content}，
+     *       否则接口 **400**；关掉思考即从根上绕开这条规则</li>
+     *   <li><b>不能带 response_format</b>：同时给出 {@code tools} 与 {@code response_format} 时，
+     *       模型会直接输出 JSON、<b>不再触发 tool_calls</b></li>
+     * </ol>
+     */
+    AGENT("agent"),
+
     /** 商品对比摘要（需要推理，思考模式开）；当前与 CHAT 同档，单列便于将来单独调档 */
     COMPARE("compare");
 

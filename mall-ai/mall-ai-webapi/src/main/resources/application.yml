@@ -55,6 +55,12 @@ cooxiao:
         tier: flash
         thinking: false
         temperature: 0.3
+      # Agent 工具选择轮（Function Calling，TODO #32）—— 必须关思考（否则触发 reasoning_content 回传 400）
+      # 且**绝不能带 response_format**（带了模型就只输出 JSON、不再调工具）
+      agent:
+        tier: flash
+        thinking: false
+        max-tokens: 1000
       # 商品对比摘要
       compare:
         tier: flash
