@@ -1,8 +1,142 @@
 # AI 导购 Agent 升级方案
 
-> **状态**: 📋 **技术方案已出（2026-09-02），待用户决策** —— **尚未实施，也尚未评估要不要做（不是「不执行」）**（2026-09-10 用户澄清）
-> **关联**: [[TODO文件]]#32、[[面试准备/09-AI模块]] Q0/Q12
+> **状态**: ✅ **已敲定实施（2026-09-11 用户拍板：做）** —— 按 **P0 → P1** 分期推进（P2 可选）；**实施前必读「〇、决策记录 + 实施前代码校正」**（其中 6 条校正来自读码实测，照原稿做会踩空）
+> **关联**: [[TODO文件]]#32、[[面试准备/09-AI模块]] Q0/Q12、**[[AI模型名停用风险与thinking参数改造方案]]（#58，与本项强相关，见校正⑥）**
 > **定位**: 技术演示增强 + 面试素材(业务收益为零——生产 0 调用,简历未投)
+
+---
+
+## 〇、决策记录 + 实施前代码校正（2026-09-11 敲定）
+
+### 1. 决策（用户 2026-09-11 拍板）
+
+| 项 | 结论 |
+|---|---|
+| **做不做** | ✅ **做**。定位不变：**演示增强 + 面试素材**，业务收益为零（生产 0 调用） |
+| **范围** | **P0（最小 Function Calling，首个可见里程碑）→ P1（完整单 Agent）**；P2 框架化仍可选 |
+| **入口开关** | 新增 `cooxiao.ai.agent-enabled`（默认 `false`，灰度切换，与 `embedding-enabled` 同套路） |
+| **对外接口** | `/ai/ask`、`/ai/chat/send`、`/ai/chat/stream` **全部不变**（前端无感） |
+| **本期不做** | 写操作（加购/下单）不给 AI 执行权——只"建议"，或**根本不暴露写工具** |
+
+### 2. 实施前代码校正（读码实测，⚠️ 照原稿做会踩空）
+
+> 原方案（2026-09-02）是**设计稿**，未逐条对代码核实。本次敲定时发现 **6 处需修正**：
+
+| # | 原稿写法 | 代码事实（证据） | 校正 |
+|---|---|---|---|
+| ① | P1「**动作审计**：AgentActionLog（**先 Redis 后 DB + Flyway**，参考 IoT DecisionLog 表）」 | 🔴 **`mall-ai` 没有任何数据库栈**：`pom.xml` 无 JDBC / MyBatis / MySQL driver / Flyway；无 `db/migration` 目录；`application*.yml` 无 `spring.datasource`。它本来就是**无状态服务**（只用 Redis + ES + Dubbo） | **改为只落 Redis**：key `ai:agent:action:{sessionId}`（List：`LPUSH` + `LTRIM 0 49` + `EXPIRE` 7 天）。**DB 化降为可选 P2**——给 mall-ai 加数据源等于引入一整套持久化栈，与"无状态"定位冲突，收益仅是演示 |
+| ② | P0「DeepSeekAiClient 支持 `tools` + 解析 `tool_calls`」 | 消息类型是 `List<Map<String, String>>`（`AiClient` 接口 2 个 `chat` 重载 + `doChat`）。但 tool 场景的 message **不是纯 String**：assistant 消息带 `tool_calls` 数组、`role:"tool"` 消息带 `tool_call_id` | **必须先把消息类型加宽为 `List<Map<String, Object>>`**：涉及 `AiClient`（接口）+ `DeepSeekAiClient`（**保留 String 版兼容重载**，避免动所有调用方）+ `ChatServiceImpl.buildMessages` |
+| ③ | P0「ChatServiceImpl 改造：请求带 tools → … → 流式回复」 | **LLM 调用有两条独立路径**：同步走 `AiClient.doChat`（RestTemplate）；**SSE 流式走 `ChatServiceImpl.doStreamDeepSeek`（裸 `HttpURLConnection`、模型硬编码 `deepseek-v4-flash`、`stream=true`）**——两份请求体各写各的 | **Agent 循环只放"非流式"路径**：新增 `DeepSeekAiClient.chatWithTools(...)`（`stream=false`）跑 1~3 轮工具；**最后一轮再复用现有 `streamDeepSeek`** 吐答案给用户。**不要**去 SSE delta 里解析 `tool_calls`（分片增量，拼接解析复杂、收益为零） |
+| ④ | P0「工具 `search_products` 复用 `RagServiceImpl.intentSearch` / `SearchServiceImpl`」 | `RagServiceImpl.intentSearch(...)`、`buildContext(...)`、`buildRelatedProducts(...)` 是**包私有方法**（无修饰符，仅 `com.cooxiao.mall.ai.service.impl` 包内可见）；`public` 的只有 `ask(...)` / `structuredSearch(...)` / `fullTextSearchNoPrice(...)` | 工具实现类**放进 `...ai.service.impl` 同包**（最省事），或改用 public 方法。**不要新建包放工具类**（会调不通） |
+| ⑤ | 未提 | 预算/闸门/限流设施已齐备：`TokenBudgetService`（2 元/天）、`AiConcurrencyGuard`（并发 20，满即失败不排队）、Sentinel 三组规则（`ai-chat=5` / `ai-reason=10` / `ai-light=30`）、`AiUserRateLimiter`（60s/10 次）；且 `doChat` 内**已自带** `checkBudget()` + `usage` 记账 | **全部复用，不新建**。但要注意：Agent 循环把 LLM 调用数**放大最多 3 倍** → 对 `concurrent-max` 与日预算的压力要能讲清（演示环境 0 调用，可接受） |
+| ⑥ | 未提 | 生产 `chat-model: deepseek-chat`，而该模型名**已被官方公告停用**（见 **[[TODO文件]]#58**）；DeepSeek 的正解是"同一模型 + `thinking` 开关"（`{"thinking":{"type":"disabled"}}`） | **与 #58 强耦合**：Agent 的**工具选择必须是稳定 JSON（`tool_calls`）** → 建议 **#58 与 #32 同期落地**（先做 thinking 开关改造，再在其上做 Function Calling），否则"模型名随时失效"的风险会直接压在新功能上 |
+
+| ⑦ | P0 S3 未提 | 🔴 实测（2026-09-11 实验 F）：**`tools` 与 `response_format: json_object` 不能共存** —— 带上 `response_format` 时模型**直接输出 JSON，不再触发 `tool_calls`**（`finish_reason=stop`） | 工具选择轮**只带 `tools`，不设 `response_format`**；工具参数的稳定性靠 **JSON Schema 约束 + 服务端二次校验**（不是靠 json mode）。⚠️ 现有 `chatWithModel(jsonMode=true)` 与 Function Calling **不兼容**，两者必须分开走 |
+
+### 3. 🔬 2026-09-11 实测复验（可行性已证实）
+
+> 与 [[AI模型名停用风险与thinking参数改造方案]] §3.1 **同一批实验**（老机直连 DeepSeek，最小请求，`max_tokens` 50~300）——**不凭文档引述，直接验证 P0 路线成立**：
+
+| 实验 | 输入 | 结果 | 对本方案的意义 |
+|---|---|---|---|
+| **E** | `thinking: disabled` + `tools` + "推荐 5000 以内的手机" | **200**，`finish_reason=tool_calls`，**`tool_calls` 1 个**，参数 `{"keywords":"手机","budgetMax":5000}` | ✅ **P0 可行性证实**：模型确实**主动调工具**、参数抽取准确 → S3/S4/S5 路线成立 |
+| **C** | `thinking: disabled` + `tools` + 历史消息**不带** `reasoning_content` | **200** | ✅ **工具轮用 `disabled` 可绕开官方 400 规则**（"思考模式 + tools 必须回传 `reasoning_content`"，实验 B 实测 400）→ **这是 P0 的关键设计依据** |
+| **F** | `thinking: disabled` + `tools` + `response_format: json_object` | **200 但 `tool_calls` 为空**，模型直接返回 JSON | 🔴 **新坑 → 校正⑦**：工具轮**绝不能设 `response_format`** |
+
+> ⚠️ **附带结论（写进代码注释）**：既然工具轮用 `thinking: disabled`，就**不需要维护 `reasoning_content` 回传链路**（那是 thinking enabled + tools 才有的负担）。这是"工具轮 disabled"设计除稳定性之外的**第二个收益**。
+
+### 4. 建议落地顺序
+
+```
+① #58 thinking 开关改造（只动 mall-ai，~几十行 + 1 个容器重建）   ← 先做：给 Agent 一个稳定的模型契约
+② #32-P0 最小 Function Calling（~0.5~1 天）                      ← 首个可见里程碑
+③ #32-P1 完整单 Agent（~2~3 天）
+④ （可选）#32-P2 框架化 / 审计 DB 化
+```
+
+> **为什么建议先 #58**：不先做也能上 P0，但 `deepseek-chat` 一旦被撤，`tool_calls` 链路同时失效。两个改动**都只动 `mall-ai`**，合在同一维护窗口更省事。
+
+### 5. 为什么**手写**而不是引入 Spring AI（与 [[AI模型名停用风险与thinking参数改造方案]] §4.6 / §4.7 呼应）
+
+> 用户之问："不引入 Spring AI，我们怎么写 agent？自己造船吗？"
+> **答：不用造船 —— 船已经有了，我们只是装一个船舵。**
+
+**① 认知前提：Agent 不是框架，是"一个循环 + 一份工具清单"**
+
+Function Calling + ReAct 的**本体**只有三十来行：
+
+```java
+messages = [system, ...history, user]
+for (round = 1; round <= maxRounds; round++) {         // ① 循环（ReAct 的"Re"）
+    r = chatWithTools(messages, TOOLS)                 // ② 带 tools 调一次（非流式）
+    if (r.toolCalls.isEmpty()) break                   // ③ 模型决定不再调工具 → 收敛
+    messages += r.assistantMessage                     // ④ assistant(含 tool_calls) 原样回灌
+    for (tc : r.toolCalls)                             // ⑤ 执行工具（ReAct 的"Act"）
+        messages += { role: "tool", tool_call_id: tc.id, content: tool(tc).run() }
+}
+answer = streamChat(messages)                          // ⑥ 最后一轮流式吐答案
+```
+
+**框架省掉的正是这几十行；框架真正值钱的是它周边的生态。** 而周边生态我们**要么已有、要么用不到**。
+
+**② 要"造"的 vs 已"有"的（本项目的真实账）**
+
+| 部件 | 处置 | 依据 |
+|---|---|---|
+| 工具契约 `AiTool` + `ToolRegistry` | 🆕 新建（~60 行） | 只需 `name/spec/execute` 三个方法 |
+| 带 `tools` 的请求 + 解析 `tool_calls` | 🆕 扩展 `DeepSeekAiClient`（~80 行） | 复用既有 `concurrencyGuard` / `checkBudget` / `usage` 记账 |
+| Agent 循环 `agentBranch` | 🆕 新建（~100 行） | 最后一轮**复用现有 `streamDeepSeek`** |
+| 工具实现（`search_products` 等） | 🆕 ~40 行/个 | **内部复用 `RagServiceImpl`**（检索已存在，零重复） |
+| 会话 / 多轮记忆 | ♻️ **已有** | `SessionManager`（Redis，TTL 24h） |
+| 预算控制 | ♻️ **已有** | `TokenBudgetService`（2 元/天，`doChat` 内已自动记账） |
+| 并发闸门 | ♻️ **已有** | `AiConcurrencyGuard`（上限 20，满即降级） |
+| 限流 / 频控 | ♻️ **已有** | Sentinel 三组规则 + `AiUserRateLimiter` |
+| SSE 流式输出 | ♻️ **已有** | `ChatServiceImpl.doStreamDeepSeek` + 前端 thinking 卡片 |
+| 检索 / 召回 / 重排 | ♻️ **已有** | `RagServiceImpl` / `SearchPipeline` / ES |
+| 降级兜底 | ♻️ **已有** | 既有 RAG 快速路径（双路径设计，见附录 A） |
+
+→ **新增代码 ≈ 300 行**（其中一半是 Schema 与工具），**不是"造船"，是"装船舵"**。
+→ 反过来看：Spring AI 自带 `ChatMemory` / `Advisor` / `VectorStore` 体系，进来后反而要**绕过或适配**我们已有的 Redis 会话、ES 检索、预算闸门 —— **框架净收益被自己的既有设施抵消**。
+
+**③ 手写在本场景是"正解"，不是"将就"**
+
+| 理由 | 说明 |
+|---|---|
+| **规模匹配** | 单 Agent / 3 个只读工具 / 3 轮上限。框架的价值在多供应商抽象 + 生态（MCP、向量库、Advisor、评测），我们要么已有、要么用不到 |
+| **可控性=核心诉求** | 我们刚用实验摸清 `reasoning_content` 回传（400）、`tools`×`response_format` 互斥 —— 这些**框架会藏起来**。自己写，每条规则都在手里，出 400 一眼定位 |
+| **面试/演示价值** | 手写能把"**agent 到底是什么**"讲透（`tool_calls` 消息结构 / ReAct 轮次 / 边界设在哪）；框架会变成"我调了个注解" |
+| **代价不成比例** | 引入 Spring AI 的前置是**全站 Boot 升级**（§4.7：13 个模块、两台机器、12 个服务回归） |
+
+**④ 诚实的代价（不吹）**
+
+| 不用框架会失去 | 影响 | 缓解 |
+|---|---|---|
+| 现成的工具编排 | 自己写循环 + 解析 | 就是上面那 ~150 行，且**已被实验验证**（E/C 两格） |
+| 多供应商无缝切换 | 换供应商要改请求体 | `base-url` + 模型占位符已可配；DeepSeek/硅基流动均为 **OpenAI 兼容协议** → 配置层可换；只有换**非兼容协议**（如 Anthropic 原生）才需改客户端 |
+| 结构化输出框架 | 自己校验参数 | **本来就必须做**：JSON Schema 声明 + **服务端二次校验**（不能只信模型） |
+| 可观测 | 自己记 | **已有**：`usage` 记账 + SkyWalking 全链路 + 结构化日志 |
+| 生态（MCP / 向量库 / Advisor / 评测） | 用不到 | 项目不需要 |
+
+**⑤ 不锁死：将来迁 Spring AI 的映射路径（本次抽象是框架无关的）**
+
+| 本次设计 | Spring AI 等价物 |
+|---|---|
+| `AiTool` 接口 | `@Tool` 注解 / `FunctionCallback` |
+| `tasks.json`（档位 + 思考模式） | `ChatOptions` / `ToolCallingChatOptions`（`spring.ai.openai.chat.options.model`） |
+| `agentBranch` 循环 | `ChatClient` + `ToolCallingAdvisor`（或直接删除） |
+| `SearchProductsTool.execute` | **一行都不用改**（业务实现与框架无关） |
+
+→ 迁移是**替换实现**，不是重写业务；**本次投入不浪费**。
+
+**⑥ 第三条路（轻量库）也评估过，仍不选**
+
+| 选项 | 结论 |
+|---|---|
+| 直接用 **OpenAI 兼容 HTTP**（现状） | ✅ **选它** —— 零新依赖，与项目"不增加外部依赖"原则一致 |
+| **LangChain4j**（可脱离 Spring Boot starter 使用） | 🟡 理论上可绕开 Boot 升级，但**仍需版本核实**，且是**新增一个重依赖**；本项目场景收益不足以抵消 |
+| **Spring AI / Spring AI Alibaba** | ❌ 卡 Boot 代际（§4.6/§4.7） |
+
+> **一句话**：**没有"既用 Agent 框架、又不升 Boot"的免费午餐**；可行且最省的是**保持 HTTP 直连 + 自己写一层薄编排**。
 
 ---
 
@@ -122,7 +256,7 @@
 
 1. **工具集扩展**:`compare_products`(复用 ProductCompareServiceImpl)、`get_stock`(Dubbo 调 mall-product/mall-seckill)
 2. **ReAct 循环**:max 3 轮,循环执行 tool_calls,记录每轮动作
-3. **动作审计**:AgentActionLog(先 Redis 后 DB + Flyway,参考 IoT DecisionLog 表)
+3. **动作审计**:⚠️ 原写法（先 Redis 后 DB + Flyway）**已作废** —— `mall-ai` 无数据库栈，见校正① → 改为 **Redis List**：`ai:agent:action:{sessionId}` + `LTRIM 0 49` + `EXPIRE 7d`（DB 化降为可选 P2）
 4. **降级兜底**:工具失败 → 回退纯 RAG
 5. **边界落地**:只读工具登录可用;写操作本期**不做**或只"建议不执行"
 6. **预算联动**:每轮调用 record 进 TokenBudgetService
@@ -152,13 +286,36 @@
 
 ---
 
-## 八、执行清单(决定做时)
+## 八、执行清单（2026-09-11 敲定版 · 分 P0 / P1）
 
-- [ ] P0:DeepSeekAiClient tools 支持 + ToolRegistry + search_products 工具 + ChatServiceImpl 循环
-- [ ] P0 验证:curl 触发工具调用
-- [ ] P1:compare_products / get_stock 工具 + 3 轮 ReAct + 审计日志 + 降级
-- [ ] P1 验证:多轮对话 + 工具审计记录 + 失败降级
-- [ ] 边界验收:写操作不自动执行 / 参数越界被拦 / 轮数超限停止
+### P0 最小 Function Calling（~0.5~1 天）
+
+- [ ] **S1 配置**：`AiProperties` 加 `agentEnabled`（默认 `false`）+ `agentMaxRounds`（默认 3）；`application.yml` / `-test` / `-prod` 同步加 `agent-enabled: false`
+- [ ] **S2 消息类型加宽**（校正②）：`AiClient` 加 `chat(List<Map<String,Object>>)`，**保留** `List<Map<String,String>>` 兼容重载；`DeepSeekAiClient` 内部统一按 `Object` 处理
+- [ ] **S3 tools 支持**：`DeepSeekAiClient` 新增 `chatWithTools(systemPrompt, messages, tools)` —— 请求体带 `tools` + `tool_choice:auto`，解析 `choices[0].message.tool_calls`，返回 `{content, List<ToolCall>}`；**复用** `concurrencyGuard.acquire("chat")` + `checkBudget()` + `usage` 记账
+- [ ] **S4 工具注册**：新增 `ToolRegistry`（`Map<String,AiTool>`）+ `AiTool` 接口（`name()` / `spec()` / `execute(JSONObject args)`）；`search_products` 实现放 **`...ai.service.impl` 同包**（校正④），内部复用 `RagServiceImpl`
+- [ ] **S5 Agent 分支**：`ChatServiceImpl` 新增 `agentBranch(...)` —— 非流式跑 1~3 轮 `tool_calls`（校正③），**最后一轮复用现有 `streamDeepSeek`** 输出；`agent-enabled=false` 时完全走原快速路径（**双路径，零行为变化**）
+- [ ] **S6 边界**：轮数上限 3（超限即停并直接生成）；未知工具名忽略；工具参数按 JSON Schema 校验（越界即拒，不回灌 LLM 自由发挥）
+- [ ] **S7 降级**：`chatWithTools` 异常 / 工具执行失败 → **回退现有快速路径 RAG**（绝不能因 Agent 挂掉让搜索挂）
+- [ ] **P0 验证**：`curl /ai/chat/send` 问"推荐 5000 以内的手机" → 日志出现工具调用 + `search_products` 命中 + 答案基于工具结果；再以 `agent-enabled=false` 回归旧行为
+
+### P1 完整单 Agent（~2~3 天）
+
+- [ ] **S8 工具扩展**：`compare_products`（复用 `ProductCompareServiceImpl`）、`get_stock`（Dubbo 调 `mall-product` / `mall-seckill` 既有接口）
+- [ ] **S9 动作审计（Redis 版，校正①）**：`ai:agent:action:{sessionId}` List + `LTRIM 0 49` + `EXPIRE 7d`，记 `{ts, tool, args 摘要, 结果条数, 耗时, 轮次}`；**不做 DB / Flyway**
+- [ ] **S10 思考可视化**：每轮工具调用发 SSE `thinking` 事件（前端 thinking 卡片已有，**无需改前端**）
+- [ ] **S11 预算/闸门回归**：确认 3 轮循环下 `ai:daily_cost` 正常累加；闸门满时降级为 RAG 而非 500
+- [ ] **P1 验证**：多轮对话触发多次工具调用；`redis-cli LRANGE ai:agent:action:<sid> 0 -1` 看到动作轨迹；**停 `mall-product` 后 Agent 工具失败 → 自动降级 RAG 仍能回答**
+- [ ] **边界验收**：写操作不自动执行（本期不暴露写工具）/ 参数越界被拦 / 轮数超限停止 / 预算超限拒绝
+
+### 部署与回滚
+
+| 项 | 说明 |
+|---|---|
+| **改动面** | **只落在 `mall-ai`**：重建 jar → `docker compose up -d mall-ai`（1 个容器）；**不改表、不改 ES mapping、不动其他 10 个服务** |
+| **开关回滚** | `agent-enabled: false` + 重建 `mall-ai` → 立刻回到现状（秒级生效，可先于代码回滚） |
+| **代码回滚** | 本项改动集中，`git revert` 单次提交即可；**无数据迁移、无 schema 变更** |
+| **监控要点** | Agent 开启后关注：`ai:daily_cost` 增速（循环放大最多 3 倍）、`AiBusyException`（闸门满）出现频率、工具执行异常日志 |
 
 ---
 
