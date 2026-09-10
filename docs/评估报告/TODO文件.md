@@ -704,12 +704,17 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 > ⚠️ **2026-09-10 复核修正（原标题"待实施"已过期一半）**：本条**前半已不成立** ——
 > | 步骤 | 状态 | 实测证据 |
 > |---|---|---|
-> | **Step 1**：引入 actuator + 暴露 `/actuator/health` | ✅ **已完成** | 11 个 webapi 模块 pom **全部有 ★实际依赖** `spring-boot-starter-actuator`（+ gateway 共 12 个）；11 个 `application.yml` 全部配 `management.endpoints.web.exposure.include: health,info`；**服务器实测 `/actuator/health` 返回 200**（10004/10006/10007/10010/10087）|
+> | **Step 1**：引入 actuator + 暴露 `/actuator/health` | ✅ **已完成** | 11 个 webapi 模块 pom **全部有 ★实际依赖** `spring-boot-starter-actuator`（+ gateway 共 12 个）；11 个 `application.yml` 全部配 `management.endpoints.web.exposure.include: health,info`（代码侧就绪）<br>🔴 **但 2026-09-10 实测发现"暴露 ≠ 可访问"**：微服务的 `/actuator/health` 被**自己的 SSO 安全链拦截**（`ResourceWebSecurityConfiguration` 里 `.anyRequest().authenticated()`，而 `buildPermitAllMatchers()` **不含 `/actuator/**`**）→ 返回的是 **HTTP 200 + 响应体 `{"state":401,"message":"您没有登录！"}`**（**"假健康"**）。实测：10004/10006/10007/10010 全是这个响应；只有 **gateway(10087)** 因无 SSOFilter 返回真正的 `{"status":"UP"}`|
 > | **Step 2**：compose 每个微服务加 `healthcheck:` + 用 `depends_on: condition: service_healthy` | ❌ **仍未做** | compose 里 `healthcheck` 实测只在 6 个**中间件**（mysql/redis/nacos/rabbitmq/es/seata）；`docker ps` 里只有这 6 个显示 **`(healthy)`**，**11 个微服务全无该标记** |
 >
 > **因此本条的剩余工作 = Step 2**（P2），价值不变：让"服务起来了但连不上 Nacos/DB/Redis"这种**假活**能被 Docker 识别并按策略重启。
 >
-> **方案（P2，剩余部分）**：compose 每个微服务加 `healthcheck: curl -f http://localhost:<port>/actuator/health`（依赖方可用 `depends_on: condition: service_healthy` 做服务级就绪等待，替代现在的"只等中间件"）。⚠️ 注意：容器基础镜像需有 `curl`（或改用 `wget`/Java 侧探针），且加 healthcheck 属 compose 变更、需 recreate 相应容器。
+> **方案（P2，剩余部分）**：compose 每个微服务加 `healthcheck`（依赖方可用 `depends_on: condition: service_healthy` 做服务级就绪等待，替代现在的"只等中间件"）。
+
+> 🔴 **⚠️ 直接写 `curl -f /actuator/health` 是无效的（2026-09-10 实测发现，必须先解决）**：
+> 微服务的 `/actuator/health` 被自己的 SSO 安全链拦截，返回 **HTTP 200**（响应体却是 `{"state":401,"message":"您没有登录！"}`）→ **`curl -f` 只看状态码，会永远通过** = healthcheck 形同虚设。
+> **因此 Step 2 有一个隐藏前置**：先把 `/actuator/health`（建议再加 `/actuator/info`）加进各服务的 `buildPermitAllMatchers()` 白名单 → 重新构建部署 11 个服务；**或者** healthcheck 不用 HTTP 探针而用 `nc -z localhost <port>`（只证明端口在听，**证明不了依赖健康**，价值低）。**推荐前者**。
+> ℹ️ 另：gateway 是唯一例外（无 SSOFilter，`/actuator/health` 返回真正的 `{"status":"UP"}`）。
 3. 注意：actuator 端点收窄（只开 health，避免暴露 env/beans 等敏感端点，呼应安全审计）
 
 **面试价值**：能讲"进程活着 ≠ 服务健康——我补了 actuator healthcheck，让依赖方等服务真正就绪"——容器化可观测基础课
@@ -829,6 +834,19 @@ redis-cli SLOWLOG GET 10                  # 慢日志=大键操作痕迹
 - ✅ 本机**没有**持久化的 `EMBEDDING_API_KEY` / `EMBEDDING_API_KEY_LOCAL` 用户级/系统级环境变量（`application-test.yml` 的 fallback 会落到 `sk-placeholder`）。
 - ✅ 前端仓库、`work/` 临时目录、其它 compose 文件均无 key 命中。
 
+**✅ 执行结果与实测验证（2026-09-10，AI 完成）**：
+
+| # | 验证项 | 结果 |
+|---|---|---|
+| 1 | 旧 key 是否真吊销 | ✅ **已吊销**：实测 `POST /v1/embeddings` 与 `GET /v1/models` 均返回 **HTTP 401 `{"code":30014,"message":"Token is invalid."}`**（旧 key `sk-pffsuu****nllw`，从 commit `719ff6f` 取出验证）|
+| 2 | 新 key 认证是否有效 | ✅ **有效**：`GET /v1/models` 返回 **HTTP 200** + 模型列表 |
+| 3 | 服务器 `.env` 是否已换 | ✅ 已换（`EMBEDDING_API_KEY=sk-loo****sask`），**属主/权限原样保留** `ecs-user:ecs-user 664`，备份 `.env.bak.20260910_150217`；原文件 950B → 987B（**+37B 与密钥长度差完全吻合**，证明只改了目标行）；`docker compose config` 解析通过 |
+| 4 | 容器是否已生效 | ✅ `docker compose up -d --no-deps mall-ai` 重建成功；容器 env 实测已是新 key；**health 200 @ 50s**、Nacos 注册完成、老机仍 **21 容器**（只动了 mall-ai）|
+| 5 | ⚠️ **新 key 能否真正调用 embedding** | 🔴 **不能 —— HTTP 402 `{"code":30001,"message":"Sorry, your account balance is insufficient"}`** |
+
+> 🔴 **遗留问题（#44 → 转 #31 的前置条件）**：**新 key 认证通过，但硅基流动账户余额不足**，`BAAI/bge-m3` 调用被拒（402）。项目文档曾记"BGE-M3 免费（2000 万 tokens）"——实测该免费额度当前**不足以调用**（可能已耗尽或政策变化）。
+> **影响**：因为生产 **`embedding-enabled: false`**，**线上功能零影响**；本地开发若开 `embedding-enabled: true` 会 402。
+> **待决策**：① 硅基流动充值（小额即可）② 或改用其它 embedding 供应商 ③ 或维持 #31「不开启向量检索」的现状（那本条目即可视为**闭环**，key 只作为"备用配置已就位"）。
 **给用户的执行块（服务器侧，AI 无写权限）**：
 
 ```bash
