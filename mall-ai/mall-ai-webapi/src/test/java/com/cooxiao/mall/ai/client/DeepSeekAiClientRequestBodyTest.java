@@ -12,9 +12,9 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 验证请求体构造规则（TODO #58 的核心行为，2026-09-11）。
+ * 验证请求体构造规则（TODO #58 的核心行为，2026-09-10）。
  *
- * <p>依据官方文档 + 2026-09-11 实测（10 格实验）：
+ * <p>依据官方文档 + 2026-09-10 实测（10 格实验）：
  * <ul>
  *   <li>思考模式 <b>只能</b>下发 {@code {"thinking":{"type":"enabled|disabled"}}} —— 取代"换个模型名 + 提示词求它别想"</li>
  *   <li>⚠️ 思考模式下 {@code temperature} 官方<b>不生效</b> → 刻意不下发，避免"调了温度"的假象</li>

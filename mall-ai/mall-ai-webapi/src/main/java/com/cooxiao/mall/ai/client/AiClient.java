@@ -19,7 +19,7 @@ import java.util.function.Consumer;
  * <p>说明：本接口原先还有 {@code embed / embedBatch}（按"可切换 AI 供应商"设想）。
  * 实测全项目 embedding 一律走 {@code SiliconFlowEmbeddingClient}（不同供应商 + 不同 baseUrl），
  * 该两方法属<b>死代码</b>（且实现打的是 DeepSeek 地址 + 硅基流动模型名，真调用必失败），
- * 已于 2026-09-11 删除（TODO #58 §5.3）。
+ * 已于 2026-09-10 删除（TODO #58 §5.3）。
  */
 public interface AiClient {
 

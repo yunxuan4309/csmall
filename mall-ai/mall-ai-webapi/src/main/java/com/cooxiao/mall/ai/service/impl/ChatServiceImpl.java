@@ -303,7 +303,7 @@ public class ChatServiceImpl {
 
         try {
             // 意图提取是 JSON 结构化任务 → chatJson：官方 thinking=disabled 从机制上关掉思考，
-            // 不再靠"提示词求它别想"，也不会出现 reasoning 挤空 content（TODO #58，2026-09-11）
+            // 不再靠"提示词求它别想"，也不会出现 reasoning 挤空 content（TODO #58，2026-09-10）
             String raw = aiClient.chatJson(null, prompt);
             // 清理 AI 可能输出的 markdown 包裹
             raw = raw.trim();

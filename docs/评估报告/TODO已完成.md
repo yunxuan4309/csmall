@@ -413,3 +413,26 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 7. **镜像获取**：两台都拉不到 Docker Hub（`i/o timeout`）→ **镜像名前加镜像站前缀** `docker.1ms.run/<image>` + `docker tag` 标准名
 
 **遗留项**：#14-P2（`min-replicas-to-write`，待做）、#51（容器 restart 策略，P2）、#53（网关重试/优雅下线，P2）、#50（哨兵认证，观察项）、#52（镜像路径，已记录事实）
+
+---
+
+## 十四、#58 AI 模型名停用风险 + `thinking` 开关 + 模型配置可配化（2026-09-10 完成并部署）
+
+> **问题**：生产 `chat-model: deepseek-chat` —— 该模型名**已被官方公告停用**（2026-04-24 公告、2026-07-24 名义停用，靠兼容层在跑）；根因是当初为绕开"`deepseek-v4-flash` 是思考模型、对 JSON 小任务思考到吃满 `max_tokens` 把 `content` 挤空"，**改用"换模型名"这个过时手段**。
+
+**正解**：官方机制是「**同一模型 + `thinking` 开关**」（`{"thinking":{"type":"disabled"}}`）—— 从机制上关掉思考，而非靠提示词"求它别想"。
+
+**本次交付（Step 1）**
+
+1. **模型配置可配化**：新增「**档位层 `models`**（逻辑档位 → 实际 model id）+ **任务层 `tasks`**（任务 → 档位 / 思考 / 温度 / max_tokens）」；**Java 代码里不再出现任何模型名**；yml 模型名全部改**显式环境变量占位符** → **官方改名 = 改 `.env` + 重建一个容器，不重编译**
+2. **新增 `AiTask`**（`CHAT` / `JSON` / `EXPAND` / `COMPARE`）—— 取代"用模型名区分任务能力"
+3. **9 项硬编码全部清零**：2 处模型名 / 2 处温度 / 1 处 max_tokens / SSE 自建请求体（与客户端重复）/ yml 字面量 / `compare-model` 死配置 / `embed` 死代码
+4. **SSE 收敛**进 `AiClient.streamChat`（与同步调用共用同一套档位 / 预算 / 闸门逻辑）
+5. **🐛 修复隐患**：主类 `@EnableConfigurationProperties(AiProperties.class)` 与 `@Component` **重复注册了两个同类型 bean** → 类型注入歧义 + `@PostConstruct` 执行两遍（原先仅靠注入字段名恰好等于 bean 名才没炸）→ 已移除重复注册并加防复发注释
+6. **新增 2 个测试类**（yml→Java 绑定 / 请求体规则），7 项全绿；全反应堆 13 模块编译通过
+
+**10 格实测实验**（服务器直连 DeepSeek，最小请求）：复现 400 规则（思考模式 + tools 不带 `reasoning_content`）/ 证实 `thinking: disabled` 生效 / 证实 tools 可触发 / **发现 `tools` 与 `response_format` 互斥** / 两轮循环收敛 / SSE + 思考模式对现有解析器安全。
+
+**生产验证（2026-09-10）**：路由日志**恰好 1 次**（修复前 2 次）；`/ai/search` 5s 返回 AI 重排说明；`/ai/ask` 4s 返回完整推荐；预算记账 0 → **0.002492 元**；`content 为空` / `reasoning` / 4xx 告警均 **0**；jar MD5 落位校验一致；回滚 tag `csmall-mall-ai:before-step1` 就位。
+
+📄 **完整记录见 [[AI模型名停用风险与thinking参数改造方案]]**（§3.1 实验 / §4.5 模型可配化 / §4.6-4.7 Spring AI 与 Boot 升级评估 / §十一 实施与部署记录）、[[TODO第三批实现与原理-1]]（技术选型过程）

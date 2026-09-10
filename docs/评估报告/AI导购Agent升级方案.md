@@ -1,14 +1,14 @@
 # AI 导购 Agent 升级方案
 
-> **状态**: ✅ **已敲定实施（2026-09-11 用户拍板：做）** —— 按 **P0 → P1** 分期推进（P2 可选）；**实施前必读「〇、决策记录 + 实施前代码校正」**（其中 6 条校正来自读码实测，照原稿做会踩空）
+> **状态**: ✅ **已敲定实施（2026-09-10 用户拍板：做）** —— 按 **P0 → P1** 分期推进（P2 可选）；**实施前必读「〇、决策记录 + 实施前代码校正」**（其中 6 条校正来自读码实测，照原稿做会踩空）
 > **关联**: [[TODO文件]]#32、[[面试准备/09-AI模块]] Q0/Q12、**[[AI模型名停用风险与thinking参数改造方案]]（#58，与本项强相关，见校正⑥）**
 > **定位**: 技术演示增强 + 面试素材(业务收益为零——生产 0 调用,简历未投)
 
 ---
 
-## 〇、决策记录 + 实施前代码校正（2026-09-11 敲定）
+## 〇、决策记录 + 实施前代码校正（2026-09-10 敲定）
 
-### 1. 决策（用户 2026-09-11 拍板）
+### 1. 决策（用户 2026-09-10 拍板）
 
 | 项 | 结论 |
 |---|---|
@@ -31,9 +31,9 @@
 | ⑤ | 未提 | 预算/闸门/限流设施已齐备：`TokenBudgetService`（2 元/天）、`AiConcurrencyGuard`（并发 20，满即失败不排队）、Sentinel 三组规则（`ai-chat=5` / `ai-reason=10` / `ai-light=30`）、`AiUserRateLimiter`（60s/10 次）；且 `doChat` 内**已自带** `checkBudget()` + `usage` 记账 | **全部复用，不新建**。但要注意：Agent 循环把 LLM 调用数**放大最多 3 倍** → 对 `concurrent-max` 与日预算的压力要能讲清（演示环境 0 调用，可接受） |
 | ⑥ | 未提 | 生产 `chat-model: deepseek-chat`，而该模型名**已被官方公告停用**（见 **[[TODO文件]]#58**）；DeepSeek 的正解是"同一模型 + `thinking` 开关"（`{"thinking":{"type":"disabled"}}`） | **与 #58 强耦合**：Agent 的**工具选择必须是稳定 JSON（`tool_calls`）** → 建议 **#58 与 #32 同期落地**（先做 thinking 开关改造，再在其上做 Function Calling），否则"模型名随时失效"的风险会直接压在新功能上 |
 
-| ⑦ | P0 S3 未提 | 🔴 实测（2026-09-11 实验 F）：**`tools` 与 `response_format: json_object` 不能共存** —— 带上 `response_format` 时模型**直接输出 JSON，不再触发 `tool_calls`**（`finish_reason=stop`） | 工具选择轮**只带 `tools`，不设 `response_format`**；工具参数的稳定性靠 **JSON Schema 约束 + 服务端二次校验**（不是靠 json mode）。⚠️ 现有 `chatWithModel(jsonMode=true)` 与 Function Calling **不兼容**，两者必须分开走 |
+| ⑦ | P0 S3 未提 | 🔴 实测（2026-09-10 实验 F）：**`tools` 与 `response_format: json_object` 不能共存** —— 带上 `response_format` 时模型**直接输出 JSON，不再触发 `tool_calls`**（`finish_reason=stop`） | 工具选择轮**只带 `tools`，不设 `response_format`**；工具参数的稳定性靠 **JSON Schema 约束 + 服务端二次校验**（不是靠 json mode）。⚠️ 现有 `chatWithModel(jsonMode=true)` 与 Function Calling **不兼容**，两者必须分开走 |
 
-### 3. 🔬 2026-09-11 实测复验（可行性已证实）
+### 3. 🔬 2026-09-10 实测复验（可行性已证实）
 
 > 与 [[AI模型名停用风险与thinking参数改造方案]] §3.1 **同一批实验**（老机直连 DeepSeek，最小请求，`max_tokens` 50~300）——**不凭文档引述，直接验证 P0 路线成立**：
 
@@ -286,7 +286,7 @@ answer = streamChat(messages)                          // ⑥ 最后一轮流式
 
 ---
 
-## 八、执行清单（2026-09-11 敲定版 · 分 P0 / P1）
+## 八、执行清单（2026-09-10 敲定版 · 分 P0 / P1）
 
 ### P0 最小 Function Calling（~0.5~1 天）
 

@@ -1,6 +1,8 @@
 # AI 模型名停用风险与 `thinking` 参数改造方案
 
-> **状态**: ✅ **复验通过 + 决策已定（2026-09-11）** —— ① 4 格实测实验**复现了 400 规则**并**验证了 `thinking: disabled` 生效**；② 用户确认**按推荐执行**（采纳方案 A；`doChat` 走**新增 `chatJson`** 变体；**删除** `compare-model` 死配置）；③ **建议与 [[AI导购Agent升级方案]]（#32）同窗口分两步做**（本方案先做，见 §3.1 实验 E/C）
+> **状态**: ✅ **已实施 + 已部署生产并验证通过（2026-09-10）** —— 代码改造、隐患修复、上线、回归**全部完成**。
+> **生产验证证据（2026-09-10）**: 「AI 模型路由」启动**只打 1 次**（修复前 2 次）；`/ai/search` 5s 返回 AI 重排说明；`/ai/ask` 4s 返回完整推荐；预算记账正常增长；`content 为空` / `reasoning` / 4xx 告警均为 **0**。**详见 §十一 实施与部署记录**。
+> **历史决策（2026-09-10）**: ① 10 格实测实验**复现了 400 规则**并**验证了 `thinking: disabled` 生效**；② 用户确认**按推荐执行**（采纳方案 A；`doChat` 走**新增 `chatJson`** 变体；**删除** `compare-model` 死配置）；③ **与 [[AI导购Agent升级方案]]（#32）同窗口分两步做** —— 本方案 Step 1 已完成，下一步 #32-P0
 > **用途**: 消除"**生产依赖一个已被官方公告停用的模型别名**"这一隐患，并把现行的"**靠提示词叫模型别思考**"换成**官方 `thinking` 开关**
 > **关联**: [[TODO文件]] #58、[[TODO第二批实现与原理]] §5.4.5 #21（当初为何改成 `deepseek-chat`）、[[TODO第三批实现与原理]]、[[跨机集群实施执行清单-2026-09-09]]（`/models` 与 API 实测方法）
 > **规则来源**: [DeepSeek 官方「思考模式」文档](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode)、[官方「模型 & 价格」](https://api-docs.deepseek.com/zh-cn/quick_start/pricing)、[官方更新日志](https://api-docs.deepseek.com/zh-cn/updates)
@@ -84,7 +86,7 @@ embedding-model: BAAI/bge-m3     # 第 41 行（走硅基流动，非 DeepSeek�
 4. 用 OpenAI SDK 时 `thinking` 要放进 `extra_body`；**裸 HTTP 请求直接放 body 顶层即可**（本项目是 `RestTemplate` + `Map`，直接 `put` 即可）
 5. 官方示例用的 model id 就是 **`deepseek-flash`**（现役 id）
 
-### 3.1 🔬 2026-09-11 实测复验（7 格实验，直接验证开关与 400 规则）
+### 3.1 🔬 2026-09-10 实测复验（7 格实验，直接验证开关与 400 规则）
 
 > **方法**：在老机用生产 `AI_API_KEY` 向 `https://api.deepseek.com/chat/completions` 发最小请求（`max_tokens` 50~300，成本可忽略、只读）。
 > **目的**：**不凭官方文档引述**，直接证实/证伪"开关生效"与"400 规则"，并顺带验证 #32（Function Calling）的可行性。
@@ -135,7 +137,7 @@ requestBody.put("reasoning_effort", "high");                          // 或 low
 | 3 | 用"**换不同模型名**"区分任务类型 | 官方设计的**单模型双模式**，语义清晰 |
 | 4 | 同一模型名被**两类任务共用**（见 §4.2 洞察）| 每个调用点**显式声明**自己要哪种模式 |
 
-### 4.2 调用点分类（✅ 2026-09-10 逐处 grep 核实；🔧 2026-09-11 实施期修正 1 处）
+### 4.2 调用点分类（✅ 2026-09-10 逐处 grep 核实；🔧 2026-09-10 实施期修正 1 处）
 
 **A. JSON 结构化任务 → `thinking: disabled` + `response_format`（实施期修正为 **3 处**）**
 
@@ -145,7 +147,7 @@ requestBody.put("reasoning_effort", "high");                          // 或 low
 | `SearchServiceImpl:227-232` | 重排 | `aiProperties.getChatModel()` | 传 `jsonMode=true` |
 | `PreferenceExtractor:54` | 偏好提取 | `chat()` → `doChat` → `chatModel` | ⚠️ **走 `doChat`，没有 `jsonMode` 标志**（靠提示词，返回后 `JSON.parseObject`）|
 
-> 🔧 **2026-09-11 实施期修正（读码发现：原稿把第 4 处归错类了）**
+> 🔧 **2026-09-10 实施期修正（读码发现：原稿把第 4 处归错类了）**
 >
 > `SearchPipeline:120` 是 **`expandQuery` 查询扩展**，输出的是**空格分隔的关键词纯文本，不是 JSON**。
 > 它同样需要"关思考"（短任务、要稳定输出），但**绝不能下发 `response_format`** ——
@@ -183,7 +185,7 @@ requestBody.put("reasoning_effort", "high");                          // 或 low
 | 7 | `ChatServiceImpl:354-373`（SSE）| 去掉硬编码 `"deepseek-v4-flash"` → 用配置；body 增加 `thinking: enabled` + `reasoning_effort`；🔴 **`max_tokens: 2000` 硬编码 → 改为读配置（3000+）**（实测 D：思考吃满会把 content 挤空）| 顺带修掉 `temperature` 死参数（§5.1）|
 | 8 | `SearchServiceImpl:227-232` | 传入的 model 由硬编码/配置统一；确保 `thinking: disabled` | — |
 
-**`doChat` 的处理 —— ✅ 2026-09-11 已定（"甲"的精简变体：新增 `chatJson`，不动现有签名）**：
+**`doChat` 的处理 —— ✅ 2026-09-10 已定（"甲"的精简变体：新增 `chatJson`，不动现有签名）**：
 
 - ✅ **采纳做法**：**新增** `String chatJson(String systemPrompt, String userMessage)`（内部 `thinking: disabled`），只把 **2 个 JSON 调用点**改过去：
   - `PreferenceExtractor:54`
@@ -202,7 +204,7 @@ requestBody.put("reasoning_effort", "high");                          // 或 low
 - 换成"别的非推理模型"反而会引入**新依赖**（又要担心那个名字停不停用、能力够不够）
 - 官方现役 id 只有 `deepseek-flash` / `deepseek-v4-pro` 两个（`/models` 实测），它们的区别是**能力档位**，不是"会不会思考" —— 后者靠 `thinking` 控制
 
-### 4.5 模型配置可配化设计（第 1+2 层，2026-09-11 并入本次改造）
+### 4.5 模型配置可配化设计（第 1+2 层，2026-09-10 并入本次改造）
 
 > **诉求（用户）**：模型相关配置要能适应**未来模型更名 / 下架** —— 即"**改名不用改代码、不用重编译**"。
 > **现状实测：半可配**。Key / API 地址已是占位符 ✅；但**模型名是字面量，且有 2 处硬编码在代码里**；而 prod 又**未覆盖 `cooxiao.ai` 段** → 生产模型名来自 **jar 内的 `application.yml`** → **想换模型必须重编译**。
@@ -241,7 +243,7 @@ cooxiao:
 维度变了 → ES mapping 的 `dims` **不可修改** → 必须走"**删索引 → 改 `embedding-dimensions` → 重启 → `/ai/syncAll`**"。
 （好消息：`dims` **已经是读配置**的 —— `EsIndexInitializer` 用 `.formatted(aiProperties.getEmbeddingDimensions())` ✅）
 
-### 4.6 为什么**暂不引入 Spring AI**（2026-09-11 评估结论）
+### 4.6 为什么**暂不引入 Spring AI**（2026-09-10 评估结论）
 
 | 判据 | 事实 | 结论 |
 |---|---|---|
@@ -255,7 +257,7 @@ cooxiao:
 > ✅ **结论**：**#58 与 #32 本次都不引入 Spring AI**，按"**手写 + 模型配置可配化**"落地；Spring AI 保留为 **#32 原方案的 P2（框架化）**，其**前置 = Boot 全站升级**，已另行登记 **TODO #60** 跟踪。
 > （历史补充：Spring AI `0.8.x` 里程碑版曾支持更早的 Boot 代际，但那是 1.0 GA **之前**、早已停止维护的版本，2026 年回头采用维护性极差，**不作为选项**。）
 
-### 4.7 若为了 Spring AI 强行升级 Spring Boot：影响面实测（2026-09-11）
+### 4.7 若为了 Spring AI 强行升级 Spring Boot：影响面实测（2026-09-10）
 
 > 回答"升级 Boot 是不是**只影响 AI 模块**"—— **不是**。
 
@@ -336,9 +338,9 @@ application.yml:27        compare-model: deepseek-v4-flash
 ```
 
 **没有任何代码读取它** → `ProductCompareServiceImpl` 用的是 `aiClient.chat(...)`（即 `chat-model`）。
-**处置建议**：✅ **删除**（2026-09-11 用户确认；全仓库零引用，实测确认）。
+**处置建议**：✅ **删除**（2026-09-10 用户确认；全仓库零引用，实测确认）。
 
-### 5.3 `DeepSeekAiClient.embed/embedBatch` 是死代码（2026-09-11 实测发现）
+### 5.3 `DeepSeekAiClient.embed/embedBatch` 是死代码（2026-09-10 实测发现）
 
 全项目**没有任何注入点使用 `AiClient` 的 embed**：
 
@@ -409,7 +411,7 @@ curl -s https://api.deepseek.com/chat/completions \
 
 ---
 
-## 十、决策记录（2026-09-11 用户确认：按推荐执行）
+## 十、决策记录（2026-09-10 用户确认：按推荐执行）
 
 | # | 决策点 | 结论 |
 |---|---|---|
@@ -423,7 +425,7 @@ curl -s https://api.deepseek.com/chat/completions \
 
 ---
 
-## 十一、实施记录（Step 1 代码完成，2026-09-11 · ⏳ **未部署**）
+## 十一、实施记录（Step 1 代码完成，2026-09-10 · ⏳ **未部署**）
 
 > **状态**：代码改造完成 + 本地编译/打包/测试全绿；**尚未部署到服务器**（按约定，部署需单独走维护窗口）。
 > **范围**：§十 决策 1~4 + **模型配置可配化**（§4.5 第 1+2 层）。
@@ -494,8 +496,33 @@ AI 模型路由（cooxiao.ai）：chat[flash→deepseek-v4-flash,thinking=on]
 - **只有 JSON 任务**带 `response_format`（EXPAND 不带）
 - 所有任务的 `model` 均来自档位表（非代码硬编码）
 
-### 11.5 待办
+### 11.5 部署记录（2026-09-10 完成）
 
-- [ ] **部署（维护窗口）**：重建 `mall-ai` jar → `docker compose up -d mall-ai`；启动日志应出现「AI 模型路由」一行
-- [ ] 部署后回归：搜索主链路（意图提取 → 召回 → 重排）无降级、SSE 正常、预算记账正常
-- [ ] 可选：`.env` 注入 `AI_MODEL_FLASH` / `AI_MODEL_EMBEDDING`（不注入即用 yml 默认值）
+| 步 | 动作 | 结果 |
+|---|---|---|
+| 1 | 本地 `mvn package` | `mall-ai-webapi-0.0.1-SNAPSHOT.jar`，127,368,066 字节，MD5 **`ff85810b187cc59030c25aa42e5943c8`** |
+| 2 | 上传 + **MD5 校验** | 落位后 `/data/csmall/jars/mall-ai.jar` 的 MD5 与本地**完全一致** |
+| 3 | 备份 / 回滚就位 | 旧 jar → `/data/csmall/jars/backup-20260911-step1/`（目录名沿用当时命名）；镜像 tag `csmall-mall-ai:before-step1`（= `8af9d33be09f`） |
+| 4 | 重建重启 | `docker compose build mall-ai && docker compose up -d mall-ai` —— **只动 mall-ai 一个容器**；新镜像 `734aaf72…`，启动 45s，内存 600MiB/1GiB |
+| 5 | 验证 | 见 §11.6 |
+
+### 11.6 生产验证证据（2026-09-10）
+
+| 验证项 | 实测结果 |
+|---|---|
+| **🐛 隐患修复** | 「AI 模型路由」启动日志 **恰好 1 次**（修复前 2 次）—— 双 bean 重复注册已消除 |
+| 模型路由值 | `chat[flash→deepseek-v4-flash,thinking=on] json[off] expand[off] compare[on]` —— **生产模型名来自配置，非硬编码** |
+| **JSON 任务（重排）** | `POST /ai/search`（关键词「手机」）→ **200 / 5s / 9 条命中**，`aiExplanation: "按热度、价格与手机匹配度排序，华为小米优先"` |
+| **CHAT 任务（思考 ON）** | `POST /ai/ask`（「推荐一款适合拍照的手机」）→ **200 / 4s**，返回完整中文推荐（含「徕卡影像」等卖点分析） |
+| 预算记账 | `ai:daily_cost:2026-09-10`：0 → **0.002492 元**（`usage` 记账链路正常） |
+| **#58 目标告警** | `content 为空` **0** 次、`reasoning` 相关 **0** 次、`invalid_request`/4xx **0** 次 |
+| Nacos | `172.18.0.9:10010` enabled + healthy |
+| 容器 env | `SPRING_PROFILES_ACTIVE=prod`、`AI_API_KEY=sk-de93…`、`EMBEDDING_API_KEY=sk-looj…`（#44 轮换后的新 key） |
+
+> ⚠️ **冒烟测试在生产留下的痕迹（透明说明）**：1 条管理员登录日志（`ams_login_log`）、`ai:daily_cost` 记了 **0.0025 元**；未创建 AI 会话键（`/ai/ask` 不建会话）。其余无副作用。
+
+### 11.7 后续（不属于本方案）
+
+- **`#32-P0` Function Calling** —— 本方案已为其铺好地基（档位层 + 任务层 + 消息类型加宽为 `Map<String,Object>`）
+- 可选：`.env` 注入 `AI_MODEL_FLASH` / `AI_MODEL_EMBEDDING`（不注入即用 yml 默认值）
+- 可选：清理 `.idea/workspace.xml` 里遗留的旧 `AI_API_KEY`（#44 已建议，属卫生项）

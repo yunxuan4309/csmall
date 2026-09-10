@@ -30,7 +30,7 @@ import java.util.function.Consumer;
 /**
  * DeepSeek API 客户端实现（OpenAI 兼容协议）。
  *
- * <h3>本次改造要点（TODO #58，2026-09-11）</h3>
+ * <h3>本次改造要点（TODO #58，2026-09-10）</h3>
  * <ol>
  *   <li><b>模型名全部外置</b>：由 {@code cooxiao.ai.models} 的档位解析，Java 里不出现模型 id</li>
  *   <li><b>思考模式显式化</b>：{@code thinking: enabled/disabled} —— 取代"换个模型名"和"提示词求它别想"</li>
@@ -174,7 +174,7 @@ public class DeepSeekAiClient implements AiClient {
                             onChunk.accept(content);
                         }
                         // 说明：思考模式下 delta 里还有 reasoning_content（实测分片数约为 content 的 2.3 倍）。
-                        // 前端不展示思考过程 → 此处天然忽略，不影响 SSE 解析（2026-09-11 实测验证）。
+                        // 前端不展示思考过程 → 此处天然忽略，不影响 SSE 解析（2026-09-10 实测验证）。
                     } catch (Exception ignored) {
                         // 单个 chunk 解析失败不中断整条流
                     }

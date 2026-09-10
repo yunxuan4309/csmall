@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Import;
  * （bean 名 {@code cooxiao.ai-com.cooxiao.mall.ai.config.AiProperties}），
  * 导致「类型注入歧义 + {@code @PostConstruct} 执行两遍」——
  * 当前能跑只是因为注入字段名恰好等于 bean 名（按名回退消歧），属隐患。
- * 2026-09-11 已移除该重复注册；与 {@code mall-order} 的 AlipayConfig 写法保持一致。
+ * 2026-09-10 已移除该重复注册；与 {@code mall-order} 的 AlipayConfig 写法保持一致。
  */
 @SpringBootApplication
 @EnableDubbo

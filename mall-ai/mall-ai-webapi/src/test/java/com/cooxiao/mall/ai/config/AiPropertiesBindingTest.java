@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 验证「模型配置可配化」的 <b>yml → Java 绑定</b>（TODO #58，2026-09-11）。
+ * 验证「模型配置可配化」的 <b>yml → Java 绑定</b>（TODO #58，2026-09-10）。
  *
  * <p>这是本次改造最易出错的部分：嵌套 {@code Map<String, TaskOptions>} + kebab-case 键
  * （{@code max-tokens} / {@code default-tier} / {@code reasoning-effort}）。绑定错了只会在运行期暴露，
