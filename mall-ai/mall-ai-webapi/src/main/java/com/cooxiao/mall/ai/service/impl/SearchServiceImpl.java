@@ -11,7 +11,6 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.cooxiao.mall.ai.client.AiClient;
-import com.cooxiao.mall.ai.config.AiProperties;
 import com.cooxiao.mall.ai.service.TokenBudgetService;
 import com.cooxiao.mall.pojo.ai.vo.RelatedProductVO;
 import com.cooxiao.mall.pojo.ai.vo.SearchResultVO;
@@ -52,9 +51,6 @@ public class SearchServiceImpl {
 
     @Autowired
     private AiClient aiClient;
-
-    @Autowired
-    private AiProperties aiProperties;
 
     @Autowired
     private TokenBudgetService tokenBudgetService;
@@ -224,12 +220,11 @@ public class SearchServiceImpl {
      */
     private String[] callRerank(String prompt) {
         try {
-            String aiResponse = aiClient.chatWithModel(
-                    // ⚠️ 关键：deepseek-v4-flash 是 reasoning 模型，若不禁思考会把 max_tokens 全耗在
-                    // reasoning_content 上导致 content 为空（实测 reasoning_tokens=4000=max_tokens）。
-                    // "不要任何思考过程，直接输出" 可关掉过度思考（实测 reasoning_tokens 降到 58，1.6s 返回）
-                    "你是专业的电商导购。直接输出 JSON，不要任何思考过程，不要输出 reasoning，不要解释。",
-                    prompt, aiProperties.getChatModel(), true);
+            // 重排是 JSON 结构化任务 → chatJson：官方 thinking=disabled 从机制上关掉思考，
+            // 不再依赖"提示词求它别想"（历史上 reasoning 把 max_tokens 吃满导致 content 为空，见 TODO #58）
+            String aiResponse = aiClient.chatJson(
+                    "你是专业的电商导购。直接输出 JSON，不要输出解释。",
+                    prompt);
             // 清理 AI 可能输出的 markdown 包裹（```json ... ```）
             if (aiResponse != null) {
                 aiResponse = aiResponse.trim();

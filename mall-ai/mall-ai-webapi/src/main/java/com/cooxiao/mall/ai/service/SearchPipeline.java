@@ -2,6 +2,7 @@ package com.cooxiao.mall.ai.service;
 
 import com.alibaba.fastjson.JSON;
 import com.cooxiao.mall.ai.client.AiClient;
+import com.cooxiao.mall.ai.config.AiTask;
 import com.cooxiao.mall.ai.model.SearchIntent;
 import com.cooxiao.mall.ai.service.impl.RagServiceImpl;
 import com.cooxiao.mall.pojo.ai.vo.RelatedProductVO;
@@ -117,7 +118,9 @@ public class SearchPipeline {
                     用户输入：%s
                     关键词：""".formatted(userMessage);
 
-            String response = aiClient.chat(null, prompt);
+            // 查询扩展输出的是空格分隔的关键词（纯文本，非 JSON）→ 用 EXPAND 任务：关思考保证稳定，
+            // 但**不下发 response_format**（开启它时提示词必须含 "json"，否则接口 400）
+            String response = aiClient.chat(AiTask.EXPAND, null, prompt);
             response = response.trim().replaceAll("[\"'\\n]", " ");
             log.info("查询扩展: {} → {}", userMessage, response);
             return response.isBlank() ? userMessage : response;

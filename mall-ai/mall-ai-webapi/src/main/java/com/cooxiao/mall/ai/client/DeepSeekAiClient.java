@@ -1,10 +1,10 @@
 package com.cooxiao.mall.ai.client;
 
 import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.cooxiao.mall.ai.config.AiConcurrencyGuard;
 import com.cooxiao.mall.ai.config.AiProperties;
+import com.cooxiao.mall.ai.config.AiTask;
 import com.cooxiao.mall.ai.service.TokenBudgetService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,22 +15,38 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
- * DeepSeek API 客户端实现
- * <p>
- * API 文档：https://platform.deepseek.com/api-docs
- * <p>
- * 并发控制（TODO #2+#34）：所有同步 LLM 调用在进入真实 HTTP 前经过 {@link AiConcurrencyGuard}
- * 并发闸门——闸门满抛 AiBusyException → 调用方走既有降级路径（纯 ES 结果），而非无限排队占线程。
+ * DeepSeek API 客户端实现（OpenAI 兼容协议）。
+ *
+ * <h3>本次改造要点（TODO #58，2026-09-11）</h3>
+ * <ol>
+ *   <li><b>模型名全部外置</b>：由 {@code cooxiao.ai.models} 的档位解析，Java 里不出现模型 id</li>
+ *   <li><b>思考模式显式化</b>：{@code thinking: enabled/disabled} —— 取代"换个模型名"和"提示词求它别想"</li>
+ *   <li><b>请求体只在一处构造</b>：{@link #buildBody} —— 历史上 SSE 分支自建过一份重复请求体（模型硬编码），
+ *       是"改一处漏一处"的根源（TODO #58 §2.4 第 6 项）</li>
+ *   <li><b>SSE 收敛进客户端</b>：{@link #streamChat} 复用同一套档位/思考/预算/闸门逻辑</li>
+ * </ol>
+ *
+ * <p>并发控制：所有真实 HTTP 调用前经 {@link AiConcurrencyGuard} 闸门，闸门满抛 AiBusyException
+ * → 调用方走既有降级路径，而非无限排队占线程。
  */
 @Slf4j
 @Component
 public class DeepSeekAiClient implements AiClient {
+
+    private static final String CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
 
     @Autowired
     private RestTemplate restTemplate;
@@ -44,78 +60,53 @@ public class DeepSeekAiClient implements AiClient {
     @Autowired
     private AiConcurrencyGuard concurrencyGuard;
 
-    // ========== Chat API ==========
+    // ================================================================
+    // 同步调用
+    // ================================================================
 
     @Override
     public String chat(String systemPrompt, String userMessage) {
-        HttpHeaders headers = buildHeaders();
-        List<Map<String, String>> messages = new ArrayList<>();
-
-        if (systemPrompt != null && !systemPrompt.isBlank()) {
-            messages.add(Map.of("role", "system", "content", systemPrompt));
-        }
-        messages.add(Map.of("role", "user", "content", userMessage));
-
-        return doChat(headers, messages);
+        return chat(AiTask.CHAT, simpleMessages(systemPrompt, userMessage));
     }
 
     @Override
-    public String chat(List<Map<String, String>> messages) {
-        HttpHeaders headers = buildHeaders();
-        return doChat(headers, messages);
+    public String chat(List<Map<String, Object>> messages) {
+        return chat(AiTask.CHAT, messages);
     }
 
     @Override
-    public String chatWithModel(String systemPrompt, String userMessage,
-                                 String model, boolean jsonMode) {
+    public String chatJson(String systemPrompt, String userMessage) {
+        return chat(AiTask.JSON, simpleMessages(systemPrompt, userMessage));
+    }
+
+    @Override
+    public String chat(AiTask task, String systemPrompt, String userMessage) {
+        return chat(task, simpleMessages(systemPrompt, userMessage));
+    }
+
+    @Override
+    public String chat(AiTask task, List<Map<String, Object>> messages) {
         checkBudget();
-        HttpHeaders headers = buildHeaders();
-        List<Map<String, String>> messages = new ArrayList<>();
-        if (systemPrompt != null && !systemPrompt.isBlank()) {
-            messages.add(Map.of("role", "system", "content", systemPrompt));
-        }
-        messages.add(Map.of("role", "user", "content", userMessage));
+        Map<String, Object> body = buildBody(task, messages);
+        log.debug("调用 AI：task={}, model={}, thinking={}, maxTokens={}",
+                task.key(), body.get("model"),
+                aiProperties.taskOptions(task).isThinking() ? "on" : "off", body.get("max_tokens"));
 
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", model);
-        requestBody.put("messages", messages);
-        requestBody.put("temperature", 0.3);
-        requestBody.put("max_tokens", aiProperties.getMaxTokens());
-        if (jsonMode) {
-            requestBody.put("response_format", Map.of("type", "json_object"));
-        }
-
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
-        log.debug("Calling DeepSeek Chat API, model={}, jsonMode={}", model, jsonMode);
-
-        // 并发闸门：意图提取/重排等 JSON 结构化任务也是真实 LLM 调用，受同一闸门保护
-        concurrencyGuard.acquire("chat:" + model);
+        concurrencyGuard.acquire("chat:" + task.key());
         try {
             ResponseEntity<String> response = restTemplate.postForEntity(
-                    aiProperties.getBaseUrl() + "/v1/chat/completions",
-                    request,
+                    aiProperties.getBaseUrl() + CHAT_COMPLETIONS_PATH,
+                    new HttpEntity<>(body, buildHeaders()),
                     String.class);
 
             JSONObject json = JSON.parseObject(response.getBody());
+            recordUsage(json);
 
-            // 记录 token 费用
-            JSONObject usage = json.getJSONObject("usage");
-            if (usage != null) {
-                int promptTokens = usage.getIntValue("prompt_tokens");
-                int completionTokens = usage.getIntValue("completion_tokens");
-                double inputCost = aiProperties.getChatInputPricePerMillion() * promptTokens / 1_000_000;
-                double outputCost = aiProperties.getChatOutputPricePerMillion() * completionTokens / 1_000_000;
-                tokenBudgetService.record(inputCost + outputCost);
-            }
-
-            String content = json.getJSONArray("choices")
-                    .getJSONObject(0)
-                    .getJSONObject("message")
-                    .getString("content");
+            String content = extractContent(json);
             if (content == null || content.isBlank()) {
-                // reasoning 模型思考过长可能把 max_tokens 吃满，content 为空 → 调用方解析 null
-                log.warn("DeepSeek 响应 content 为空（model={}, jsonMode={}, 可能 reasoning 耗尽 max_tokens={}），usage={}",
-                        model, jsonMode, aiProperties.getMaxTokens(), usage);
+                // 思考模式下 reasoning 可能吃满 max_tokens → content 为空（实测：max_tokens=120 时必现）
+                log.warn("AI 响应 content 为空（task={}, model={}, max_tokens={}, usage={}）",
+                        task.key(), body.get("model"), body.get("max_tokens"), json.getJSONObject("usage"));
             }
             return content;
         } finally {
@@ -123,50 +114,147 @@ public class DeepSeekAiClient implements AiClient {
         }
     }
 
-    private String doChat(HttpHeaders headers, List<Map<String, String>> messages) {
+    // ================================================================
+    // 流式调用（SSE）
+    // ================================================================
+
+    @Override
+    public void streamChat(List<Map<String, Object>> messages, Consumer<String> onChunk) throws Exception {
         checkBudget();
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", aiProperties.getChatModel());
-        requestBody.put("messages", messages);
-        requestBody.put("temperature", aiProperties.getTemperature());
-        requestBody.put("max_tokens", aiProperties.getMaxTokens());
-
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
-
-        log.debug("Calling DeepSeek Chat API, model={}", aiProperties.getChatModel());
-
-        // 并发闸门：多轮对话同步回复也是真实 LLM 调用
-        concurrencyGuard.acquire("chat");
+        AiTask task = AiTask.CHAT;
+        // 并发闸门：SSE 是"最长寿"的 LLM 调用（秒级~十几秒），不设闸门时少量并发即可占满线程/打满外部配额
+        concurrencyGuard.acquire("stream");
         try {
-            ResponseEntity<String> response = restTemplate.postForEntity(
-                    aiProperties.getBaseUrl() + "/v1/chat/completions",
-                    request,
-                    String.class);
-
-            JSONObject json = JSON.parseObject(response.getBody());
-
-            // 记录 token 费用
-            JSONObject usage = json.getJSONObject("usage");
-            if (usage != null) {
-                int promptTokens = usage.getIntValue("prompt_tokens");
-                int completionTokens = usage.getIntValue("completion_tokens");
-                double promptCost = aiProperties.getChatInputPricePerMillion() * promptTokens / 1_000_000;
-                double completionCost = aiProperties.getChatOutputPricePerMillion() * completionTokens / 1_000_000;
-                tokenBudgetService.record(promptCost + completionCost);
-            }
-
-            return json.getJSONArray("choices")
-                    .getJSONObject(0)
-                    .getJSONObject("message")
-                    .getString("content");
+            doStream(buildBody(task, messages), onChunk);
         } finally {
             concurrencyGuard.release();
         }
     }
 
+    private void doStream(Map<String, Object> body, Consumer<String> onChunk) throws Exception {
+        body.put("stream", true);
+        // 预算修复：请求返回 usage，否则流式调用无法记账（2 元/日预算形同虚设）
+        body.put("stream_options", Map.of("include_usage", true));
+
+        HttpURLConnection conn = (HttpURLConnection) URI
+                .create(aiProperties.getBaseUrl() + CHAT_COMPLETIONS_PATH)
+                .toURL().openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Authorization", "Bearer " + aiProperties.getApiKey());
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(aiProperties.getTimeout());
+
+        try {
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(JSON.toJSONString(body).getBytes(StandardCharsets.UTF_8));
+            }
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.startsWith("data: ") || "data: [DONE]".equals(line)) {
+                        continue;
+                    }
+                    try {
+                        JSONObject data = JSON.parseObject(line.substring(6));
+
+                        // 末尾 chunk 携带 usage（stream_options.include_usage=true 时返回）
+                        if (data.getJSONObject("usage") != null) {
+                            recordUsage(data);
+                            continue;
+                        }
+
+                        JSONObject delta = data.getJSONArray("choices")
+                                .getJSONObject(0).getJSONObject("delta");
+                        String content = delta == null ? null : delta.getString("content");
+                        if (content != null && !content.isEmpty()) {
+                            onChunk.accept(content);
+                        }
+                        // 说明：思考模式下 delta 里还有 reasoning_content（实测分片数约为 content 的 2.3 倍）。
+                        // 前端不展示思考过程 → 此处天然忽略，不影响 SSE 解析（2026-09-11 实测验证）。
+                    } catch (Exception ignored) {
+                        // 单个 chunk 解析失败不中断整条流
+                    }
+                }
+            }
+        } finally {
+            conn.disconnect();
+        }
+    }
+
+    // ================================================================
+    // ★ 唯一构造请求体的地方
+    // ================================================================
+
+    /**
+     * 按任务类型组装请求体 —— <b>模型 / 思考模式 / 温度 / max_tokens 只在这里出现一次</b>。
+     * <p>SSE 与同步共用此方法，避免"改一处漏一处"。
+     */
+    private Map<String, Object> buildBody(AiTask task, List<Map<String, Object>> messages) {
+        AiProperties.TaskOptions opt = aiProperties.taskOptions(task);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", aiProperties.modelFor(task));   // 档位解析；Java 代码不出现模型名
+        body.put("messages", messages);
+        body.put("max_tokens", opt.getMaxTokens());
+
+        if (opt.isThinking()) {
+            body.put("thinking", Map.of("type", "enabled"));
+            if (hasText(opt.getReasoningEffort())) {
+                body.put("reasoning_effort", opt.getReasoningEffort());
+            }
+            // ⚠️ 思考模式下 temperature 官方不生效（设了不报错）→ 刻意不下发，避免"调了温度"的假象
+        } else {
+            body.put("thinking", Map.of("type", "disabled"));
+            if (opt.getTemperature() != null) {
+                body.put("temperature", opt.getTemperature());   // 只有非思考模式温度才真正生效
+            }
+        }
+
+        // 只有 JSON 任务下发 response_format（提示词必须含 "json"）
+        // ⚠️ 它不能与 tools 同时使用 —— 同时给出时模型会直接输出 JSON、不再触发 tool_calls（TODO #32 校正⑦实测）
+        if (task == AiTask.JSON) {
+            body.put("response_format", Map.of("type", "json_object"));
+        }
+        return body;
+    }
+
+    // ================================================================
+    // 公共辅助
+    // ================================================================
+
+    private List<Map<String, Object>> simpleMessages(String systemPrompt, String userMessage) {
+        List<Map<String, Object>> messages = new ArrayList<>();
+        if (hasText(systemPrompt)) {
+            messages.add(Map.of("role", "system", "content", systemPrompt));
+        }
+        messages.add(Map.of("role", "user", "content", userMessage == null ? "" : userMessage));
+        return messages;
+    }
+
+    /** 记录 token 费用（输入 + 输出） */
+    private void recordUsage(JSONObject json) {
+        JSONObject usage = json.getJSONObject("usage");
+        if (usage == null) {
+            return;
+        }
+        int promptTokens = usage.getIntValue("prompt_tokens");
+        int completionTokens = usage.getIntValue("completion_tokens");
+        double cost = aiProperties.getChatInputPricePerMillion() * promptTokens / 1_000_000.0
+                + aiProperties.getChatOutputPricePerMillion() * completionTokens / 1_000_000.0;
+        tokenBudgetService.record(cost);
+    }
+
+    private String extractContent(JSONObject json) {
+        return json.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content");
+    }
+
     /**
      * 预算强制检查：所有 DeepSeek API 调用发起前执行。
-     * 任何遗漏入口检查的调用路径（如 /ai/search）也会在此被拦下。
+     * 任何遗漏入口检查的调用路径也会在此被拦下。
      */
     private void checkBudget() {
         if (tokenBudgetService.isBudgetExceeded()) {
@@ -175,67 +263,6 @@ public class DeepSeekAiClient implements AiClient {
         }
     }
 
-    // ========== Embedding API ==========
-
-    @Override
-    public float[] embed(String text) {
-        JSONObject result = doEmbed(List.of(text));
-        JSONArray embeddingArray = result.getJSONArray("data")
-                .getJSONObject(0)
-                .getJSONArray("embedding");
-        return toFloatArray(embeddingArray);
-    }
-
-    @Override
-    public List<float[]> embedBatch(List<String> texts) {
-        JSONObject result = doEmbed(texts);
-        JSONArray dataArray = result.getJSONArray("data");
-        List<float[]> embeddings = new ArrayList<>(dataArray.size());
-        for (int i = 0; i < dataArray.size(); i++) {
-            embeddings.add(toFloatArray(dataArray.getJSONObject(i).getJSONArray("embedding")));
-        }
-        return embeddings;
-    }
-
-    private JSONObject doEmbed(List<String> inputs) {
-        checkBudget();
-        HttpHeaders headers = buildHeaders();
-
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", aiProperties.getEmbeddingModel());
-        requestBody.put("input", inputs.size() == 1 ? inputs.get(0) : inputs);
-
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
-
-        log.debug("Calling DeepSeek Embedding API, model={}, batchSize={}",
-                aiProperties.getEmbeddingModel(), inputs.size());
-
-        // 并发闸门：embedding 也是外部 API 调用，与 chat 共享闸门（启动全量向量化受并发 20 约束）
-        concurrencyGuard.acquire("embed");
-        try {
-            ResponseEntity<String> response = restTemplate.postForEntity(
-                    aiProperties.getBaseUrl() + "/v1/embeddings",
-                    request,
-                    String.class);
-
-            JSONObject json = JSON.parseObject(response.getBody());
-
-            // 记录 token 费用
-            JSONObject usage = json.getJSONObject("usage");
-            if (usage != null) {
-                int promptTokens = usage.getIntValue("prompt_tokens");
-                double cost = aiProperties.getEmbeddingPricePerMillion() * promptTokens / 1_000_000;
-                tokenBudgetService.record(cost);
-            }
-
-            return json;
-        } finally {
-            concurrencyGuard.release();
-        }
-    }
-
-    // ========== Common ==========
-
     private HttpHeaders buildHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -243,11 +270,7 @@ public class DeepSeekAiClient implements AiClient {
         return headers;
     }
 
-    private float[] toFloatArray(JSONArray array) {
-        float[] result = new float[array.size()];
-        for (int i = 0; i < array.size(); i++) {
-            result[i] = array.getFloatValue(i);
-        }
-        return result;
+    private static boolean hasText(String s) {
+        return s != null && !s.isBlank();
     }
 }

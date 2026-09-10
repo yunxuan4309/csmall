@@ -14,45 +14,85 @@ seata:
 
 cooxiao:
   ai:
+    # ===== 供应商 / 凭据 =====
     # API Key 兼容两个环境变量名：生产 .env 用 AI_API_KEY；本地系统/用户变量用 DEEPSEEK_API_KEY。
     # 嵌套占位符：AI_API_KEY 优先，其次 DEEPSEEK_API_KEY，都缺才回退占位符（启动即暴露配置问题）。
     # ⚠️ Spring Boot 不自动读取 .env 文件——本地开发请在 IDE Run Configuration 注入环境变量，
     #    或用系统/用户环境变量（本机用户级已有 DEEPSEEK_API_KEY）。踩坑记录见 TODO 第二批 §5.4.5。
     api-key: ${AI_API_KEY:${DEEPSEEK_API_KEY:sk-placeholder}}
     base-url: ${AI_API_BASE_URL:https://api.deepseek.com}
-    # ⚠️ chat-model 用 deepseek-chat（非推理模型）：重排/意图提取等 JSON 结构化任务需要"快+稳+不截断"，
-    # 推理模型(deepseek-v4-flash)会思考到预算耗尽才输出，content 易被截断/挤空（2026-09-08 实测）。
-    # 真正需要深度推理的 SSE 对话在 ChatServiceImpl 硬编码 v4-flash，不受此配置影响。
-    chat-model: deepseek-chat
-    compare-model: deepseek-v4-flash
+
+    # ===== 模型档位（逻辑档位 → 实际 model id）★ 模型可配化的关键 =====
+    # 官方模型「更名 / 换代 / 下架」时**只改这里**（或注入环境变量）→ 重建 mall-ai 一个容器即可，
+    # 无需改 Java 代码、无需重编译。Java 侧只引用档位名（flash/pro），不出现任何模型 id。
+    # ⚠️ 必须用显式占位符：cooxiao.ai.chat-model 对应的环境变量是 COOXIAO_AI_CHATMODEL（去横线），
+    #    写 COOXIAO_AI_CHAT_MODEL 并不映射 —— 依赖 Spring relaxed binding 隐式且易错。
+    models:
+      flash: ${AI_MODEL_FLASH:deepseek-v4-flash}
+      pro: ${AI_MODEL_PRO:deepseek-v4-pro}
+    default-tier: flash
+
+    # ===== 任务 → 档位 + 思考模式（代码只认任务类型，见 AiTask）=====
+    # thinking=false → 下发 {"thinking":{"type":"disabled"}}：官方机制上关掉思考，
+    #                  不再靠提示词"求它别想"，也不会有 reasoning 挤空 content（TODO #58）
+    # thinking=true  → 下发 {"thinking":{"type":"enabled"}}（官方默认即开）
+    # 温度：官方明确思考模式下不生效 → 只有 thinking=false 时才下发
+    tasks:
+      # 对话 / 深度推理：RAG 回答、多轮对话、SSE 流式
+      chat:
+        tier: flash
+        thinking: true
+        max-tokens: 3000
+      # JSON 结构化任务：意图提取 / 重排 / 偏好提取（带 response_format）
+      # ⚠️ 该模式下提示词必须含 "json" 字样，否则会被拒
+      json:
+        tier: flash
+        thinking: false
+        temperature: 0.3
+        max-tokens: 3000
+      # 查询扩展：输出空格分隔的关键词（纯文本，非 JSON）→ 关思考，但**不带 response_format**
+      expand:
+        tier: flash
+        thinking: false
+        temperature: 0.3
+      # 商品对比摘要
+      compare:
+        tier: flash
+        thinking: true
+
+    # 全局默认值（任务未显式配置时回退）
     temperature: 0.7
-    # max-tokens：deepseek-v4-flash 是 reasoning 模型，提示词禁思考后仍会产出大量 reasoning
-    # （实测随 max_tokens 水涨船高：1000→想满1000、2000→想~1630）。max_tokens 必须 >> reasoning
-    # 自然上限 + content 长度，否则 reasoning 占满 → content 空（重排偶发降级）。
-    # 实测 2000 时 reasoning≈1630 content 正常(3/3成功)，但余量偏紧；3000 留足安全边际（2026-09-08 实测调优）
+    # max-tokens：思考模式下 reasoning 可能吃掉大半预算（实测 max_tokens=120 时 content 必为空）
+    # → 必须留足；各任务可用 tasks.*.max-tokens 单独覆盖
     max-tokens: 3000
-    # LLM HTTP 调用超时：deepseek-v4-flash 是 reasoning 模型（先思考后回答），
-    # 意图提取/AI 重排等完整生成常需 15-30s，15s 会导致 AI 重排 Read timed out 频繁降级
+    # LLM HTTP 调用超时：restTemplate 的读写超时由它决定（深度思考场景常需 15-30s）
     timeout: 60000
-    # Embedding 向量检索（硅基流动 BGE-M3，免费）
+
+    # ===== Embedding 向量检索（硅基流动 BGE-M3，独立供应商）=====
     embedding-enabled: false
     embedding-api-key: ${EMBEDDING_API_KEY:sk-placeholder}
-    embedding-base-url: https://api.siliconflow.cn
-    embedding-model: BAAI/bge-m3
+    embedding-base-url: ${AI_EMBEDDING_BASE_URL:https://api.siliconflow.cn}
+    embedding-model: ${AI_MODEL_EMBEDDING:BAAI/bge-m3}
     embedding-dimensions: 1024
     embedding-price-per-million: 0.0
-    # 每日预算 2 元
+
+    # ===== 预算（每日 2 元，Redis 日计数）=====
     daily-budget: 2.0
     chat-input-price-per-million: 1.0
     chat-output-price-per-million: 2.0
+
     # ===== 高并发防护（TODO #2+#34）=====
-    # 并发闸门：同时进行的 LLM 调用上限（含 chat/chatWithModel/embed + SSE 流式）
+    # 并发闸门：同时进行的 LLM 调用上限（含 chat / json / expand / stream）
     concurrent-max: 20
     # 闸门满时不等待直接失败（慢请求等待无意义，降级更优）
     concurrent-wait-ms: 0
     # 每用户频控：60s 窗口最大请求数（防单用户刷爆预算/打满闸门）
     user-rate-limit-enabled: true
     user-rate-limit: 10
+
+    # ===== Agent 双路径开关（TODO #32；Step 1 仅落地配置，默认关 = 走现有快速路径）=====
+    agent-enabled: false
+    agent-max-rounds: 3
 
 knife4j:
   enable: true

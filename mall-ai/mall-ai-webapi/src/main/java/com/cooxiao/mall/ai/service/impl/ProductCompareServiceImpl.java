@@ -3,6 +3,7 @@ package com.cooxiao.mall.ai.service.impl;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.cooxiao.mall.ai.client.AiClient;
+import com.cooxiao.mall.ai.config.AiTask;
 import com.cooxiao.mall.ai.service.TokenBudgetService;
 import com.cooxiao.mall.common.restful.JsonResult;
 import com.cooxiao.mall.common.restful.ResponseCode;
@@ -74,9 +75,9 @@ public class ProductCompareServiceImpl {
                 .map(spu -> buildCompareItem(spu, actualDimensions))
                 .collect(Collectors.toList()));
 
-        // 5. AI 只生成总结
+        // 5. AI 只生成总结（COMPARE 任务：与 CHAT 同档，单列便于将来单独调档）
         try {
-            String summary = aiClient.chat(buildSummaryPrompt(spuList),
+            String summary = aiClient.chat(AiTask.COMPARE, buildSummaryPrompt(spuList),
                     "请简洁总结对比并给出推荐。");
             result.setSummary(summary);
         } catch (Exception e) {

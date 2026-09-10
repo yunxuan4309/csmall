@@ -3,7 +3,6 @@ package com.cooxiao.mall.ai.service.impl;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.cooxiao.mall.ai.client.AiClient;
-import com.cooxiao.mall.ai.config.AiProperties;
 import com.cooxiao.mall.ai.model.SearchIntent;
 import com.cooxiao.mall.ai.service.SearchPipeline;
 import com.cooxiao.mall.ai.service.PreferenceExtractor;
@@ -19,13 +18,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.net.HttpURLConnection;
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
 import jakarta.annotation.PreDestroy;
@@ -52,8 +44,6 @@ public class ChatServiceImpl {
     @Autowired private RagServiceImpl ragService;
     @Autowired private SearchPipeline searchPipeline;
     @Autowired private AiClient aiClient;
-    @Autowired private AiProperties aiProperties;
-    @Autowired private com.cooxiao.mall.ai.config.AiConcurrencyGuard aiConcurrencyGuard;
 
     /** 创建新会话 */
     public ChatResultVO createSession(Long userId) {
@@ -96,7 +86,7 @@ public class ChatServiceImpl {
 
         // 4. 构建对话并调用 AI
         String preferenceContext = buildPreferenceContext(session.getPreferences());
-        List<Map<String, String>> allMessages = buildMessages(session, message, preferenceContext, searchContext);
+        List<Map<String, Object>> allMessages = buildMessages(session, message, preferenceContext, searchContext);
 
         String aiResponse;
         try {
@@ -158,11 +148,12 @@ public class ChatServiceImpl {
             writeSSE(outputStream, "thinking", "💬 AI 正在生成回答...");
 
             String preferenceContext = buildPreferenceContext(session.getPreferences());
-            List<Map<String, String>> allMessages = buildMessages(session, message,
+            List<Map<String, Object>> allMessages = buildMessages(session, message,
                     preferenceContext, pipelineResult.getSearchContext());
 
             StringBuilder fullResponse = new StringBuilder();
-            streamDeepSeek(allMessages, chunk -> {
+            // 模型 / 思考模式 / 温度 / max_tokens 全部由 AiClient 按任务类型决定（含并发闸门与预算记账）
+            aiClient.streamChat(allMessages, chunk -> {
                 fullResponse.append(chunk);
                 writeSSE(outputStream, "chunk", chunk);
             });
@@ -244,11 +235,11 @@ public class ChatServiceImpl {
                 emitter.send(SseEmitter.event().name("thinking").data("💬 AI 正在生成回答..."));
 
                 String preferenceContext = buildPreferenceContext(session.getPreferences());
-                List<Map<String, String>> allMessages = buildMessages(session, message,
+                List<Map<String, Object>> allMessages = buildMessages(session, message,
                         preferenceContext, pipelineResult.getSearchContext());
 
                 StringBuilder fullResponse = new StringBuilder();
-                streamDeepSeek(allMessages, chunk -> {
+                aiClient.streamChat(allMessages, chunk -> {
                     try {
                         fullResponse.append(chunk);
                         emitter.send(SseEmitter.event().name("chunk").data(chunk));
@@ -311,9 +302,9 @@ public class ChatServiceImpl {
                 """.formatted(preferenceContext.isBlank() ? "无" : preferenceContext, message);
 
         try {
-            // 意图提取是 JSON 结构化任务：用 deepseek-chat（非推理，快+稳+不截断）。
-            // 推理模型(v4-flash)会思考到预算耗尽才输出，JSON 易被截断/延迟大（2026-09-08 实测调优）
-            String raw = aiClient.chatWithModel(null, prompt, "deepseek-chat", true);
+            // 意图提取是 JSON 结构化任务 → chatJson：官方 thinking=disabled 从机制上关掉思考，
+            // 不再靠"提示词求它别想"，也不会出现 reasoning 挤空 content（TODO #58，2026-09-11）
+            String raw = aiClient.chatJson(null, prompt);
             // 清理 AI 可能输出的 markdown 包裹
             raw = raw.trim();
             if (raw.startsWith("```")) raw = raw.replaceAll("```json?", "").replace("```", "").trim();
@@ -331,80 +322,6 @@ public class ChatServiceImpl {
         SearchIntent intent = new SearchIntent();
         intent.setKeywords(message);
         return intent;
-    }
-
-    // ================================================================
-    // DeepSeek SSE 调用
-    // ================================================================
-
-    /** 通过 SSE 流式调用 DeepSeek API */
-    private void streamDeepSeek(List<Map<String, String>> messages,
-                                java.util.function.Consumer<String> onChunk) throws Exception {
-        // 并发闸门（TODO #2+#34）：SSE 流式是"最长寿"的 LLM 调用（秒级~十几秒），
-        // 不设闸门时少量并发 SSE 即可占满线程/打满外部 API 配额。闸门满抛 AiBusyException
-        // → sendStream 的 catch 发 error 事件（降级而非挂死）。
-        aiConcurrencyGuard.acquire("stream");
-        try {
-            doStreamDeepSeek(messages, onChunk);
-        } finally {
-            aiConcurrencyGuard.release();
-        }
-    }
-
-    private void doStreamDeepSeek(List<Map<String, String>> messages,
-                                java.util.function.Consumer<String> onChunk) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) URI
-                .create(aiProperties.getBaseUrl() + "/v1/chat/completions")
-                .toURL().openConnection();
-        conn.setRequestMethod("POST");
-        conn.setRequestProperty("Authorization", "Bearer " + aiProperties.getApiKey());
-        conn.setRequestProperty("Content-Type", "application/json");
-        conn.setDoOutput(true);
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(60000);
-
-        Map<String, Object> body = new HashMap<>();
-        body.put("model", "deepseek-v4-flash");
-        body.put("messages", messages);
-        body.put("temperature", 0.7);
-        body.put("max_tokens", 2000);
-        body.put("stream", true);
-        // 2026-08-14 预算修复：请求返回 usage，否则流式调用无法记账（2元/日预算形同虚设）
-        body.put("stream_options", Map.of("include_usage", true));
-
-        try (OutputStream os = conn.getOutputStream()) {
-            os.write(JSON.toJSONString(body).getBytes(StandardCharsets.UTF_8));
-        }
-
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.startsWith("data: ") && !line.equals("data: [DONE]")) {
-                    try {
-                        JSONObject data = JSON.parseObject(line.substring(6));
-                        // 流式末尾 chunk 携带 usage（stream_options.include_usage=true 时返回）
-                        JSONObject usage = data.getJSONObject("usage");
-                        if (usage != null) {
-                            int promptTokens = usage.getIntValue("prompt_tokens");
-                            int completionTokens = usage.getIntValue("completion_tokens");
-                            double cost = aiProperties.getChatInputPricePerMillion() * promptTokens / 1_000_000.0
-                                    + aiProperties.getChatOutputPricePerMillion() * completionTokens / 1_000_000.0;
-                            tokenBudgetService.record(cost);
-                            log.info("AI 流式记账：输入 {} tokens + 输出 {} tokens = {} 元",
-                                    promptTokens, completionTokens, String.format("%.4f", cost));
-                            continue;
-                        }
-                        JSONObject delta = data.getJSONArray("choices")
-                                .getJSONObject(0).getJSONObject("delta");
-                        String content = delta.getString("content");
-                        if (content != null && !content.isEmpty()) {
-                            onChunk.accept(content);
-                        }
-                    } catch (Exception ignored) {}
-                }
-            }
-        }
     }
 
     // ================================================================
@@ -455,9 +372,9 @@ public class ChatServiceImpl {
         return vo;
     }
 
-    private List<Map<String, String>> buildMessages(ChatSession session, String message,
+    private List<Map<String, Object>> buildMessages(ChatSession session, String message,
                                                      String preferenceContext, String searchContext) {
-        List<Map<String, String>> msgs = new ArrayList<>();
+        List<Map<String, Object>> msgs = new ArrayList<>();
         msgs.add(Map.of("role", "system", "content", buildSystemPrompt(preferenceContext, searchContext)));
         for (ChatMessage hist : session.getMessages()) {
             msgs.add(Map.of("role", hist.getRole(), "content", hist.getContent()));

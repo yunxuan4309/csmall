@@ -1,52 +1,58 @@
 package com.cooxiao.mall.ai.client;
 
+import com.cooxiao.mall.ai.config.AiTask;
+
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
- * AI API 客户端抽象接口
- * 支持切换不同的 AI 供应商（DeepSeek、通义千问等）
+ * AI API 客户端抽象接口。
+ *
+ * <p>调用方只声明<b>任务类型</b>（{@link AiTask}），由 {@code cooxiao.ai.tasks} 决定
+ * 「档位 + 思考模式 + 温度 + max_tokens」—— <b>模型名不出现在调用方代码里</b>。
+ *
+ * <p>⚠️ 消息类型为 {@code List<Map<String, Object>>}（而非 {@code String}）：
+ * Function Calling 场景下 assistant 消息要携带 {@code tool_calls} 数组、
+ * {@code role:"tool"} 消息要携带 {@code tool_call_id}，纯 String 装不下（TODO #32 校正②）。
+ *
+ * <p>说明：本接口原先还有 {@code embed / embedBatch}（按"可切换 AI 供应商"设想）。
+ * 实测全项目 embedding 一律走 {@code SiliconFlowEmbeddingClient}（不同供应商 + 不同 baseUrl），
+ * 该两方法属<b>死代码</b>（且实现打的是 DeepSeek 地址 + 硅基流动模型名，真调用必失败），
+ * 已于 2026-09-11 删除（TODO #58 §5.3）。
  */
 public interface AiClient {
 
     /**
-     * 调用 AI 聊天 API，返回文本回复
-     *
-     * @param systemPrompt 系统提示词
-     * @param userMessage  用户消息
-     * @return AI 回复文本
+     * 对话 / 深度推理（{@link AiTask#CHAT}，思考模式开）。
      */
     String chat(String systemPrompt, String userMessage);
 
     /**
-     * 调用 AI 聊天 API（自由 message 列表，用于多轮对话）
+     * 对话 / 深度推理（{@link AiTask#CHAT}，思考模式开），自由 message 列表 —— 多轮对话与 Agent 工具轮使用。
      */
-    String chat(List<Map<String, String>> messages);
+    String chat(List<Map<String, Object>> messages);
 
     /**
-     * 调用 AI 聊天 API，指定模型 + 是否启用 JSON 模式
-     *
-     * @param systemPrompt 系统提示词
-     * @param userMessage  用户消息
-     * @param model        模型名称（如 deepseek-v4-pro）
-     * @param jsonMode     是否强制 JSON 输出
-     * @return AI 回复文本
+     * 按指定任务类型 + 简单消息（system + user）调用。
      */
-    String chatWithModel(String systemPrompt, String userMessage, String model, boolean jsonMode);
+    String chat(AiTask task, String systemPrompt, String userMessage);
 
     /**
-     * 调用 Embedding API，将文本转为向量
-     *
-     * @param text 输入文本
-     * @return float 数组向量
+     * 按指定任务类型调用（档位与思考模式由 {@code cooxiao.ai.tasks.<task>} 决定）。
      */
-    float[] embed(String text);
+    String chat(AiTask task, List<Map<String, Object>> messages);
 
     /**
-     * 批量调用 Embedding API
-     *
-     * @param texts 文本列表
-     * @return 向量列表
+     * JSON 结构化任务（{@link AiTask#JSON}）：<b>思考模式关闭</b> + {@code response_format=json_object}。
+     * <p>意图提取 / 重排 / 偏好提取用这个（查询扩展输出的是纯文本，走 {@link AiTask#EXPAND}）——
+     * 从机制上避免 reasoning 挤空 content，不再依赖提示词"求它别想"。
      */
-    List<float[]> embedBatch(List<String> texts);
+    String chatJson(String systemPrompt, String userMessage);
+
+    /**
+     * 流式对话（{@link AiTask#CHAT}，思考模式开 + SSE），逐片回调。
+     * <p>并发闸门与预算记账均在实现内完成，调用方不需要重复处理。
+     */
+    void streamChat(List<Map<String, Object>> messages, Consumer<String> onChunk) throws Exception;
 }

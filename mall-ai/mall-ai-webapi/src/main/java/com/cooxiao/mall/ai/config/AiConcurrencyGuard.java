@@ -23,8 +23,9 @@ import java.util.concurrent.TimeUnit;
  *   （Search 返回纯 ES 结果、Ask 返回 busy、SSE 发 error 事件）= 降级而非 500
  *
  * 挂点：所有真实 LLM 调用的汇聚点——
- *   DeepSeekAiClient.chat/chatWithModel/doChat/embed（同步调用）
- *   ChatServiceImpl.streamDeepSeek（SSE 流式）
+ *   DeepSeekAiClient.chat(task, ...)（同步；覆盖 chat / json / expand / compare 各任务）
+ *   DeepSeekAiClient.streamChat（SSE 流式，2026-09-11 由 ChatServiceImpl 收敛进来）
+ *   SiliconFlowEmbeddingClient.embed / embedBatch（embedding）
  */
 @Slf4j
 @Component

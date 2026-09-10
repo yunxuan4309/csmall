@@ -51,7 +51,8 @@ public class PreferenceExtractor {
         }
 
         try {
-            String response = aiClient.chat(EXTRACT_PROMPT.formatted(historyText),
+            // JSON 结构化任务 → chatJson：thinking=disabled + response_format，从机制上保证稳定 JSON
+            String response = aiClient.chatJson(EXTRACT_PROMPT.formatted(historyText),
                     "请按JSON格式输出用户偏好。");
             String cleaned = cleanResponse(response);
             JSONObject json = JSON.parseObject(cleaned);
