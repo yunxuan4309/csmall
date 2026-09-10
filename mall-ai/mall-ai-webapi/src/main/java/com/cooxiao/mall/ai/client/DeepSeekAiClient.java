@@ -121,11 +121,17 @@ public class DeepSeekAiClient implements AiClient {
 
     @Override
     public AiToolRound chatWithTools(List<Map<String, Object>> messages, List<Map<String, Object>> tools) {
+        return chatWithTools(messages, tools, null);
+    }
+
+    @Override
+    public AiToolRound chatWithTools(List<Map<String, Object>> messages, List<Map<String, Object>> tools,
+                                     String toolChoice) {
         checkBudget();
         AiTask task = AiTask.AGENT;
-        Map<String, Object> body = buildToolBody(task, messages, tools);
-        log.debug("调用 AI（带工具）：task={}, model={}, tools={}",
-                task.key(), body.get("model"), tools == null ? 0 : tools.size());
+        Map<String, Object> body = buildToolBody(task, messages, tools, toolChoice);
+        log.debug("调用 AI（带工具）：task={}, model={}, tools={}, toolChoice={}",
+                task.key(), body.get("model"), tools == null ? 0 : tools.size(), body.get("tool_choice"));
 
         concurrencyGuard.acquire("chat:" + task.key());
         try {
@@ -149,10 +155,11 @@ public class DeepSeekAiClient implements AiClient {
      * 这正是必需的行为（实测二者共存时模型不再返回 tool_calls，见 TODO #32 校正⑦）。
      */
     private Map<String, Object> buildToolBody(AiTask task, List<Map<String, Object>> messages,
-                                             List<Map<String, Object>> tools) {
+                                             List<Map<String, Object>> tools, String toolChoice) {
         Map<String, Object> body = buildBody(task, messages);
         body.put("tools", tools == null ? List.of() : tools);
-        body.put("tool_choice", "auto");
+        // auto = 模型自己决定；required = 强制必须调工具（首轮商品类问题用，避免凭历史作答）
+        body.put("tool_choice", hasText(toolChoice) ? toolChoice : "auto");
         return body;
     }
 
@@ -206,9 +213,17 @@ public class DeepSeekAiClient implements AiClient {
     public AiToolRound streamChatWithTools(List<Map<String, Object>> messages,
                                            List<Map<String, Object>> tools,
                                            Consumer<String> onContentChunk) throws Exception {
+        return streamChatWithTools(messages, tools, null, onContentChunk);
+    }
+
+    @Override
+    public AiToolRound streamChatWithTools(List<Map<String, Object>> messages,
+                                           List<Map<String, Object>> tools,
+                                           String toolChoice,
+                                           Consumer<String> onContentChunk) throws Exception {
         checkBudget();
         AiTask task = AiTask.AGENT;
-        Map<String, Object> body = buildToolBody(task, messages, tools);
+        Map<String, Object> body = buildToolBody(task, messages, tools, toolChoice);
 
         // 正文实时回吐给前端；tool_calls 按 index 累积（⚠️ arguments 是**分片到达**的字符串，必须拼接）
         StringBuilder content = new StringBuilder();

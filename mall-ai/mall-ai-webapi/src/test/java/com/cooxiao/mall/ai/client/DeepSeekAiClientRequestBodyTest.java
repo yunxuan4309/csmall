@@ -119,8 +119,13 @@ class DeepSeekAiClientRequestBodyTest {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> toolBodyOf(List<Map<String, Object>> tools) {
+        return toolBodyOf(tools, "auto");
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> toolBodyOf(List<Map<String, Object>> tools, String toolChoice) {
         Map<String, Object> body = (Map<String, Object>) ReflectionTestUtils.invokeMethod(
-                client, "buildToolBody", AiTask.AGENT, List.<Map<String, Object>>of(), tools);
+                client, "buildToolBody", AiTask.AGENT, List.<Map<String, Object>>of(), tools, toolChoice);
         assertThat(body).isNotNull();
         return body;
     }
@@ -149,6 +154,19 @@ class DeepSeekAiClientRequestBodyTest {
     void toolBody_withNullTools_stillSendsEmptyArray() {
         // tools 传 null 时下发的必须是空数组而不是 null —— 否则请求体非法
         assertThat(toolBodyOf(null).get("tools")).isEqualTo(List.of());
+    }
+
+    @Test
+    void toolChoiceRequired_isPassedThrough_andStillNoResponseFormat() {
+        // 商品类问题首轮"强制调工具"（P1 加固）：tool_choice=required 必须原样下发，
+        // 且依然不能带 response_format（实测二者互斥）
+        Map<String, Object> body = toolBodyOf(List.of(Map.of("type", "function",
+                "function", Map.of("name", "search_products", "description", "d", "parameters", Map.of("type", "object")))),
+                "required");
+
+        assertThat(body.get("tool_choice")).isEqualTo("required");
+        assertThat(body).doesNotContainKey("response_format");
+        assertThat(body.get("thinking")).isEqualTo(Map.of("type", "disabled"));
     }
 
     @Test

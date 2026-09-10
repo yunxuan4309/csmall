@@ -182,6 +182,9 @@ class ChatServiceImplAgentTest {
         final Deque<AiToolRound> script = new ArrayDeque<>();
         final Deque<AiToolRound> streamScript = new ArrayDeque<>();
         final List<List<Map<String, Object>>> toolRoundInputs = new ArrayList<>();
+        /** 每轮实际下发的 tool_choice（null = auto）：用来断言"首轮强制"是否生效 */
+        final List<String> toolChoices = new ArrayList<>();
+        final List<String> streamToolChoices = new ArrayList<>();
         boolean throwOnToolCall;
         /** 在第 N 次流式调用时"先吐一片再抛异常"（-1 = 不抛）：用来测"已经写出去之后再失败" */
         int streamThrowOnCall = -1;
@@ -194,7 +197,14 @@ class ChatServiceImplAgentTest {
 
         @Override
         public AiToolRound chatWithTools(List<Map<String, Object>> messages, List<Map<String, Object>> tools) {
+            return chatWithTools(messages, tools, null);
+        }
+
+        @Override
+        public AiToolRound chatWithTools(List<Map<String, Object>> messages, List<Map<String, Object>> tools,
+                                         String toolChoice) {
             toolRoundInputs.add(new ArrayList<>(messages));
+            toolChoices.add(toolChoice);
             if (throwOnToolCall) throw new IllegalStateException("模拟 LLM 异常");
             return script.isEmpty() ? convergeRound("（脚本耗尽）") : script.poll();
         }
@@ -202,7 +212,14 @@ class ChatServiceImplAgentTest {
         @Override
         public AiToolRound streamChatWithTools(List<Map<String, Object>> messages, List<Map<String, Object>> tools,
                                                Consumer<String> onContentChunk) {
+            return streamChatWithTools(messages, tools, null, onContentChunk);
+        }
+
+        @Override
+        public AiToolRound streamChatWithTools(List<Map<String, Object>> messages, List<Map<String, Object>> tools,
+                                               String toolChoice, Consumer<String> onContentChunk) {
             toolRoundInputs.add(new ArrayList<>(messages));
+            streamToolChoices.add(toolChoice);
             streamCalls++;
             if (streamThrowOnCall > 0 && streamCalls == streamThrowOnCall) {
                 onContentChunk.accept("先吐一半");
@@ -546,6 +563,10 @@ class ChatServiceImplAgentTest {
     // ⑫ 流式：轮数用尽 → 摘掉工具、流式收口
     // ================================================================
 
+    // ================================================================
+    // ⑫ 流式：轮数用尽 → 摘掉工具、流式收口
+    // ================================================================
+
     @Test
     void streamAgent_maxRoundsExhausted_streamsForcedConclusion() {
         props.setAgentMaxRounds(1);
@@ -557,6 +578,52 @@ class ChatServiceImplAgentTest {
         assertThat(sse).contains("信息已足够，正在生成回答");
         assertThat(sse).contains("（流式回答）");       // 收口用的是流式作答（aiClient.streamChat）
         assertThat(sse).contains("event: done");
+        assertThat(tool.calls).isEqualTo(1);
+    }
+
+    // ================================================================
+    // ⑬ 首轮强制调工具（商品类问题）—— 防"凭历史作答导致商品卡片为空"
+    // ================================================================
+
+    @Test
+    void productQuery_forcesToolCallOnFirstRound_thenBackToAuto() {
+        tool.hits = List.of(hit("酷鲨手机", 4999));
+        aiClient.script.add(toolCallRound("c1", "search_products", "{\"keywords\":\"手机\"}"));
+        aiClient.script.add(convergeRound("推荐。"));
+
+        service.send(1L, "sid-1", "我想买5000以内的手机");
+
+        assertThat(aiClient.toolChoices).containsExactly("required", null);   // 首轮 required，之后 auto
+    }
+
+    @Test
+    void nonProductQuery_doesNotForce() {
+        aiClient.script.add(convergeRound("你好，我可以帮你选商品。"));
+
+        service.send(1L, "sid-1", "你好呀");
+
+        assertThat(aiClient.toolChoices).containsExactly((String) null);
+    }
+
+    @Test
+    void forceFirstTool_canBeDisabledByConfig() {
+        props.setAgentForceFirstTool(false);
+        aiClient.script.add(convergeRound("推荐。"));
+
+        service.send(1L, "sid-1", "我想买手机");
+
+        assertThat(aiClient.toolChoices).containsExactly((String) null);
+    }
+
+    @Test
+    void streamAgent_alsoForcesFirstToolForProductQuery() {
+        tool.hits = List.of(hit("酷鲨手机", 4999));
+        aiClient.streamScript.add(toolCallRound("c1", "search_products", "{\"keywords\":\"手机\"}"));
+        aiClient.streamScript.add(convergeRound("推荐。"));
+
+        sendStream();
+
+        assertThat(aiClient.streamToolChoices).containsExactly("required", null);
         assertThat(tool.calls).isEqualTo(1);
     }
 }

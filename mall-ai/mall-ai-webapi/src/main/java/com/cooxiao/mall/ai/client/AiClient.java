@@ -69,6 +69,15 @@ public interface AiClient {
     AiToolRound chatWithTools(List<Map<String, Object>> messages, List<Map<String, Object>> tools);
 
     /**
+     * 同上，但**显式指定 `tool_choice`**：{@code "auto"}（默认）/ {@code "required"}（强制必须调工具）/ {@code "none"}。
+     *
+     * <p>用途：商品类问题在**第一轮**用 {@code "required"} 强制检索，避免模型"凭历史对话里的商品作答"——
+     * 那样回答内容也许对，但**没有工具结果就没有商品卡片**，前端会空一块（2026-09-10 生产实测踩到）。
+     * 后续轮次回到 {@code "auto"}，让模型自己决定收敛。
+     */
+    AiToolRound chatWithTools(List<Map<String, Object>> messages, List<Map<String, Object>> tools, String toolChoice);
+
+    /**
      * 带工具的<b>流式</b>调用（SSE）—— 流式 Agent 的一拍。
      *
      * <p>与 {@link #chatWithTools} 的区别：模型"边想边吐"的正文会**实时**通过 {@code onContentChunk} 回调出去，
@@ -79,5 +88,11 @@ public interface AiClient {
      */
     AiToolRound streamChatWithTools(List<Map<String, Object>> messages,
                                     List<Map<String, Object>> tools,
+                                    Consumer<String> onContentChunk) throws Exception;
+
+    /** 同上，但显式指定 {@code tool_choice}（见 {@link #chatWithTools(List, List, String)}） */
+    AiToolRound streamChatWithTools(List<Map<String, Object>> messages,
+                                    List<Map<String, Object>> tools,
+                                    String toolChoice,
                                     Consumer<String> onContentChunk) throws Exception;
 }

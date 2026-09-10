@@ -40,6 +40,14 @@ public class ChatServiceImpl {
     private static final int SEARCH_TOP_K = 10;
     /** Agent 回放的历史消息条数上限：工具轮请求体最大（含 tools schema + observation），历史必须封顶 */
     private static final int AGENT_HISTORY_LIMIT = 8;
+
+    /**
+     * 商品/购买意图的**保守**关键词表 —— 命中则首轮强制调用工具（`tool_choice=required`）。
+     * <p>宁可多强制一次检索，也不让模型"凭历史对话编商品"：没有工具结果就没有商品卡片（2026-09-10 实测踩到）。
+     */
+    private static final List<String> PRODUCT_INTENT_KEYWORDS = List.of(
+            "买", "推荐", "找", "搜", "有没有", "有货", "库存", "多少钱", "价格", "预算",
+            "便宜", "贵", "对比", "比较", "哪个", "选", "适合");
     private static final ExecutorService SSE_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
 
     @PreDestroy
@@ -144,9 +152,10 @@ public class ChatServiceImpl {
         List<Map<String, Object>> tools = toolRegistry.toolSchemas();
         List<Map<String, Object>> hits = List.of();
         int maxRounds = Math.max(1, aiProperties.getAgentMaxRounds());
+        String firstToolChoice = forceFirstTool(message);
 
         for (int round = 1; round <= maxRounds; round++) {
-            AiToolRound toolRound = aiClient.chatWithTools(messages, tools);
+            AiToolRound toolRound = aiClient.chatWithTools(messages, tools, round == 1 ? firstToolChoice : null);
 
             if (!toolRound.hasToolCalls()) {
                 // ✅ 收敛：模型认为信息够了，本轮的正文就是最终回答
@@ -178,6 +187,24 @@ public class ChatServiceImpl {
     // ================================================================
     // Agent 公共部件（同步 / 流式共用）
     // ================================================================
+
+    /**
+     * 首轮是否**强制调用工具**（{@code tool_choice=required}）：仅当开关打开且消息命中商品意图关键词。
+     * <p>依据 2026-09-10 生产实测：不加这道约束时，模型遇到与历史相似的问题会**直接引用历史里的商品**作答 ——
+     * 内容也许没错，但**这一轮没有任何工具结果 → 前端商品卡片为空**。首轮强制检索一次，之后回到 auto。
+     */
+    private String forceFirstTool(String message) {
+        if (!aiProperties.isAgentForceFirstTool() || message == null || message.isBlank()) {
+            return null;
+        }
+        for (String keyword : PRODUCT_INTENT_KEYWORDS) {
+            if (message.contains(keyword)) {
+                log.info("Agent 首轮强制调用工具（命中商品意图关键词「{}」）", keyword);
+                return "required";
+            }
+        }
+        return null;
+    }
 
     /** 组装 Agent 初始消息：system + 最近若干轮历史（只回放 role/content，工具过程不跨轮持久化）+ 本轮用户消息 */
     private List<Map<String, Object>> agentMessages(ChatSession session, String message) {
@@ -261,6 +288,7 @@ public class ChatServiceImpl {
         List<Map<String, Object>> tools = toolRegistry.toolSchemas();
         List<Map<String, Object>> hits = List.of();
         int maxRounds = Math.max(1, aiProperties.getAgentMaxRounds());
+        String firstToolChoice = forceFirstTool(message);
 
         boolean[] productsSent = {false};
         boolean[] anythingWritten = {false};
@@ -271,7 +299,8 @@ public class ChatServiceImpl {
                 writeSSE(out, "thinking", "🔧 第 " + round + " 轮：判断是否需要查询商品…");
 
                 List<String> buffered = new ArrayList<>();
-                AiToolRound toolRound = aiClient.streamChatWithTools(messages, tools, chunk -> {
+                AiToolRound toolRound = aiClient.streamChatWithTools(messages, tools,
+                        round == 1 ? firstToolChoice : null, chunk -> {
                     if (productsSent[0]) {
                         anythingWritten[0] = true;
                         reply.append(chunk);
@@ -413,6 +442,9 @@ public class ChatServiceImpl {
                 3. 工具返回 count=0 时，可放宽条件（去掉品牌或价格）再试一次；仍为空才如实告知用户暂无匹配商品
                 4. 推荐必须基于工具返回的商品，不得编造名称、价格、销量；不要罗列全部商品，挑最合适的 2~4 个并说明理由
                 5. 信息足够时直接给出最终回答，不要再调用工具
+                6. **即使本轮问题与历史对话相似，也必须重新调用工具核对当前数据** —— 历史里的商品名/价格/库存
+                   不能直接当成当前结果（用户看到的是现在可买的商品，历史数据可能已变）
+                7. 没有工具返回的数据时，不要给出具体商品名、价格或库存
 
                 用户历史偏好（仅供理解需求，不是硬约束）：
                 %s

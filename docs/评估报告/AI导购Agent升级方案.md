@@ -319,7 +319,9 @@ answer = streamChat(messages)                          // ⑥ 最后一轮流式
 - [ ] **P1 验证（待部署执行）**：多轮对话触发多次工具调用；`redis-cli LRANGE ai:agent:action:<sid> 0 -1` 看到动作轨迹；**停 `mall-product` 后 Agent 工具失败 → 自动降级 RAG 仍能回答**（⚠️ 这条要在维护窗口做）
 - [x] **边界验收（代码/测试层）**：写操作不暴露（本期只有 3 个只读工具）/ 参数越界被拦（非法 id、负数、超量都拦在工具内，且有专门测试）/ 轮数超限停止（摘掉 tools 强制收口）/ 预算超限拒绝（沿用既有 `checkBudget`）。**在线验收**待部署后执行
 
-> 📋 **P1 实施记录（2026-09-10）**：新增 4 个类（`CompareProductsTool` / `GetStockTool` / `AgentActionAuditor` + `AiClient.streamChatWithTools` 接口方法）+ 改 2 个类（`DeepSeekAiClient` 抽出 SSE 公共管道并实现流式工具轮 / `ChatServiceImpl` 抽出同步流式共用的工具轮与降级分层）；**测试 26 → 50 项全绿**；另补 **2 格实测实验（K/L）**确证"流式 `tool_calls` 分片 + preamble"契约。部署指令：`work/部署指令-step3-agent-p1.md`。
+> 📋 **P1 实施记录（2026-09-10）**：新增 4 个类（`CompareProductsTool` / `GetStockTool` / `AgentActionAuditor` + `AiClient.streamChatWithTools` 接口方法）+ 改 2 个类（`DeepSeekAiClient` 抽出 SSE 公共管道并实现流式工具轮 / `ChatServiceImpl` 抽出同步流式共用的工具轮与降级分层）；**测试 26 → 56 项全绿**；另补 **3 格实测实验（K/L/M）**确证"流式 `tool_calls` 分片 + preamble + `tool_choice=required`"契约。部署指令：`work/部署指令-step3-agent-p1.md`。
+>
+> 🔧 **部署后加固（同日，生产验证挖出）**：① **商品类问题首轮强制 `tool_choice=required`** —— 模型遇到与历史相似的问题会直接引用历史商品作答，内容对但**没有工具结果 → 前端商品卡片为空**（`agent-force-first-tool` 默认 true，可关）；② system 提示词新增两条规则（即使与历史相似也要重新核对 / 没有工具数据不要给具体商品）；③ **`get_stock` observation 增加 `spuName`** —— 原先不带商品名，模型会先猜 spuId 再按提问里的商品名作答，有张冠李戴风险。**逐类实现说明见 [[AI导购Agent实现详解]]**。
 
 ### 部署与回滚
 

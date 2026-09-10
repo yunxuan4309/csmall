@@ -2,7 +2,9 @@ package com.cooxiao.mall.ai.service.impl;
 
 import com.alibaba.fastjson.JSON;
 import com.cooxiao.mall.pojo.product.vo.SkuStandardVO;
+import com.cooxiao.mall.pojo.product.vo.SpuStandardVO;
 import com.cooxiao.mall.product.service.front.IForFrontSkuService;
+import com.cooxiao.mall.product.service.front.IForFrontSpuService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.stereotype.Component;
@@ -30,6 +32,13 @@ public class GetStockTool implements AiTool {
 
     @DubboReference
     private IForFrontSkuService skuService;
+
+    /**
+     * 只为了拿"商品名" —— 2026-09-10 生产实测发现：**不带商品名时，模型可能把库存安到别的商品头上**
+     * （它先猜了个 spuId 去查，拿到 SKU 数据后仍按提问里的商品名作答）。库存工具必须自报家门。
+     */
+    @DubboReference
+    private IForFrontSpuService spuService;
 
     @Override
     public String name() {
@@ -66,6 +75,13 @@ public class GetStockTool implements AiTool {
         }
 
         try {
+            // ⚠️ 先确认这个 spuId 到底是哪个商品，并把名字带进 observation ——
+            // 否则模型可能"查了 A、却把库存说成 B"（生产实测踩到过，见类注释）
+            SpuStandardVO spu = spuService.getSpuById(spuId);
+            if (spu == null) {
+                return AiToolResult.error("spuId=" + spuId + " 查不到商品，请确认它来自 search_products 的结果");
+            }
+
             List<SkuStandardVO> skus = skuService.getSkusBySpuId(spuId);
             List<Map<String, Object>> items = new ArrayList<>();
             int totalStock = 0;
@@ -86,6 +102,8 @@ public class GetStockTool implements AiTool {
 
             Map<String, Object> observation = new LinkedHashMap<>();
             observation.put("spuId", spuId);
+            observation.put("spuName", spu.getName());          // ★ 自报家门，杜绝张冠李戴
+            observation.put("listPrice", spu.getListPrice());
             observation.put("skuCount", skus == null ? 0 : skus.size());
             observation.put("totalStock", totalStock);
             observation.put("note", "常规库存（不含秒杀活动库存）");
@@ -96,7 +114,8 @@ public class GetStockTool implements AiTool {
             }
             observation.put("skus", items);
 
-            log.info("工具 get_stock：spuId={} → {} 个 SKU，总库存 {}", spuId, skus == null ? 0 : skus.size(), totalStock);
+            log.info("工具 get_stock：spuId={}（{}）→ {} 个 SKU，总库存 {}",
+                    spuId, spu.getName(), skus == null ? 0 : skus.size(), totalStock);
             // 库存工具不产出商品卡片（不返回 hits），前端商品列表由检索/对比类工具负责
             return AiToolResult.text(JSON.toJSONString(observation));
         } catch (Exception e) {

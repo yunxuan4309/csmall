@@ -102,6 +102,10 @@ cooxiao:
     # 默认关 = 走现有固定流水线（意图提取 → 检索 → 生成）；开 = 模型自己决定查什么、查几次。
     agent-enabled: ${AI_AGENT_ENABLED:false}
     agent-max-rounds: ${AI_AGENT_MAX_ROUNDS:3}
+    # 商品类问题**首轮强制调用工具**（tool_choice=required），避免模型凭历史对话里的商品作答导致
+    # "没有工具结果 → 前端商品卡片为空"（2026-09-10 生产实测踩到）。默认 true，置 false 即回退为纯 auto。
+    # ⚠️ 目前未在 compose 里注入同名环境变量 —— 要在线切换需先在 compose 的 mall-ai.environment 加一行。
+    agent-force-first-tool: ${AI_AGENT_FORCE_FIRST_TOOL:true}
 
 knife4j:
   enable: true

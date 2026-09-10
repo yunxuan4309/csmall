@@ -4,7 +4,9 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.cooxiao.mall.pojo.product.vo.SkuStandardVO;
+import com.cooxiao.mall.pojo.product.vo.SpuStandardVO;
 import com.cooxiao.mall.product.service.front.IForFrontSkuService;
+import com.cooxiao.mall.product.service.front.IForFrontSpuService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -12,6 +14,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,6 +32,7 @@ class GetStockToolTest {
     private boolean providerDown;
     private List<SkuStandardVO> skus;
     private final List<Long> calledWith = new ArrayList<>();
+    private final Map<Long, SpuStandardVO> spus = new LinkedHashMap<>();
     private GetStockTool tool;
 
     @BeforeEach
@@ -36,8 +40,10 @@ class GetStockToolTest {
         skus = new ArrayList<>();
         providerDown = false;
         calledWith.clear();
+        spus.clear();
+        spus.put(2L, spu(2L, "酷鲨手机", 4999));
 
-        IForFrontSkuService fake = (IForFrontSkuService) Proxy.newProxyInstance(
+        IForFrontSkuService fakeSku = (IForFrontSkuService) Proxy.newProxyInstance(
                 IForFrontSkuService.class.getClassLoader(),
                 new Class<?>[]{IForFrontSkuService.class},
                 (proxy, method, args) -> {
@@ -59,8 +65,36 @@ class GetStockToolTest {
                     }
                 });
 
+        // 库存工具会先查 SPU（为的是把商品名带进 observation，避免张冠李戴）
+        IForFrontSpuService fakeSpu = (IForFrontSpuService) Proxy.newProxyInstance(
+                IForFrontSpuService.class.getClassLoader(),
+                new Class<?>[]{IForFrontSpuService.class},
+                (proxy, method, args) -> {
+                    switch (method.getName()) {
+                        case "getSpuById":
+                            return spus.get((Long) args[0]);
+                        case "toString":
+                            return "fakeSpuService";
+                        case "hashCode":
+                            return System.identityHashCode(proxy);
+                        case "equals":
+                            return proxy == args[0];
+                        default:
+                            return null;
+                    }
+                });
+
         tool = new GetStockTool();
-        ReflectionTestUtils.setField(tool, "skuService", fake);
+        ReflectionTestUtils.setField(tool, "skuService", fakeSku);
+        ReflectionTestUtils.setField(tool, "spuService", fakeSpu);
+    }
+
+    private static SpuStandardVO spu(long id, String name, double price) {
+        SpuStandardVO vo = new SpuStandardVO();
+        vo.setId(id);
+        vo.setName(name);
+        vo.setListPrice(BigDecimal.valueOf(price));
+        return vo;
     }
 
     private static SkuStandardVO sku(long id, String spec, double price, int stock) {
@@ -89,6 +123,7 @@ class GetStockToolTest {
         AiToolResult result = tool.execute(Map.of("spuId", 2));
 
         JSONObject observation = JSON.parseObject(result.observation());
+        assertThat(observation.getString("spuName")).isEqualTo("酷鲨手机");   // ★ 自报家门，防张冠李戴
         assertThat(observation.getIntValue("skuCount")).isEqualTo(2);
         assertThat(observation.getIntValue("totalStock")).isEqualTo(15);
         JSONArray items = observation.getJSONArray("skus");
@@ -97,6 +132,14 @@ class GetStockToolTest {
         assertThat(items.getJSONObject(0).getIntValue("stock")).isEqualTo(10);
         assertThat(calledWith).containsExactly(2L);
         assertThat(result.hits()).isEmpty();   // 库存工具不产出前端商品卡片
+    }
+
+    @Test
+    void unknownSpu_returnsReadableError_insteadOfQueryingSkus() {
+        AiToolResult result = tool.execute(Map.of("spuId", 999));
+
+        assertThat(result.observation()).contains("查不到商品");
+        assertThat(calledWith).isEmpty();     // SPU 不存在就不必再查 SKU
     }
 
     @Test
@@ -132,7 +175,7 @@ class GetStockToolTest {
 
     @Test
     void noSkus_hintsThatProductMayBeUnavailable() {
-        AiToolResult result = tool.execute(Map.of("spuId", 999));
+        AiToolResult result = tool.execute(Map.of("spuId", 2));
 
         JSONObject observation = JSON.parseObject(result.observation());
         assertThat(observation.getIntValue("skuCount")).isZero();
