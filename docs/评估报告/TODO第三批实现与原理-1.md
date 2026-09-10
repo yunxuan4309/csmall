@@ -1,7 +1,8 @@
 # TODO 第三批实现与原理 · 补册 1（AI 导购 Agent + Python 模拟数据）
 
 > **创建日期**: 2026-09-10
-> **状态**: 📋 **设计定稿 + 决策记录（待实施）** —— 本册覆盖 **#32（AI 导购 Agent）/ #48（Python 模拟数据）**，以及支撑它们的 **#58（模型 `thinking` 开关）/ #60（Spring AI 评估）**
+> **状态**: 🚧 **选型与设计已定稿，且部分已进入实施**（2026-09-10 更新）—— **#58 已完成并部署生产**、**#32-P0 代码已完成（提交 `09d22b1`，待部署）**、**#48 仍待实施**、**#60 仅评估**
+> **📖 本册同时是"AI 模块升级"的执行记录**：**§三·6** 记录 P0 的**真实实现**（与 §3.4「计划骨架」的差异已如实标注）；**§八 小插曲**记录两次**非计划内**的生产事件（nginx 全站 502 抢修 / 前端 conf 双向漂移）
 > **为什么另开一册**: 原 [[TODO第三批实现与原理]] 已 946 行、以跨机集群为主；按用户要求把 **Agent 与模拟数据**这两块"新东西"单独成册，**原册不动**，两册互链
 > **用途**: 与三个「实现与原理」正册格式对齐 —— 「**选型/原理 → 本项目设计 → 实测证据 → 疑惑点 → 面试话术**」；**本册的特色是"技术选型过程"被完整记录**（为什么不跟风上框架）
 > **关联**: [[TODO文件]] #32/#48/#58/#60、[[AI导购Agent升级方案]]、[[Python模拟数据与AI并发测试方案]]、[[AI模型名停用风险与thinking参数改造方案]]、[[TODO第三批实现与原理]]（正册）、[[TODO已完成]]
@@ -12,10 +13,11 @@
 
 | 编号 | 事项 | 本质 | 状态 |
 |---|---|---|---|
-| **#58** | 模型名停用风险 + `thinking` 开关改造 | **前置**：给 Agent 一个稳定的模型契约 | ✅ 方案定稿 + 实测复验通过；待实施 |
-| **#32** | AI 导购升级 Agent（Function Calling + ReAct） | 让 LLM 有"动作决策权"，而非只当解析器 | ✅ 方案敲定（P0 → P1）；待实施 |
-| **#48** | Python 模拟数据 + AI 并发测试 | 造运营数据 + 验证 AI 承载 | ✅ 规范设计定稿；待实施 |
+| **#58** | 模型名停用风险 + `thinking` 开关改造 | **前置**：给 Agent 一个稳定的模型契约 | ✅ **已完成并部署生产**（2026-09-10，见 [[TODO已完成]] §十四）|
+| **#32** | AI 导购升级 Agent（Function Calling + ReAct） | 让 LLM 有"动作决策权"，而非只当解析器 | 🚧 **方案敲定；P0 代码已完成（`09d22b1`，26 项测试全绿）；P0 部署待执行**；P1 未开始（见 §三·5 / §三·6）|
+| **#48** | Python 模拟数据 + AI 并发测试 | 造运营数据 + 验证 AI 承载 | 📋 规范设计定稿；待实施 |
 | **#60** | Spring AI 引入评估 | **结论：暂不引入**（前置 = Boot 全站升级） | ✅ 评估完成，仅记录 |
+| **插曲** | nginx 静态上游 IP → 全站 502 / 前端 conf 漂移 | **非计划内**：调用方持有"过期地址" | ✅ 已抢修并复盘（见 **§八**）|
 
 **依赖关系**：`#58（模型契约）→ #32-P0 → #32-P1`；**#48 相对独立**（可并行、也可作为给 #32 喂演示数据的下游）。
 
@@ -200,6 +202,12 @@ cooxiao:
 → 代码只出现 `TaskType.CHAT` / `TaskType.JSON`，**永不出现模型名**
 → **官方改名 = 改一个环境变量 + 重建 `mall-ai` 一个容器**；官方出新档位 = 加一行 yml，代码零改动
 
+> 📌 **落地时的实际形态（与上面草图的差异，2026-09-10）**：
+> - 档位层只保留 **`flash` / `pro` 两档**（embedding 不放进档位表，仍是独立标量 `embedding-model` —— 它属于另一个供应商、也不是"思考/非思考"的档位概念）
+> - 任务层由 **`AiTask` 枚举**（`CHAT` / `JSON` / `EXPAND` / `AGENT` / `COMPARE`）承载，yml 里 `tasks.<task>` 配 `tier + thinking + temperature + max-tokens`
+> - 缺失档位 **启动不报错、调用时报明确错误**（`modelFor()` 抛异常并提示检查 `cooxiao.ai.models`），且启动打印一次"任务→档位→模型 id/思考模式"路由表
+> - 细节见 [[AI模型名停用风险与thinking参数改造方案]] §4.5 / §11
+
 ### 2.3 ⚠️ 为什么必须用显式占位符（一个容易踩的隐式坑）
 
 `cooxiao.ai.chat-model` 对应的环境变量是 **`COOXIAO_AI_CHATMODEL`**（**去横线**），写 `COOXIAO_AI_CHAT_MODEL`（带下划线）**并不直接映射**。
@@ -217,9 +225,11 @@ cooxiao:
 | 6 | **SSE 自建 body + 自建 Authorization** | `ChatServiceImpl:354-373` | 🔴 **与客户端重复一份请求逻辑** → 收敛为 `AiClient.streamChat(...)`，**模型/思考/温度/max_tokens 只有一处** |
 | 7 | 模型名 / embedding 地址字面量 | `application.yml` | → 显式占位符 |
 | 8 | `compare-model` 死配置 | `AiProperties:22` + yml | → **删除**（全仓库零引用，实测确认） |
-| 9 | `DeepSeekAiClient.embed/embedBatch` 死代码 | `DeepSeekAiClient:180-235` | 🟡 可选删除（无人调用；真调用必失败 —— 打的是 DeepSeek 地址 + 硅基流动模型名） |
+| 9 | `DeepSeekAiClient.embed/embedBatch` 死代码 | `DeepSeekAiClient:180-235` | ✅ **已删除**（无人调用；真调用必失败 —— 打的是 DeepSeek 地址 + 硅基流动模型名） |
 
 > 第 6 条是**结构性问题**：改模型要改两个地方（客户端 + SSE），本次一并收敛，以后只改一处。
+
+> ✅ **落地与验证（2026-09-10）**：**#58 已实施并部署生产** —— 生产实测：路由日志**恰好 1 次**（修双 bean 前是 2 次）、`/ai/search` 5s 返回 AI 重排说明、`/ai/ask` 4s 返回完整推荐、`ai:daily_cost` 0 → **0.002492 元**、`content 为空` / `reasoning` / 4xx 告警均 **0**；**9 项硬编码全部清零** + 新增 2 个测试类（yml→Java 绑定 / 请求体规则）。详见 [[TODO已完成]] §十四、[[AI模型名停用风险与thinking参数改造方案]] §十一（实施与部署记录）。
 
 ### 2.5 面试话术
 
@@ -250,7 +260,7 @@ cooxiao:
 |---|---|
 | **工具轮 `thinking: disabled`** | 实测 C：`thinking: disabled` + tools + 不带 `reasoning_content` → **200**；而 enabled 时 **400**（实测 B）→ **天然绕开官方的 reasoning 回传规则** |
 | **工具轮绝不带 `response_format`** | 实测 F：带 `json_object` 时模型**直接输出 JSON、不再调工具**（`tool_calls` 为空） |
-| **循环只放非流式路径**，最后一轮再复用 SSE | LLM 调用有**两条独立路径**；流式下解析 `tool_calls` 分片收益为零 |
+| **循环只放非流式路径**，最后一轮再复用 SSE | LLM 调用有**两条独立路径**；流式下解析 `tool_calls` 分片收益为零（⚠️ **P0 实际做得更保守：连"最后一轮复用 SSE"都没做** —— 见 §3.6 偏差①）|
 | **工具类必须放 `...ai.service.impl` 同包** | `RagServiceImpl.intentSearch/buildContext/buildRelatedProducts` 是**包私有**方法 |
 | **`max_tokens` 要留足** | 实测 D/I：思考模式下 `max_tokens=120` 被思考**全部吃光 → content 为空** |
 
@@ -264,7 +274,7 @@ cooxiao:
 
 **工具级/行为级边界（代码层强制）**：白名单 / 参数 JSON Schema + **服务端二次校验** / **轮数上限 3** / 预算复用（每轮记账）/ Sentinel 限流 / **结果真实性**（只能基于工具返回）/ 角色映射 / **动作审计**（Redis List：`ai:agent:action:{sessionId}`，`LTRIM 0 49` + TTL 7d —— ⚠️ **mall-ai 无任何数据库栈，落 DB 不可行**）/ 失败降级。
 
-### 3.4 代码骨架（用本项目真实类名）
+### 3.4 代码骨架（**计划稿**，用本项目真实类名 —— 落地实现与它有差异，见 §3.6）
 
 ```java
 public interface AiTool {                                   // ① 框架无关的工具契约
@@ -302,6 +312,44 @@ public ToolRound chatWithTools(List<Map<String,Object>> messages) {
 - **回滚**：`agent-enabled: false` 重启一个容器即回现状；改动**只落在 `mall-ai`**，无表变更、无 ES mapping 变更
 
 > 📄 完整方案（差距清单 / 9 条边界 / 文件级清单 / 验证 / 回滚）见 [[AI导购Agent升级方案]]
+
+### 3.6 🛠 实际实现（P0 代码，2026-09-10 完成 · 提交 `09d22b1`）
+
+> §3.4 是**计划骨架**（当时尚未通读全部代码）；下面是**真正落地的形态**。差异一律如实标出 —— 记录的价值在于"实际怎么做的"，而不是"当初打算怎么做"。
+
+**新增 6 个类 / 改 4 个类**（全部在 `mall-ai`）
+
+| 类 | 职责 | 与计划骨架的差异 |
+|---|---|---|
+| `client/AiToolCall` | `tool_calls` 元素；`arguments` 是**字符串形式的 JSON** → `args()` 二次解析（非法 JSON 返回空 Map，交给工具自身校验）| 计划里没单独建类 |
+| `client/AiToolRound` | 一轮工具响应：`content` + `List<AiToolCall>` + **`assistantMessage`（可直接回灌）** | ⭐ **计划缺这一块**：回灌消息必须含 `tool_calls` 原样结构，且**刻意不带 `reasoning_content`**（工具轮 `thinking=disabled` 本就没有；若哪天改成开思考，**必须回传否则接口 400**）|
+| `AiClient.chatWithTools(messages, tools)` | 接口方法（`tools` 由调用方传入）| 计划签名是 `chatWithTools(messages)` |
+| `service/impl/AiTool` | 契约：`name()` / `description()` / `parameters()`（JSON Schema）/ `execute(Map)` | 计划写的是 `spec()`；**`description` 单独一个方法**，因为它直接决定"模型会不会用、用得对不对" |
+| `service/impl/AiToolResult` | `observation`（给模型看）**+ `hits`**（原始 ES 文档，**只给 Java 侧转 VO**）| ⭐ **计划缺这一块**：解决"工具结果既要喂模型、又要出前端商品列表"的双向需求 |
+| `service/impl/ToolRegistry` | 构造器注入 `List<AiTool>` **自动收集**（新增工具不必改注册表）；**同名工具启动期直接抛异常** | 计划只是 `Map<String,AiTool>`；**同名 = "模型点了 A、执行的却是 B"的静默故障，必须炸在启动期** |
+| `service/impl/SearchProductsTool` | `search_products`：`SearchIntent → intentSearch → observation`，严格条件无命中时去掉价格/品牌兜底一次 | 计划写 `→ buildContext`（散文）；**落地改用紧凑 JSON：同信息 token 约为散文的 1/3，而 Agent 每轮都要带全历史 → 省下来的是复利** |
+| `config/AiTask` | 新增 **`AGENT("agent")`** 任务档（`thinking:false`、`max_tokens:1000`）| 计划未提 |
+| `DeepSeekAiClient` | `buildToolBody = buildBody(AGENT) + tools + tool_choice:auto` —— 复用"**请求体只在一处定义**"的收敛成果，因此**天然不会带 `response_format`** | 计划是另写一段 body（那样迟早会与主流程漂移）|
+| `ChatServiceImpl` | `sendWithAgent(...)` + `sendWithPipeline(...)`（把原 `send()` 主体抽出来当**兜底**）| 见下方偏差①② |
+
+**⭐ 三条关键实现决策（讲这些比讲"我写了 300 行"值钱）**
+
+1. **模型给的参数一律不可信** → 代码层收敛：`sortBy` 白名单（非法**直接忽略、绝不拼进 ES 查询**）、负数预算丢弃、**上下限颠倒自动交换**（模型的常见错误，纠正比报错好）、关键词/品牌长度截断。
+2. **严格条件无命中时"放宽兜底 + 如实告知"**：去掉价格/品牌再查一次，并在 observation 里写明"已放宽条件" —— 否则模型会**以为这就是严格匹配的结果**，继续误导用户。
+3. **轮数用尽 → 摘掉工具强制收口**：不抛错、也不把"超出轮数"这种内部细节抛给用户，而是追加一句"请立即基于以上信息给出最终推荐，不要再请求调用工具"再问一次。
+
+**🧪 离线测试（计划里没有，落地时补的）**：`ChatServiceImplAgentTest` 用**假 LLM 脚本化多轮**锁死 6 条路径 —— ①一轮工具 + 收敛（**断言 `assistant.tool_calls` 与 `role=tool` 的 observation 真的出现在第 2 轮请求里**）②轮数用尽强制收口 ③正文为空兜底 ④未知工具 ⑤异常降级回固定流水线 ⑥开关关闭完全不碰 Agent。
+> **为什么必须离线**：Agent 的正确性主要在**循环控制**，与真实模型无关；而真实调用不稳定、要花钱、跑得慢 → 拿它当回归测试等于没有测试。**mall-ai 模块 26 项测试全绿**（请求体规则 8 / 工具注册 2 / 检索工具边界 7 / 配置绑定 3 / Agent 循环 6）。
+
+**⚠️ 与计划的偏差（如实记录）**
+
+| # | 计划 | 实际 | 原因 |
+|---|---|---|---|
+| ① | 最后一轮**复用现有 SSE** 输出 | **P0 只覆盖同步 `/ai/chat/send`**；SSE（`/ai/chat/stream`）**仍走旧流水线** | "流式 + 工具轮"要处理"工具调用发生在流里"的复杂情形，放 P1 更稳 |
+| ② | `agent-enabled: false` 写死 | 改为 **`${AI_AGENT_ENABLED:false}` + compose 注入** | 让开关"**改 `.env` + recreate 即生效，不用重编译 jar**"；回滚更快（三级：关开关 ~45s / 换回 jar / 连 compose 一起回）|
+| ③ | `spec()` 返回 schema，`execute` 返回 String | `parameters()` + `execute → AiToolResult` | 见上表（回灌与出前端是两条数据流，混在 String 里迟早出错）|
+
+> 📋 部署指令：`work/部署指令-step2-agent-p0.md`（**阶段 A 只换 jar 验"零回归" → 阶段 B 开开关验 Agent**；jar MD5 `5193b258f0725fd729d261c482659b19`）
 
 ---
 
@@ -383,17 +431,18 @@ CREATE TABLE cs_mall_sim.sim_entity ( id PK, batch_id, db_name, table_name, pk_v
 ## 六、依赖关系与执行顺序
 
 ```
-【Step 1】#58 模型契约 + 可配化（同一批文件，边际成本≈0）
+【Step 1】#58 模型契约 + 可配化（同一批文件，边际成本≈0）        ✅ 已完成并部署（2026-09-10）
    ├ 现役模型 id + thinking 开关 + 删 compare-model / temperature 死参数
    ├ 第 1 层：占位符外置 + 清掉 2 处硬编码 + temperature/max_tokens 收敛
    ├ 第 2 层：models（档位）+ tasks（任务→档位+thinking）
    └ 结构收敛：SSE 请求体收敛进 AiClient.streamChat
-        ↓ 验证：JSON 任务无 reasoning / SSE 正常 / 主链路无降级 / 预算记账正常
-【Step 2】#32-P0 Function Calling（在 Step 1 的模型契约之上）
-        ↓ 验证：curl 触达工具调用 + 两轮收敛（实验 H 已验证可行）
-【Step 3】#32-P1 完整单 Agent（单独排期，不塞进同一窗口）
-【并行/下游】#48 模拟数据（独立；造的商品数据可反哺 #32 演示）
-【不做】#60 Spring AI（前置 = Boot 全站升级）
+        ↓ 验证：JSON 任务无 reasoning / SSE 正常 / 主链路无降级 / 预算记账正常   ✅ 全部实测通过
+【Step 2】#32-P0 Function Calling（在 Step 1 的模型契约之上）     ✅ 代码已完成（09d22b1，26 项测试全绿）｜⏳ 部署待执行
+        ↓ 验证：curl 触达工具调用 + 两轮收敛（实验 H 已验证可行）    ⏳ 待部署后执行（runbook 已备）
+【Step 3】#32-P1 完整单 Agent（单独排期，不塞进同一窗口）           ⏳ 未开始
+【并行/下游】#48 模拟数据（独立；造的商品数据可反哺 #32 演示）        📋 设计定稿，待实施
+【不做】#60 Spring AI（前置 = Boot 全站升级）                      — 仅评估记录
+【插曲】nginx 全站 502 抢修 + 前端 conf 漂移（非计划内）            ✅ 已完成（见 §八）
 ```
 
 ---
@@ -417,4 +466,40 @@ A：**不能（现状）**——它没有任何数据库栈（无 JDBC/MyBatis/F
 
 ---
 
-**关联文档**：[[TODO文件]]（状态源 #32/#48/#58/#60）、[[AI导购Agent升级方案]]（Agent 完整方案）、[[Python模拟数据与AI并发测试方案]]（模拟数据完整方案）、[[AI模型名停用风险与thinking参数改造方案]]（§3.1 实验 / §4.5 可配化 / §4.6-4.7 Spring AI 与 Boot 升级评估）、[[TODO第三批实现与原理]]（正册：跨机集群等）、[[TODO已完成]]、[[TODO第二批实现与原理]]（§5.4.5 #21 当初为何改用 `deepseek-chat`）
+## 八、小插曲（非计划内，2026-09-10）
+
+> 这两件事**都不是本册计划的实施项**，是当晚突发处理生产问题时顺带发生/发现的。记在这里只为"原理与踩坑不断线" —— **详细排查链、证据与面试话术都在问题解决文档里**，本节只做索引与一句话本质。
+
+### 插曲 1：生产全站 502 —— nginx"静态解析上游 IP"（约 24.5 小时无人发现）
+
+**现象**：用户报登不上，浏览器满屏 `502 Bad Gateway`（`/user/sso/login`、`/front/category/all` 全挂）。
+
+**一句话根因**：`proxy_pass http://mall-gateway:10087` 里的**主机名，nginx 只在加载配置那一刻解析一次并永久缓存**（等价写死 IP）；网关容器被重建后 IP 由 `172.18.0.9` 变成 `172.18.0.7`，而 `.9` 被后来重建的 `mall-ai` 占用 → nginx 一直把请求打到**错误的容器**（10087 无人监听）→ `connect() failed (111)` → 502。
+
+**为什么"坏了 24 小时没人知道"**：**21 个容器全 Up、网关自身 `/actuator/health` 还是 200** —— 内部健康检查天然抓不到"路由层地址漂移"（这直接催生了 [[TODO文件]] **#61 外部端到端探活**）。
+
+**处置（先恢复、再根治、不夹带）**：`restart frontend` 秒级恢复 → **隔离网络 A/B 实验**（容器重建后：动态解析 200 / 静态解析 502）→ 改 `resolver 127.0.0.11 valid=10s` + `upstream mall_gateway { zone …; server mall-gateway:10087 resolve; }` → `nginx -t` + `nginx -s reload` **零停机** → `docker commit` 烘进镜像（回滚点 `pre-dynamic-20260910`）→ 逐条路由验证 + 真登录通过。
+> ⚠️ 刻意**没用** `set $gw …; proxy_pass http://$gw;` 变量法：用变量会改变 nginx 的 URI 处理语义（与 `rewrite … break` 的配合不同），而本项目有 `/api/… → 剥前缀` 的 rewrite location —— **只有 `upstream` 块能保证语义零变化**。
+
+📄 **完整排查链（7 步逐层排除）+ A/B 实验 + 验证矩阵 + 面试话术** → [[问题解决--服务注册与网关路由]] **问题 2**；归档 → [[TODO已完成]] §十五
+🔗 **同类问题**：本册读者可把它与 [[问题解决--服务注册与网关路由]] **问题 1**（Dubbo 应用名撞名 → 网关把 HTTP 请求打到 20880）对照看 —— 两者同族（**调用方持有错误身份/过期地址**），一个"身份错"、一个"地址过期"。
+
+### 插曲 2：前端 nginx conf 的**双向漂移**（两块生产缺失的配置）
+
+**怎么发现的**：排查插曲 1 时顺手比对"容器内 conf / 服务器源文件 / 仓库副本"，发现**仓库那份（`.gitignore` 忽略、未入库、8/1 16:55）比服务器现行版（8/1 23:15）旧，却多了两块生产没有的内容** —— 典型的"双向漂移"，谁都不是谁的超集：
+
+| 块 | 内容 | 生产现状（当时）| 处置 |
+|---|---|---|---|
+| ① **SSE 超时** | `proxy_read_timeout/proxy_send_timeout 180s` | 缺失 → 走默认 60s | ✅ **已合并上线**（预防性：思考模式下 reasoning 分片被后端忽略 → 模型"闷头思考"期间 nginx 收不到任何字节 → 60s 无数据即被掐断；当时 **0 次**实际发生）|
+| ② **`/seckill/:id` SPA 保护** | `location ~ ^/seckill/?\d*$ { if GET → rewrite /index.html last; }` | 缺失 → **真 bug**：浏览器刷新秒杀详情页拿到的是 `{"state":401,"message":"您没有登录！"}` JSON，不是页面 | ✅ **已合并上线**（验证：`/seckill/123` → `text/html`；`/seckill/spu/list`、`/seckill/sku/list/{id}`、`POST /seckill/{code}` 仍走网关 JSON，**真 API 未被吃掉**）|
+
+**根因（比配置本身更值得记）**：`.gitignore` 里有 `deploy/`，这份 conf **从来没进过版本控制** → "服务器改了、仓库不知道"必然发生。**已 `git add -f deploy/docker/frontend/nginx.conf` 纳入跟踪**，并同步了服务器源文件（md5 `1382897d…`）。
+
+**处置纪律**：两块**先只在隔离容器校验、再 `docker cp` + `nginx -t` + `reload` 零停机上线**，且**与插曲 1 分成两次提交/两个回滚点**（`pre-dynamic-20260910` → `dynamic-only-20260910` → `latest`）—— **抢修不夹带"顺手发现的改进"，每次变更都能独立回滚**。
+
+📄 **完整记录** → [[问题解决--服务注册与网关路由]] 问题 2「附带发现」+ [[问题解决--容器构建与编排卫生]]（"单一事实源/配置治理"这一类问题）
+🔗 **状态源** → [[TODO文件]]（#61 / conf 已入 git）；归档 → [[TODO已完成]] §十五
+
+---
+
+**关联文档**：[[TODO文件]]（状态源 #32/#48/#58/#60/#61）、[[AI导购Agent升级方案]]（Agent 完整方案 + P0 清单与实施记录）、[[Python模拟数据与AI并发测试方案]]（模拟数据完整方案）、[[AI模型名停用风险与thinking参数改造方案]]（§3.1 实验 / §4.5 可配化 / §4.6-4.7 Spring AI 与 Boot 升级评估 / §十一 实施与部署记录）、**[[问题解决--服务注册与网关路由]]（§八 插曲 1/2 的完整排查与话术）**、[[问题解决--容器构建与编排卫生]]（配置不在版本控制这一类问题）、[[TODO第三批实现与原理]]（正册：跨机集群等）、[[TODO已完成]]、[[TODO第二批实现与原理]]（§5.4.5 #21 当初为何改用 `deepseek-chat`）
