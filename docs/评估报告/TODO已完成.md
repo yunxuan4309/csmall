@@ -471,3 +471,34 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 **⚠️ 遗留动作（需 ecs-user）**：服务器源文件 `/data/csmall/frontend/nginx.conf` 仍是旧版（md5 `8bdd4cd2…`）→ 需把**合并版**（md5 `1382897db1b09d05bfe1aace2058fe8e`）覆盖上去，否则将来 `docker compose build frontend` 会**覆盖回退**本次修复。
 
 **镜像基线（回滚用）**：`pre-dynamic-20260910` = `1ed14bbc615b`（原始静态版）→ `dynamic-only-20260910` = `917eead35007`（仅动态解析）→ `latest` = `f8ea5dd5aab5`（**当前：动态解析 + 两块合并**）。
+
+---
+
+## 十六、#32-P0 AI 导购 Agent（Function Calling）阶段完成并部署（2026-09-10）
+
+> **说明**：#32 整体（P0 → P1）**尚未结束**，本条只归档**已完成并上线的 P0 阶段**；P1（工具扩展 / Redis 动作审计 / 流式 Agent）仍在 [[TODO文件]] #32 里跟踪。
+> **设计与原理**：[[TODO第三批实现与原理-1]] §一/§二/§三（含 **§3.6 实际实现**）；**清单与偏差**：[[AI导购Agent升级方案]] §八
+
+**交付（提交 `09d22b1` 代码 + `0fe1a1e` 部署准备）**
+
+1. **`chatWithTools`**：工具轮请求体 = `buildBody(AiTask.AGENT)` + `tools` + `tool_choice:auto`；**关思考**（开思考必须回传 `reasoning_content` 否则 400）、**绝不带 `response_format`**（实测与 tools 互斥）
+2. **工具层**：`AiToolCall` / `AiToolRound`（含**可回灌的 assistant 消息**）、`AiTool` / `AiToolResult`（`observation` 给模型 + `hits` 给前端）、`ToolRegistry`（自动收集 + **同名工具启动期报错**）、`SearchProductsTool`（复用 `RagServiceImpl`；**参数一律边界收敛**；无命中时放宽兜底并在 observation 里如实标注）
+3. **Agent 分支**：`sendWithAgent`（轮数用尽**摘掉工具强制收口**）+ `sendWithPipeline`（原流程变兜底）；**任何异常降级回旧流水线**
+4. **可运维化**：开关走 `.env` 的 `AI_AGENT_ENABLED`（compose 注入）→ **启用/回滚只改 `.env` + recreate，不重编译**；启动日志打印开关状态
+5. **测试**：`ChatServiceImplAgentTest` 用**假 LLM 脚本化多轮**锁死 6 条路径（离线、零成本、可重复）；mall-ai 模块 **26 项全绿**
+
+**生产部署与验证（两阶段，2026-09-10 晚）**
+
+| 阶段 | 结果 |
+|---|---|
+| **A 零回归**（开关=false，只换 jar）| jar md5 落位一致；启动日志 `agent-enabled=false`；`/ai/search`、`/ai/ask` 正常；`content 为空`=0、真实 4xx=0 |
+| **B 开启 Agent**（`.env`→true + recreate）| 问"我想买 5000 以内的手机" → `工具 search_products … 命中 4 条` → `Agent 第 1 轮：调用工具 1 次` → **`Agent 第 2 轮收敛`**（413 字、带表格推荐）|
+| **兜底复验**（独立提问）| 问"1000 以内的单反相机" → `已放宽=true` → 回答**如实说明库里无此类目、不编造**，并给替代建议 |
+
+**两个可写进面试的真实细节**：① 模型**主动剔除误召回**（ES 把"联想天逸510S 台式机"召回到"手机"结果，模型自己注明"它是台式机，已帮你排除"）—— 工具只给候选、判断交给模型；② 兜底放宽后仍没有该品类时，模型**没有硬推荐**，而是如实说明 —— 上下文里"已放宽"的标注起了作用。
+
+**⚠️ 生产当前开关为 `true`**（`AI_AGENT_ENABLED=true`）；**回滚**：改 `.env` 为 `false` + `docker compose up -d mall-ai`（~45s，**无需换 jar**）；**成本**：Agent 单次约为旧路径 **2~2.5 倍**（工具轮 + 收敛轮），`ai:daily_cost` 正常累加。
+
+**归档时的镜像/备份基线**：`csmall-mall-ai:before-step2` = `734aaf72a80b`（Step 1 版）→ `latest` = `343170e667a0`（P0 版）；jar/compose 备份在 `/data/csmall/jars/backup-20260910-step2/`。
+
+**同时记录（非本次引入，避免后续误判）**：mall-ai 启动日志有 1 条 Dubbo ERROR（`Failed register interface application mapping …`，error code 5-10）—— **未改动**的 `csmall-product` 里有 7 次、`csmall-order` 1 次（09-09 启动即有），且服务发现与 TCP 连通均正常 → **项目既有的启动噪声，无功能影响**。
