@@ -463,7 +463,8 @@ CREATE TABLE cs_mall_sim.sim_entity ( id PK, batch_id, db_name, table_name, pk_v
 | mock 必须支持 | **SSE 分片**（`data: {…}\n\n` + `data: [DONE]`）+ 非流式 JSON + usage + 🔴 **`tool_calls` 分片**（2026-09-11 复核补：生产 `AI_AGENT_ENABLED=true`，不带工具轮测的就不是生产链路）；且**必须线程化**（`ThreadingHTTPServer`，单线程会自己成为瓶颈） |
 | 压测三约束 | ① 脚本**跑新机/内网**（老机 5 Mbps，本机压自己=自压自伤）② **先证伪干扰项再测承载**：入口 Sentinel（秒杀 QPS=10、ai-chat=5）+ **每用户频控 10/60s** → 需临时放开阈值 + 用多用户 token ③ **20→50→100 阶梯** + 盯 `docker stats`/`free -h` + **中止阈值**（available<1.5G / 5xx+429>1% / p99>10s） |
 
-> 📄 完整方案（DDL / 清理 SQL / mock 代码 / 纪律清单 12 项 / 面试话术）见 [[Python模拟数据与AI并发测试方案]]
+> 📄 完整方案（DDL / 清理 SQL / mock 代码 / 纪律清单 / 面试话术）见 [[Python模拟数据与AI并发测试方案]]
+> 🆕 **2026-09-11 补强（按用户"最初出发点"）**：该方案的初衷是「**模拟客户行为 → 在 Sentinel / SkyWalking 上看数据量与变化 → 录像展示**」，原稿只写了造数与压测取数、**漏了"可观测展示"这一层** → 已补 **§六 可观测展示与录像 SOP**（面板清单 / SSH 隧道命令 / **§6.2 实证：压浏览 URL 在 Sentinel 也可见** / "平地起峰"三段式录制脚本 / 话术），并把 **§五 执行顺序按"可录像展示"重排**（可观测展示 → 第 ② 步；AI 并发 → 第 ⑤ 步）。
 
 ---
 
