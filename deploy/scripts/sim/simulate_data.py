@@ -3,7 +3,7 @@
 """
 simulate_data.py — CoolShark 业务数据模拟器（TODO #48 · 第一层「造数」骨架）
 
-设计依据：docs/评估报告/Python模拟数据与AI并发测试方案.md
+设计依据：docs/评估报告/Python模拟数据与数据隔离方案.md
           （规范设计定稿 09-10 + **实施前复核 09-11 §〇.1 D1~D9**）
 
 核心原则（缺一不可）
@@ -20,7 +20,7 @@ simulate_data.py — CoolShark 业务数据模拟器（TODO #48 · 第一层「�
   python simulate_data.py --clean --batch sim_20260911_1530       # 清理预览（默认 dry-run）
   python simulate_data.py --clean --batch sim_20260911_1530 --apply
 
-⚠️ 本脚本只做「第一层：造数」。AI 并发压测（第二层）与 mock LLM 见方案文档 §3.5。
+⚠️ 本脚本只做「第一层：造数」。AI 并发压测（第二层）与 mock LLM 见 docs/评估报告/AI并发测试方案.md §五（原 §3.5）。
 """
 
 from __future__ import annotations

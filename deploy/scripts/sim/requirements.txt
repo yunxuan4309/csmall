@@ -14,6 +14,6 @@
 #    pip3 install --index-url https://mirrors.aliyun.com/pypi/simple/ \
 #         --break-system-packages pymysql==1.1.1
 # ℹ️ 脚本只用到 pymysql.connect 与 pymysql.cursors.DictCursor，1.0.2 / 1.1.1 两版一致。
-# 详见 docs/评估报告/Python模拟数据与AI并发测试方案.md §〇.1 D6（2026-09-11 晚修订）
+# 详见 docs/评估报告/Python模拟数据与数据隔离方案.md §〇.1 D6（2026-09-11 晚修订）
 requests==2.31.0
 PyMySQL==1.1.1

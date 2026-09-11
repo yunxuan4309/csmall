@@ -6,7 +6,7 @@ load_test.py — CoolShark #48 第二层「可观测展示」压测脚本（两�
 定位（与 simulate_data.py 的区别，**别混着讲**）
   · simulate_data.py = **慢节奏造数**（0.5~3s/次 ≈ 0.5 QPS）→ 数据**沉淀进数据库**
   · load_test.py     = **短时高峰**（并发阶梯）→ 在 **SkyWalking / Sentinel** 上出**曲线**
-  见方案 §六「可观测展示与录像 SOP」；§6.4 三段式录像：静默基线 → 阶梯加压 → 撞限流。
+  见方案（docs/评估报告/Python模拟数据与数据隔离方案.md）§六「可观测展示与录像 SOP」；§6.4 三段式录像：静默基线 → 阶梯加压 → 撞限流。
 
 两档（方案 §6.2 的"两档展示"，**结论不能混着讲**）
   · `--mode browse`（默认）：压**只读浏览** URL → 看 **pass QPS 曲线**（SkyWalking / Sentinel）

@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS cs_mall_sim.sim_batch (
   done_actions BIGINT       NOT NULL DEFAULT 0 COMMENT '已完成动作数',
   dump_file    VARCHAR(255) NULL COMMENT '造数前全量快照文件名（快照兜底用）',
   status       VARCHAR(16)  NOT NULL DEFAULT 'running' COMMENT 'running/finished/cleaned/failed',
-  note         VARCHAR(2000) NULL COMMENT '结果回填：统计数字 / 压测结论（#48 §五 第 10 步）',
+  note         VARCHAR(2000) NULL COMMENT '结果回填：统计数字 / 压测结论（见 docs/评估报告/Python模拟数据与数据隔离方案.md §五「收尾」第 16 步）',
   PRIMARY KEY (batch_id)
 ) ENGINE=InnoDB COMMENT='模拟数据批次（影子登记）';
 
