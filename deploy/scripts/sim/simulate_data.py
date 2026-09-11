@@ -144,8 +144,23 @@ def log(msg: str) -> None:
 def db(**overrides):
     cfg = dict(SIM_DB)
     cfg.update(overrides)
-    if not cfg.get("password"):
+    pwd = cfg.get("password") or ""
+    if not pwd:
         sys.exit("未设置 SIM_DB_PASSWORD 环境变量（凭据不落盘，见 §〇.1 D6）")
+    # 🔴 2026-09-11 实测踩到：PyMySQL 用 **latin1** 编码密码，若密码含非 ASCII 字符会抛
+    #    `UnicodeEncodeError: 'latin-1' codec can't encode characters in position N-M`
+    #    —— 那个报错完全看不出"其实是占位符没替换"。这里提前拦下并给可执行的提示。
+    try:
+        pwd.encode("latin1")
+    except UnicodeEncodeError:
+        sys.exit(
+            "❌ SIM_DB_PASSWORD 含非 ASCII 字符（如中文）→ 你很可能**没有把占位符替换成真实密码**。\n"
+            "   错误示例：export SIM_DB_PASSWORD='<老机 MySQL root 密码>'   ← 中文占位符会被原样当密码\n"
+            "   正确做法：在老机跑 `grep '^MYSQL_ROOT_PASSWORD=' /data/csmall/.env` 取真实值，然后\n"
+            "     · 方式一：export SIM_DB_PASSWORD='真实密码'\n"
+            "     · 方式二（更稳，不进历史、免引号）："
+            "read -rsp 'MySQL root 密码: ' SIM_DB_PASSWORD; export SIM_DB_PASSWORD; echo"
+        )
     cfg["cursorclass"] = pymysql.cursors.DictCursor
     return pymysql.connect(**cfg)
 

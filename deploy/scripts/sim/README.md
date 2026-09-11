@@ -68,12 +68,20 @@ export SIM_RESOURCE_HOST='http://8.156.77.197/'      # 图片前缀
 ```bash
 # ⓪ 🔴 迁移先行（首次执行；否则 --preflight 会因"data_source 列缺失"直接拒绝）
 #    4 个 Flyway 迁移文件已入库：ums V3 / oms V7 / seckill V6 / resource V2（方案 §2.2.9）
-#    ① 低峰**逐个重启** 4 个服务（每个 ~40-60s）
-#       ⚠️ 必须用**容器名** csmall-*（docker restart 不认 service 名）。实测五层命名：
-#          容器名 csmall-ums | compose service 名 mall-ums | 镜像 csmall-mall-ums
-#          | SkyWalking 服务名 mall-ums | Maven 模块目录 mall-ums/
-#          老机 21 个容器里**没有任何 mall-*** → 照旧写法会 No such container
-#       docker restart csmall-ums csmall-order csmall-seckill csmall-resource
+#    🔴 关键：`docker restart` 对 Flyway 是**空操作**（2026-09-11 实测踩到）
+#       迁移文件在 **jar 里**，而 jar 是 COPY 烘进镜像的（`/data/csmall/dockerfiles/mall-*.Dockerfile`
+#       → `COPY mall-<svc>.jar /app/app.jar`，构建上下文 `/data/csmall/jars/`）
+#       → 重启只是用旧镜像跑旧 jar，Flyway 报 "Schema is up to date"，新迁移永不执行
+#    必须**重建镜像 + 重建容器**：
+#       ① 本地打包
+#          mvn -o -B -DskipTests -pl mall-ums/mall-ums-webapi,mall-order/mall-order-webapi,mall-seckill/mall-seckill-webapi,mall-resource -am package
+#       ② 传 4 个 jar 到老机 /data/csmall/jars/（改名 mall-<svc>.jar）
+#          scp mall-ums/mall-ums-webapi/target/mall-ums-webapi-0.0.1-SNAPSHOT.jar ecs-user@<老机>:/data/csmall/jars/mall-ums.jar
+#          （order / seckill / resource 同理；⚠️ 该目录 ai-deepseek 不可写，须 ecs-user）
+#       ③ 服务器 build：docker compose -f /data/csmall/docker-compose.yml build mall-ums mall-order mall-seckill mall-resource
+#       ④ 服务器 up：docker compose -f /data/csmall/docker-compose.yml up -d mall-ums mall-order mall-seckill mall-resource
+#       ⚠️ 五层命名：容器名 csmall-ums | compose service 名 mall-ums | 镜像 csmall-mall-ums
+#          | SkyWalking 服务名 mall-ums | Maven 模块目录 mall-ums/（老机 21 个容器里没有任何 mall-*）
 #    ② 复核（期望输出 9 行）：
 #       docker exec -i csmall-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N -B \
 #         -e "SELECT CONCAT(table_schema,\".\",table_name) FROM information_schema.columns \

@@ -112,7 +112,7 @@
 |---|---|---|---|
 | 0 | 🆕 **新机装依赖**（二选一，均已实证）<br>**A（免 sudo，推荐）**：`cd /tmp && apt-get download python3-pymysql && dpkg -x python3-pymysql_*.deb x && mkdir -p ~/.local/lib/python3.12/site-packages && cp -r x/usr/lib/python3/dist-packages/pymysql ~/.local/lib/python3.12/site-packages/`<br>**B（需 sudo）**：`sudo apt-get install -y python3-pymysql`<br>🔴 **不用 venv** —— 2026-09-11 晚实测：`ensurepip` 缺失 → venv 无 pip；且新机**无外网**（pypi/清华源全不通，仅阿里云镜像可达）→ 见 §〇.1 D6 修订 | ★用户 | ⏳ 待做（**C-7 的前置**） |
 | 1 | 4 个 **Flyway 迁移文件**：`ums V3` / `oms V7` / `seckill V6` / `resource V2`，各表加 `data_source` | AI 写 | ✅ **已落盘**（2026-09-11 晚；只加文件、未手工 ALTER） |
-| 2 | 逐个**重启** 4 个服务让 Flyway 迁移生效（每个 ~40-60s，低峰）<br>⚠️ **必须用容器名 `csmall-*`**（`docker restart` 不认 service 名）—— 详见 §B「五层命名」<br>一条命令：`docker restart csmall-ums csmall-order csmall-seckill csmall-resource` | ★用户 | ⏳ **待做（当前阻塞点）** |
+| 2 | 🔴 **重建镜像并重建容器**让 Flyway 迁移生效<br>⚠️ **`docker restart` 无效！**（2026-09-11 实测踩到）—— 迁移文件在 **jar 里**，而 jar 是 `COPY` 烘进镜像的（`/data/csmall/dockerfiles/mall-*.Dockerfile` → `COPY mall-<svc>.jar /app/app.jar`，构建上下文 `/data/csmall/jars/`）。容器重启只是**用旧镜像跑旧 jar** → Flyway 报 `Schema is up to date. No migration necessary.` → 新迁移永不执行。<br>**正确步骤**：① 本地 `mvn -o -B -DskipTests -pl <4 个模块> -am package` ② scp 4 个 jar → `/data/csmall/jars/`（改名 `mall-ums.jar` / `mall-order.jar` / `mall-seckill.jar` / `mall-resource.jar`）③ 服务器 `docker compose build mall-ums mall-order mall-seckill mall-resource` ④ `docker compose up -d mall-ums mall-order mall-seckill mall-resource`<br>⚠️ 容器名是 `csmall-*`（`docker restart` 只认容器名）；⚠️ `/data/csmall/jars/` **ai-deepseek 不可写，须 ecs-user** | ★用户 | ⏳ **待做（当前阻塞点）** |
 | 3 | 脚本改「**按登记表回填 `data_source`**」+ **撤回**借用字段（`tag=SIM`、订单项 `data={"sim":…}`） | AI | ✅ **已完成**（新增 `backfill()` / `verify_backfill()`；借用字段已撤回；顺带修掉 `oms_payment_record` 漏删） |
 | 4 | 执行前**只读核对**：9 张表是否已存在 `data_source`（存在则先决策，别硬跑迁移） | AI | ✅ **已完成**（实测 6 个 schema **0 个** `data_source` 列 → 迁移可安全执行） |
 | 5 | 在**老机**建影子库（跑 `init_sim_db.sql`） | ★用户 | ⏳ 待做 |
@@ -361,6 +361,17 @@ CREATE TABLE IF NOT EXISTS cs_mall_sim.sim_entity (
 
 > ⚠️ MySQL 8 **不支持** `ADD COLUMN IF NOT EXISTS` → "SQL 层幂等"这条路不通，**幂等只能靠 Flyway 的记录**；
 > 因此**执行前必须只读核对"这 9 张表还没有 `data_source` 列"**（有则先决策，别硬跑）。
+>
+> 🔴🔴 **第三个同类陷阱：`docker restart` 不会执行新迁移**（2026-09-11 实测踩到，最费时间的一个）
+> 迁移文件在 **jar 里**（`src/main/resources/db/migration/`），而 jar 是 `COPY` **烘进镜像**的
+> （`/data/csmall/dockerfiles/mall-*.Dockerfile` → `COPY mall-<svc>.jar /app/app.jar`，构建上下文 `/data/csmall/jars/`）。
+> ⇒ **容器重启 = 用旧镜像跑旧 jar** → Flyway 日志只会出现 `Schema ... is up to date. No migration necessary.`，**新迁移永不执行**（而服务"看起来"重启成功了，极易误判为已完成）。
+> ⇒ **正确姿势**：改完迁移文件必须 **重新 `mvn package` → 传 jar → `docker compose build` → `docker compose up -d`**；只改 SQL 资源、无 Java 改动时可 `-DskipTests`。
+> 🔎 **一眼验证是否真生效**（不看日志、直接查元数据）：
+> ```sql
+> SELECT version, description, success FROM cs_mall_ums.flyway_schema_history ORDER BY installed_rank DESC LIMIT 1;
+> -- 应看到 V3；若还是 V2，就是镜像没重建
+> ```
 >
 > 🔴 **另一个同类陷阱：不要"顺手统一行尾"** —— Flyway 的 `validate` 会比对**迁移文件字节的 checksum**。
 > 实测本仓库 `core.autocrlf=true` 且**没有 `*.sql` 的 `.gitattributes` 规则** → 迁移文件在工作区的行尾**取决于谁写的 / 是否被 git checkout 过**：实测 18 个迁移里 **17 个 `w/lf`**、**1 个 `w/crlf`**（`V6__add_order_type_to_oms_order.sql`），而**索引里全部是 `i/lf`**。
