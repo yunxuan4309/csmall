@@ -138,8 +138,8 @@ python3 simulate_data.py --clean --batch sim_20260911_1530 --apply
 | 浏览：全部 SPU | `GET /front/spu/list/all?page=&pageSize=` | `mall-front/.../FrontSpuController.java:26,47`；🔴 **需带 `Authorization`**（`ResourceWebSecurityConfiguration.java:64` `.anyRequest().authenticated()`；无 token → `state=401 您没有登录！`，**HTTP 仍 200**） |
 | 浏览：SPU 详情 | `GET /front/spu/{spuId}` | 同上 `:61`；🔴 **同上，需带 token** |
 | 加购 | `POST /oms/cart/add`（`CartAddDTO`：`skuId/title/price/quantity` 必填） | `mall-order/.../OmsCartController.java:24,30`；`mall-pojo/.../CartAddDTO.java:22,29,42,49` |
-| 下单 | `POST /oms/order/add`（`OrderAddDTO` + `OrderItemAddDTO{skuId,title,data,mainPicture,price,quantity}`） | `mall-order/.../OmsOrderController.java:35,45`；`OrderItemAddDTO.java:23,29,40,46,53,60` |
-| 支付（模拟） | `POST /oms/order/pay`（`PayOrderDTO{id, paymentType}`） | `OmsOrderController.java:76`；`PayOrderDTO.java:19` |
+| 下单 | `POST /oms/order/add`（`OrderAddDTO` + `OrderItemAddDTO{skuId,title,data,mainPicture,price,quantity}`） | `mall-order/.../OmsOrderController.java:35,45`；`OrderItemAddDTO.java:23,29,40,46,53,60`；🔴 **`contactName` 只能 2~4 字符**（`OrderRegExpression.java:6`）、**`paymentType` 必须传 2=支付宝**（0=银联会 500 暂未实现） |
+| 支付（模拟） | `POST /oms/order/pay`（`PayOrderDTO{id, paymentType}`） | `OmsOrderController.java:76`；`PayOrderDTO.java:19`；🔴 **`paymentType=2`**（`PaymentTypeEnum.java:8-10`；只有 `AlipaySandboxStrategy` 注册了策略，未配 AppId 时是**模拟模式直接成功** `AlipaySandboxStrategy.java:110`） |
 | 秒杀提交 | `POST /seckill/{randCode}`（`SeckillOrderAddDTO`） | `mall-seckill/.../SeckillController.java:32,40` |
 
 **为什么目录/地址直接读 MySQL 而不是调接口**：
@@ -174,7 +174,8 @@ python3 simulate_data.py --clean --batch sim_20260911_1530 --apply
 | 🆕 **迁移+脚本改动后自检** | ✅ 新机 `python3 -m py_compile` 通过；**md5 本地 = 远端 `640104bb…`**（字节一致）；导入模块断言 **9 张表 / 4+5 回填分组 / 清理表集 == 回填表集 / 无借用字段残留** → `STRUCT_CHECK_OK` |
 | 🆕 **4 个迁移文件已落盘** | ✅ `ums V3` / `oms V7` / `seckill V6` / `resource V2`，**只加文件、未手工 ALTER**（守 Flyway 纪律） |
 | 🆕 **依赖安装路径实证（免 sudo）** | ✅ `apt-get download python3-pymysql`（阿里云镜像 **38.2KB 秒下**）→ `dpkg -x` → 拷进 `~/.local/lib/python3.12/site-packages/` → **`import pymysql` 1.0.2 无需 `PYTHONPATH` 即生效**（用户级 site-packages 默认在 `sys.path`），脚本依赖守卫**当场转为通过**（提示变为"未设置 SIM_DB_PASSWORD"）；验证后已清理干净 |
-| 🆕 **校准实测（2 次真跑）** | ✅ 抓到并修掉 4 处：用户名下划线被拒（400）· 联系人 8 字符超限（`".{2,4}"`）· 我手抄 phone 正则多一组 `[0-9]`（机器比对 7/7 修正）· **假号段 `1390000` 被 benchuser01..100 占满**（409）；见方案 **§〇.2 §G** |
+| 🆕 **校准实测（4 次真跑）** | ✅ 共抓到并修掉 7 处：G1 用户名下划线被拒(400) · G2 联系人 8 字符超限(`".{2,4}"`) · G3 我手抄 phone 正则多一组 `[0-9]`(机器比对 7/7 修正) · G4 假号段 `1390000` 被 benchuser01..100 占满(409) · **G5 浏览接口也需登录**(推翻 §6.2 旧结论) · **G6 支付渠道必须用 2=支付宝**(0=银联 500) · **G7 订单项因事务快照漏登记**(`oms_order_item` SIM=0) + **校验盲点**(只校验登记出现过的表 → 漏标却报通过)。见方案 **§〇.2 §G** |
+| 🆕 **第 4 次真跑结果** | 浏览 37 / 加购 10 / 下单 3 单已建(SIM 3) / 失败 3（全是支付渠道）· 🏷️ **合计标记 53 行 + 回填校验通过** · `ums_login_log` **20/20 被按 user_id 兜底回填** ✅（"服务端写的表"这条路验证通过）· `sales`/`stock` 未动（库存是**支付时**才扣） |
 | 🆕 **碰撞预检 SQL 实证** | ✅ 实测 `1390000`+`0001..0020` → 占用 **20**（正是 409 原因）；`1390009`/`1390090`/`1391111`/`1380000`/`1890000`/`1990000` → 占用 **0**（可用）；`testsim0001..0020` → 占用 **0** |
 | 旧路径被证伪 | ❌ `python3 -m venv` 实测**建不出 pip**（`ensurepip` 缺失）；`pypi.org`/`archive.ubuntu.com`/清华源**全不通** → 原"venv + requirements.txt"路径**双重死路**（2026-09-11 晚） |
 | 未验证 | ❌ 涉及**写**的整条链路（注册/登录/加购/下单/支付/**回填**/清理）—— 需要 DB 密码与生产写权限，由用户在窗口内执行；**且迁移本身尚未执行**（需先低峰重启 4 个服务） |

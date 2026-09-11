@@ -84,11 +84,14 @@ FAKE_PHONE_PREFIX = os.environ.get("SIM_PHONE_PREFIX", "1390009")
 # ⚠️ 边界：**新增的商品数据视为真实商品、不打 SIM 标记**（见《商品与秒杀扩容方案》）。
 DATA_SOURCE_SIM = os.environ.get("SIM_DATA_SOURCE", "SIM")
 
-# 🔄 回填口径（2026-09-11 只读实测 `information_schema` 后确定）——
+# 🔄 回填口径（2026-09-11 只读实测 `information_schema` 后确定；G7 后补 ③）——
 #    ① 脚本直接 INSERT 的 4 张表 → 按**登记主键** `id` 回填；
 #    ② 服务端在业务链路中写的 5 张表（登录日志 / 支付记录 / 秒杀成功 / 秒杀重试 / 上传记录）
 #       脚本**没有插入点**，只能按 **`user_id`** 兜底回填 —— 实测这 5 张**全部有 `user_id`**，
-#       所以键可靠、**不需要 JOIN 订单**（唯一没有 user_id 的 `oms_order_item` 走 ① 的主键）。
+#       所以键可靠、**不需要 JOIN 订单**；
+#    ③ 🆕 **子表按父表主键兜底**：`oms_order_item` 没有 `user_id`，且它**可能因事务快照问题漏登记**
+#       （2026-09-11 G7 实测：地址模板的 SELECT 提前定格了 REPEATABLE READ 快照 →
+#        3 条订单项全部漏登记，导致"库里有行、SIM=0"）。按父订单 `order_id` 回填最可靠。
 BACKFILL_BY_PK: Sequence[Tuple[str, str, str]] = (
     ("cs_mall_ums", "ums_user", "id"),
     ("cs_mall_oms", "oms_cart", "id"),
@@ -102,10 +105,16 @@ BACKFILL_BY_USER: Sequence[Tuple[str, str]] = (
     ("cs_mall_seckill", "seckill_message_retry"),
     ("cs_mall_resource", "res_upload_record"),
 )
+BACKFILL_BY_ORDER: Sequence[Tuple[str, str, str]] = (
+    ("cs_mall_oms", "oms_order_item", "order_id"),   # 子表：按父订单 id 兜底
+)
 # 迁移应加 `data_source` 的 9 张表（预检用：列不在 = 迁移没跑，直接 fail-fast）
-DATA_SOURCE_TABLES: Sequence[Tuple[str, str]] = tuple(
-    (db_name, table) for db_name, table, _ in BACKFILL_BY_PK
-) + tuple(BACKFILL_BY_USER)
+# ⚠️ `oms_order_item` 同时出现在 ① 与 ③ → 这里**必须去重**，否则预检会以为缺列
+DATA_SOURCE_TABLES: Sequence[Tuple[str, str]] = tuple(dict.fromkeys(
+    [(d, t) for d, t, _ in BACKFILL_BY_PK]
+    + list(BACKFILL_BY_USER)
+    + [(d, t) for d, t, _ in BACKFILL_BY_ORDER]
+))
 
 # 资源站前缀：pictures 存的是**相对文件名**，需拼成完整 URL（实测既有订单项就是这个形态）
 SIM_RESOURCE_HOST = os.environ.get("SIM_RESOURCE_HOST", "http://8.156.77.197/")
@@ -293,6 +302,17 @@ def backfill(conn, batch: str) -> Dict[str, int]:
                     continue
                 marked[f"{db_name}.{table}"] = _mark(db_name, table, "user_id", user_ids)
 
+        # ③ 子表按**父订单 id** 兜底（父行主键即 BACKFILL_BY_PK 里的 oms_order.id）
+        #    这是 G7 的修复：即便订单项漏登记，也能按父订单把它们标上
+        order_ids = by_pk.get(("cs_mall_oms", "oms_order"))
+        if order_ids:
+            for db_name, table, key_col in BACKFILL_BY_ORDER:
+                if not has_column(conn, db_name, table, "data_source"):
+                    log(f"   ⚠️ 跳过 {db_name}.{table}：无 data_source 列（迁移未执行？）")
+                    continue
+                key = f"{db_name}.{table}"
+                marked[key] = marked.get(key, 0) + _mark(db_name, table, key_col, order_ids)
+
     conn.commit()
     return marked
 
@@ -357,7 +377,29 @@ def verify_backfill(conn, batch: str) -> List[str]:
                 else:
                     log(f"   ✅ {full:38s} 模拟用户 {should:5d} 行 → 已标 {got:5d}")
 
-        # ③ 反向总检：标了 SIM 但**不属于本批次主键**的行（跨批次/历史残留的粗筛）
+        # ③ 子表按父订单：属于本批订单的所有子行都应被标记
+        #    （G7 的校验盲点修复：以前只校验"登记表里出现过的表"，
+        #      `oms_order_item` 漏登记 → 根本不在校验范围内 → 漏标却报"通过"）
+        order_ids = by_pk.get(("cs_mall_oms", "oms_order"))
+        if order_ids:
+            for db_name, table, key_col in BACKFILL_BY_ORDER:
+                full = f"{db_name}.{table}"
+                if not has_column(conn, db_name, table, "data_source"):
+                    problems.append(f"{full} 缺 data_source 列 → 迁移没执行？")
+                    continue
+                should = 0
+                for part in _chunks(order_ids):
+                    ph = ",".join(["%s"] * len(part))
+                    should += _count_where(cur, full, f"{key_col} IN ({ph})", part)
+                got = _sim_count(db_name, table)
+                if got < should:
+                    problems.append(f"{full} 漏标：属于本批订单 {should} 行，只标了 {got} 行")
+                elif got > should:
+                    problems.append(f"{full} 误标：标了 {got} 行，但只有 {should} 行属于本批订单")
+                else:
+                    log(f"   ✅ {full:38s} 本批订单下 {should:5d} 行 → 已标 {got:5d}")
+
+        # ④ 反向总检：标了 SIM 但**不属于本批次主键**的行（跨批次/历史残留的粗筛）
         for db_name, table, key_col in BACKFILL_BY_PK:
             values = by_pk.get((db_name, table))
             if not values:
@@ -453,7 +495,13 @@ class Api:
             "districtCode": address["district_code"], "districtName": address["district_name"],
             "streetCode": address["street_code"], "streetName": address["street_name"],
             "detailedAddress": f"模拟地址 {random.randint(1, 999)} 号",
-            "paymentType": 0, "orderType": 0,          # 0=银联（模拟支付）；orderType 服务端会强制置 0
+            # 🔴 2026-09-11 实测踩坑：`PaymentTypeEnum` = 0=银联 / 1=微信 / **2=支付宝**
+            #    （mall-pojo/.../order/enums/PaymentTypeEnum.java:8-10），而 `PaymentStrategyFactory`
+            #    **只注册了支付宝策略**（AlipaySandboxStrategy），其余渠道会
+            #    `throw IllegalArgumentException("支付渠道 [银联] 暂未实现")`（PaymentStrategyFactory.java:36）
+            #    → 原来传 0 必然 500。支付宝走的是**模拟模式**：未配置 AppId/私钥时
+            #    **跳过真实支付宝 API 直接返回成功**（AlipaySandboxStrategy.java:110-112）。
+            "paymentType": 2, "orderType": 0,          # 2=支付宝（当前唯一可用渠道；底层仍是模拟支付）
             "amountOfOriginalPrice": total, "amountOfFreight": 0.0,
             "amountOfDiscount": 0.0, "amountOfActualPay": total,
             "orderItems": [{
@@ -463,9 +511,12 @@ class Api:
         })
 
     def order_pay(self, token_header: str, order_id: int):
-        """POST /oms/order/pay —— 当前为**模拟支付**（不碰支付宝沙箱）"""
+        """POST /oms/order/pay —— **支付宝渠道 + 模拟支付**（不碰支付宝沙箱真实 API）
+
+        🔴 必须传 `paymentType=2`（支付宝）：只有它注册了策略，0/1 会 500「暂未实现」。
+        """
         return self._call("POST", "/oms/order/pay", token_header=token_header, json={
-            "id": order_id, "paymentType": 0,
+            "id": order_id, "paymentType": 2,
         })
 
 
@@ -686,8 +737,19 @@ def ensure_users(api: Api, conn, registry: Registry, n_users: int) -> List[Dict[
 
 def run_funnel(api: Api, conn, registry: Registry, catalog, users, days: int, per_day: int,
                sleep_min: float, sleep_max: float, with_seckill: bool) -> Dict[str, int]:
-    stat = {"browse": 0, "cart": 0, "order": 0, "fail": 0}
+    stat = {"browse": 0, "cart": 0, "order": 0, "paid": 0, "pay_fail": 0, "fail": 0}
     actions = days * per_day
+
+    # 🔴 2026-09-11 实测踩坑（G7）：地址模板**必须挪到循环外读一次**。
+    #    原来每个下单动作都调 `load_address_template(conn)`，它是 SELECT →
+    #    会**开启脚本自己的事务并在那一刻定格快照**（MySQL 默认 REPEATABLE READ），
+    #    而该参数在 `api.order_add(...)` **之前**求值 → 快照定格在"App 还没建订单"时，
+    #    于是紧随其后的 `SELECT id FROM oms_order_item WHERE order_id=?`
+    #    **永远看不到 App 刚提交的订单项** → 订单项全部漏登记（实测 3/3 漏）。
+    #    （加购没出问题，是因为 `api.cart_add()` 之前没有任何 DB 读，快照是新的。）
+    address = load_address_template(conn)
+    conn.commit()                       # 结束"读地址"开启的事务，确保后续 SELECT 拿新快照
+
     log(f"开始造数：{days} 天 × {per_day} 行为 = {actions} 次动作（慢节奏 {sleep_min}~{sleep_max}s）")
     for n in range(1, actions + 1):
         r, acc = random.random(), 0.0
@@ -705,6 +767,7 @@ def run_funnel(api: Api, conn, registry: Registry, catalog, users, days: int, pe
                     api.spu_detail(sku["spu_id"], user["token"])
                 else:
                     api.spu_list_all(random.randint(1, 3), 10, user["token"])
+                stat["browse"] += 1
             elif kind == "cart":                      # 15%：加购但不结算
                 api.cart_add(user["token"], sku, random.randint(1, 2))
                 with conn.cursor() as cur:            # 取回刚插入的 cartId 并登记
@@ -714,25 +777,40 @@ def run_funnel(api: Api, conn, registry: Registry, catalog, users, days: int, pe
                 if row:
                     registry.register(conn, "oms_cart", row["id"], "cs_mall_oms", user_ref=str(user["id"]))
                     conn.commit()
+                stat["cart"] += 1
             else:                                     # 5%：完整下单 + 模拟支付
-                vo = api.order_add(user["token"], sku, 1, load_address_template(conn))
+                vo = api.order_add(user["token"], sku, 1, address)
                 if not isinstance(vo, dict) or "id" not in vo:
                     raise RuntimeError(f"下单响应里没有订单 id，无法登记（返回={vo}）→ 核对 OrderAddVO 字段")
                 oid = vo["id"]
+                # 🔴 防御性刷新快照：确保下面的 SELECT 能看到 App 刚提交的订单项（见函数开头说明）
+                conn.commit()
                 registry.register(conn, "oms_order", oid, "cs_mall_oms", user_ref=str(user["id"]))
                 with conn.cursor() as cur:            # 订单项按 order_id 登记（它自己没有 user_id）
                     cur.execute("SELECT id FROM cs_mall_oms.oms_order_item WHERE order_id=%s", (oid,))
-                    for it in cur.fetchall():
-                        registry.register(conn, "oms_order_item", it["id"], "cs_mall_oms", user_ref=str(user["id"]))
+                    items = list(cur.fetchall())
+                for it in items:
+                    registry.register(conn, "oms_order_item", it["id"], "cs_mall_oms",
+                                      user_ref=str(user["id"]))
                 conn.commit()
-                api.order_pay(user["token"], int(oid))
-            stat[kind] += 1
+                if not items:
+                    log(f"   ⚠️ 订单 {oid} 查不到订单项 → 已改由 backfill() 按 order_id 兜底标记")
+                stat["order"] += 1                    # 订单已建即计入（与支付结果分开统计）
+                try:
+                    api.order_pay(user["token"], int(oid))
+                    stat["paid"] += 1
+                except Exception as pe:               # noqa: BLE001
+                    # 支付失败**不算动作失败**：订单已建成（只是保持未支付）
+                    stat["pay_fail"] += 1
+                    if stat["pay_fail"] <= 20:
+                        log(f"   ⚠️ 支付失败（订单 {oid} 已建、保持未支付）：{pe}")
         except Exception as e:                        # noqa: BLE001
             stat["fail"] += 1
             if stat["fail"] <= 20:                    # 只打前 20 条错误，避免刷屏
                 log(f"   ⚠️ 动作失败（{kind}）：{e}")
         if n % 50 == 0:
-            log(f"   进度 {n}/{actions}：浏览 {stat['browse']} / 加购 {stat['cart']} / 下单 {stat['order']} / 失败 {stat['fail']}")
+            log(f"   进度 {n}/{actions}：浏览 {stat['browse']} / 加购 {stat['cart']} / "
+                f"下单 {stat['order']}（已支付 {stat['paid']}，支付失败 {stat['pay_fail']}）/ 失败 {stat['fail']}")
         time.sleep(random.uniform(sleep_min, sleep_max))
     if with_seckill:
         log("⚠️ --with-seckill 未实现（随机码需先从 /seckill/spu/list 取回，见 README「待补」）→ 本次跳过")
@@ -910,7 +988,9 @@ def main() -> None:
         with conn.cursor() as cur:
             cur.execute("UPDATE cs_mall_sim.sim_batch SET status='finished', finished_at=NOW(), "
                         "done_actions=%s, note=CONCAT(COALESCE(note,''), ' | ', %s) WHERE batch_id=%s",
-                        (sum(stat.values()) - stat["fail"], note, batch))
+                        # done_actions = 真正成功的业务动作数（浏览+加购+下单；
+                        # 支付失败不算动作失败，订单已建成 → 不计入 done 也不计入 fail）
+                        (stat["browse"] + stat["cart"] + stat["order"], note, batch))
         conn.commit()
         log(f"✅ 造数结束（批次 {batch}）：{json_stat(stat, registry)}")
         log(f"清理预览：python {os.path.basename(__file__)} --clean --batch {batch}")
