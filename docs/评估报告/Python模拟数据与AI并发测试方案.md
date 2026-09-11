@@ -3,8 +3,9 @@
 > **创建日期**：2026-08-26（初稿）
 > **规范设计定稿**：2026-09-10
 > **实施前复核**：**2026-09-11**（逐条实测 + 读码，写入 **§〇.1**；**复核 9 条 = 8 项修正 + 1 项澄清** + 固化 2 项决策）
-> **状态**：✅ **规范设计已定稿 + 实施前复核完成 + 可观测展示章节已补，待实施**（对应 TODO **#48**）
-> **修订链**：初稿（08-26）→ 规范设计定稿（09-10，补数据隔离层）→ **实施前复核（09-11，修正 mock 注入变量名 / Agent 工具轮 / 频控 / 单线程 mock 等 8 项 + 1 项澄清 + 决策"生产临时放开限流 + 双链路各压一遍"）** → 🆕 **可观测展示章节（09-11，新增 §六 + 执行顺序重排）**
+> **状态**：🟢 **方案定稿 + 复核完成 + 可观测展示章节已补 + 标识方案已定（专用列）· 今晚开始实施**（对应 TODO **#48**）
+> 🔴 **接续入口**：**§〇.2「当前进度与交接」** —— 决策、环境事实、待办清单（含谁执行）、今晚目标全在里面
+> **修订链**：初稿（08-26）→ 规范设计定稿（09-10，补数据隔离层）→ **实施前复核（09-11，修正 8 项 + 1 项澄清 + 2 项决策）** → **可观测展示章节（09-11，新增 §六 + 执行顺序重排）** → 🆕 **标识方案定稿（09-11，改用专用列 `data_source` + Flyway 纪律 + 交接 §〇.2）**
 > 🆕 **2026-09-11 按"最初出发点"补强**：本方案的**初衷**是"模拟客户行为 → 在 **Sentinel / SkyWalking** 上看见数据量与变化 → **录像展示**"，而原稿只写了"造数"与"压测取数"、**没把可观测展示当交付物** → 新增 **§六 可观测展示与录像 SOP**（面板清单 + 隧道命令 + **§6.2 实证**：压浏览 URL 在 Sentinel 也可见），并把 **§五 执行顺序按"可录像展示"重排**
 > **目的**：① 用 Python 脚本模拟真实业务数据积累（浏览/加购/下单/秒杀），让系统看起来像运营中的电商；② 在不调用真实 DeepSeek API 的前提下，测试 AI 导购模块能扛住多少并发
 > **定位**：与 JMeter 压测互补——JMeter 测性能尖峰（100 并发秒杀 + Sentinel 限流），本方案造业务数据沉淀 + 测 AI 服务端并发承载
@@ -70,6 +71,65 @@
 |---|---|---|
 | **① 压测环境** | **生产 + 临时放开限流**（Nacos 热改 → 压 → 改回，零重建） | 保留"内网真压生产"的卖点（带宽/内存/容器编排都是真的）；执行剧本 **§3.5** |
 | **② Agent 链路** | **两条链路各压一遍**：`AI_AGENT_ENABLED=false`（固定流水线，单轮 LLM）vs `true`（Agent，工具轮 + 收敛轮双轮） | 拿到"**Agent 双轮链路多付出的承载代价**"这组数字——**#32 上线后才可能获得的新素材**；前置是 mock 先支持工具轮（D2） |
+
+---
+
+## 〇.2 当前进度与交接（2026-09-11 晚 · **新会话/压缩上下文后从这里接续**）
+
+> **用途**：本方案跨度长、决策多。本节是**唯一交接点** —— 决策、环境事实、待办、接续步骤全在这里。
+> 接续时先读 **§〇.1（复核）+ §〇.2（本节）+ §五（执行顺序）+ §六（可观测展示）+ §2.2.9（标识设计）**。
+
+### A. 今日已定决策（**勿重复讨论**）
+
+| # | 决策 | 内容 |
+|---|---|---|
+| 1 | 造数路径 | **方案 A：直接调真实接口造数**（用户执行、AI 独立复核） |
+| 2 | 商品扩容 | **商品 20→60、秒杀 6→12**；🔴 **新增商品视为「真实商品」、不打模拟标记**（编号跟随现有约定：`type_number`=`品牌缩写-型号-序号`、`bar_code`=`SKU-{spuId}-001`）→ 详见 [[商品与秒杀扩容方案]] |
+| 3 | **模拟数据标识** | ✅ **用专用列 `data_source VARCHAR(16) NULL`**（`NULL`=常规/真实；`SIM`=模拟造数）—— **不再借用 `tag`/`data`**（借用写法**已撤回**，避免"一行挂两种标识"的新歧义） |
+| 4 | 标识写入方式 | **造数后按登记表回填** `UPDATE … SET data_source='SIM' WHERE pk IN (登记主键)` → **零服务端代码改动** |
+| 5 | **Flyway 纪律** | 🔴 **只加迁移文件、禁止手工 ALTER**（手工 ALTER + 迁移并存 → 服务重启时 `Duplicate column` → **应用起不来**） |
+| 6 | 压测环境 | **生产 + 临时放开限流**（Nacos 热改、零重建）；**Agent 双链路各压一遍** |
+| 7 | 展示优先级 | **可观测展示提为第 ② 步**（其中"浏览档"**无需 token**，可当天开录） |
+| 8 | 造数分档 | **慢节奏造数 → 数据库沉淀**；**短时高峰 → 面板曲线**（两套流量，结论不能混着讲） |
+
+### B. 环境事实（2026-09-11 实测，可直接用）
+
+| 项 | 值 |
+|---|---|
+| 老机 / 新机 | `8.156.77.197`（私网 `172.29.193.239`，21 容器） / `47.109.70.197`（私网 `172.29.193.240`，**造数与压测执行位**） |
+| **SSH 隧道（一条命令开全）** | `-L 8088:localhost:8088`（SkyWalking UI）`-L 8090:localhost:8090`（Sentinel Dashboard）`-L 8848:localhost:8848`（Nacos） |
+| 造数脚本 | `deploy/scripts/sim/`（`simulate_data.py` / `init_sim_db.sql` / `requirements.txt` / `README.md`）；⚠️ **`deploy/` 被 gitignore → 改动需 `git add -f`** |
+| 新机运行环境 | `python3 -m venv ~/sim-venv`（系统 pip 被 PEP 668 拦）；`pymysql` 未装需装；HTTP 走内网（新机→老机 3306/6379/10087 全通） |
+| **Flyway 下一个可用版本号** | `cs_mall_ums=`**V3** · `cs_mall_oms=`**V7** · `cs_mall_seckill=`**V6** · `cs_mall_resource=`**V2**（pms 已到 V14、ams 已到 V6，本次不用） |
+| Flyway 配置 | `enabled: true` + `baseline-on-migrate: true` + `baseline-version: 0`；迁移目录 `<模块>/src/main/resources/db/migration/`（**mall-resource 无 `-webapi` 后缀**） |
+| 数据基线 | `cs_mall_sim` **不存在**（待建）· `test_sim_%`=**0** · 全库 **0 外键** · 在售 SKU **36** 个 / 库存约 **1456** 件 |
+| 代码/分支 | `master` 与 `origin/master` **同步**（末次推送含 4 个提交）；⚠️ mall-ai 的"降级 + 启动自检"改动**仍未部署**（与本方案无关） |
+
+### C. 待办清单（★ = **用户执行**，其余 AI 完成）
+
+| # | 事项 | 谁 | 状态 |
+|---|---|---|---|
+| 1 | 4 个 **Flyway 迁移文件**：`ums V3` / `oms V7` / `seckill V6` / `resource V2`，各表加 `data_source` | AI 写 | ⏳ 待做 |
+| 2 | 逐个**重启** `mall-ums` / `mall-order` / `mall-seckill` / `mall-resource` 使迁移生效（每个 ~40-60s，低峰） | ★用户 | ⏳ 待做 |
+| 3 | 脚本改「**按登记表回填 `data_source`**」+ **撤回**借用字段（`tag=SIM`、订单项 `data={"sim":…}`） | AI | ⏳ 待做 |
+| 4 | 执行前**只读核对**：9 张表是否已存在 `data_source`（存在则先决策，别硬跑迁移） | AI | ⏳ 待做 |
+| 5 | 在**老机**建影子库（跑 `init_sim_db.sql`） | ★用户 | ⏳ 待做 |
+| 6 | 给凭据 `export SIM_DB_PASSWORD=…` + **快照** `mysqldump` 六库（实测仅 ~207M） | ★用户 | ⏳ 待做 |
+| 7 | **校准写链路**：`--days 1 --per-day 50`（约 2~3 单）→ 校准注册正则 / 加购下单字段 / 订单登记 / 拿 token | ★用户跑 · AI 复核 | ⏳ 待做 |
+| 8 | **dry-run 清理演练**（清理 → 比对照基线） | ★用户 · AI 复核 | ⏳ 待做 |
+| 9 | 写 `load_test.py` + 按 §6.4 三段式**录像**（浏览档可先做） | AI 写 · ★用户录 | ⏳ 待做 |
+| 10 | 秒杀动作实现（`--with-seckill` 目前只做预检） | AI | ⏸️ 未实现（可选，看是否要造秒杀数据） |
+
+### D. 今晚目标
+
+**主目标：把 §五 的 ①（校准写链路）跑通** —— 含标识回填与一次 dry-run 清理演练；
+有余力再开 ② 的"浏览档"录像（不依赖 token，最快见效）。
+
+### E. 接续时先做这 3 件事
+
+1. 读 **§〇.1 / §〇.2 / §五 / §六 / §2.2.9**（这五节决定"怎么做"）
+2. `git log --oneline -3` + `git status` 确认工作区状态（末次提交应为"#48 交接：专用列标识 + Flyway 方案"）
+3. 从 **C-1 / C-3 / C-4** 开始（AI 写迁移 + 改脚本 + 只读核对），用户并行做 **C-5 / C-6**（建影子库 + 快照）
 
 ---
 
@@ -273,19 +333,54 @@ CREATE TABLE IF NOT EXISTS cs_mall_sim.sim_entity (
 | 人眼可辨 · 用户 | `ums_user.username` | `test_sim_0001` | **前缀即身份** |
 | 人眼可辨 · 文案 | `ums_user.nickname` / `email` / `oms_order.contact_name` / `detailed_address` | `模拟用户0001` / `test_sim_0001@example.com`（**保留域名**，误发也发不出去） / `模拟用户1234` / `模拟地址 5 号` | 打开单据就知道是造的 |
 | 人眼可辨 · 号段 | `oms_order.mobile_phone` / `seckill.success.user_phone` | **`1390000xxxx`** | **假号段**：能过手机号正则、又不撞真实号码 |
-| 🆕 **字段标识** | **`oms_order.tag`** | **`SIM`** | 订单列表/详情**一眼可辨**（`tag` 本就是展示用标签位） |
-| 🆕 **字段标识** | **`oms_order_item.data`** | **`{"sim":true,"date":"…"}`** | 原来传 `"{}"`，现在自带身份 |
-| 🆕 **字段标识** | `oms_payment_record.extra_data` | `{"sim":true,…}` | ⚠️ 该行由**服务端**写 → 造数够不到字段，只能按 `order_id` 反查（见下 ⑤） |
+| ✅ **字段标识（新）** | **9 张表统一加 `data_source`** | **`NULL`**（常规/真实）· **`SIM`**（模拟造数） | 🔴 **2026-09-11 定稿**：专用列 = 契约（等值可查、可索引、零副作用）；**造数后按登记表回填**。⚠️ 早先"借用 `tag`/`data`"的写法**已撤回**（见下"关键设计选择"） |
 | **机器权威** | **`cs_mall_sim.sim_entity`** | 批次 + 库 + 表 + 主键 + `user_ref` | **清理与审计的唯一依据** —— 字段标识只是"便于人看/便于粗筛"，**权威始终是登记表** |
 
-#### 🔴 关键设计选择：**复用"现有自由字段"，不加列（零 DDL）**
+#### 🔴 关键设计选择：**用专用列 `data_source`（2026-09-11 定稿）**
+
+> **决策过程**：初版想"复用现有自由字段（`tag`/`data`）"以求**零 DDL**；**用户 2026-09-11 拍板改为专用列**，理由是**避免歧义**（`tag` 本是展示标签、`data` 本是"商品全属性 json"，借用会让同一行挂两种语义）。**借用写法已撤回。**
 
 | 方案 | 做法 | 评价 |
 |---|---|---|
-| ✅ **采用：复用现有自由字段** | `oms_order.tag`（展示标签位，实测可空）· `oms_order_item.data`（实测 NULL）· `oms_payment_record.extra_data`（实测 NULL） | **零 DDL、零服务端代码改动**，与"直接调真实接口造数"的路线完全兼容；代价是**语义借用**（`data` 里多一个 `sim` 键） |
-| ⏸️ 备选：加专用标记列 | 9 张表各 `ALTER TABLE … ADD COLUMN data_source VARCHAR(8) NULL`；造数后按登记表 `UPDATE … SET data_source='SIM' WHERE pk IN (登记主键)` | 语义**最干净、可索引**，单谓词 `WHERE data_source='SIM'` 即可筛；但需**一次 DDL 变更**（9 张表）+ 多一步回填。**当前选前者**；将来若要做"开发/正式数据同库强隔离"再升级 |
+| ✅ **采用：专用列 `data_source`** | 9 张表各加 `data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)'`；造数后按登记表回填 `'SIM'` | 语义是**契约而非借用** · 等值可查**可索引** · 零副作用 · 可扩展（`SIM`/`LOADTEST`/`REPLAY` = 数据血缘） |
+| ❌ **已撤回**：借用自由字段 | `oms_order.tag='SIM'` + `oms_order_item.data={"sim":…}` | 零 DDL、零服务端改动，但**语义借用**、且 `tag` 会在订单页显示成标签 → **两套标识反而更易混** |
 
-> **为什么 `oms_cart` / `ums_login_log` / `res_upload_record` 没有字段标识**：它们由服务端写、且没有合适的自由字段 → 只能按 `user_id` **反查登记表**（下表 ⑦）。这不是缺陷，是"标识分级"的正常取舍。
+##### 🔴 Flyway 纪律（**这一步做错会让服务起不来**）
+
+| 做法 | 结果 |
+|---|---|
+| ❌ **手工 ALTER + 又写迁移文件** | 服务重启 → Flyway 执行该迁移 → **`Duplicate column name 'data_source'`** → **Flyway 失败 → 应用启动失败** |
+| ❌ 只手工 ALTER、不写迁移 | 不报错，但**新环境建库缺列**（环境漂移）；将来补迁移时老环境**又会重复列报错** |
+| ✅ **只加迁移文件（采用）** | Flyway 启动时执行一次并写入 `flyway_schema_history`（带 checksum）→ **天然幂等**；新老环境一致 |
+
+> ⚠️ MySQL 8 **不支持** `ADD COLUMN IF NOT EXISTS` → "SQL 层幂等"这条路不通，**幂等只能靠 Flyway 的记录**；
+> 因此**执行前必须只读核对"这 9 张表还没有 `data_source` 列"**（有则先决策，别硬跑）。
+
+**4 个迁移文件（版本号已按实测 `flyway_schema_history` 核对为"下一个可用号"）**
+
+```sql
+-- mall-ums/mall-ums-webapi/src/main/resources/db/migration/V3__add_data_source_to_ums.sql
+ALTER TABLE cs_mall_ums.ums_user       ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+ALTER TABLE cs_mall_ums.ums_login_log  ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+
+-- mall-order/mall-order-webapi/src/main/resources/db/migration/V7__add_data_source_to_oms.sql
+ALTER TABLE cs_mall_oms.oms_order           ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+ALTER TABLE cs_mall_oms.oms_order_item      ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+ALTER TABLE cs_mall_oms.oms_cart            ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+ALTER TABLE cs_mall_oms.oms_payment_record  ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+
+-- mall-seckill/mall-seckill-webapi/src/main/resources/db/migration/V6__add_data_source_to_seckill.sql
+ALTER TABLE cs_mall_seckill.success                ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+ALTER TABLE cs_mall_seckill.seckill_message_retry  ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+
+-- mall-resource/src/main/resources/db/migration/V2__add_data_source_to_res_upload_record.sql
+ALTER TABLE cs_mall_resource.res_upload_record     ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+```
+
+> **索引**：**先不加**（数据量小；"按来源反查"是运维场景而非在线查询，将来量大再加 `KEY idx_data_source (data_source)`）。
+> **回滚**：`ALTER TABLE … DROP COLUMN data_source` + 删除 `flyway_schema_history` 对应行（列可空、无人读 → 回滚零影响）。
+> **值谁写**：**造数脚本按登记表回填**（服务端零改动）；回填后必须校验 **`data_source='SIM'` 行数 = 登记表条数**（不等即漏标）。
+> ✅ **改用专用列后，之前"`oms_cart`/`ums_login_log`/`res_upload_record` 没有合适自由字段"的限制消失了** —— **9 张表全部都有 `data_source`**。
 
 #### 🔍 反查 SQL（标识只有配上"反查"才有用）
 
