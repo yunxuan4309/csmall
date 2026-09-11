@@ -122,7 +122,25 @@
 | 9 | 写 `load_test.py` + 按 §6.4 三段式**录像**（浏览档可先做） | AI 写 · ★用户录 | ✅ **脚本已完成并自检通过**（`--check` 全绿 + 并发 5 冒烟 RPS 33.9/成功率 100%）；⏳ **待你录像** |
 | 10 | 秒杀动作实现（`--with-seckill` 目前只做预检） | AI | ⏸️ 未实现（可选，看是否要造秒杀数据） |
 | 11 | 🆕 **录像**（§6.4 三段式：静默基线 → 阶梯加压 → 收尾；机位 = SkyWalking + Sentinel + 脚本日志三窗口并排）<br>用户决定**稍后再录** → 已登记为待办 | ★用户 | ⏸️ **待做**（脚本已就绪，见 §5.1） |
-| 12 | 🆕 **补 8 个服务的 Sentinel dashboard 地址**（否则面板看不到 `mall-front` 曲线 —— 见 §6.2 G9） | ★用户（改 compose + recreate） | ⏸️ **待决策**（已登记 TODO **#66**） |
+| 12 | 🆕 **补 8 个服务的 Sentinel dashboard 地址**（#66）—— ✅ **仓库 compose 已改好**（8 处新增，每处一行 `SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858`）；⏳ **待你在老机应用**（见下方 A 步清单） | ★用户 | ⏳ **待执行（A 步）** |
+
+> **🅰️ A 步执行清单（#66）—— 安全前提已核实，可照做**
+> ① **安全前提**：实测 **老机** `/data/csmall/docker-compose.yml` 的 md5 = 仓库副本（`55e192ee…`）→ **可安全覆盖**；
+>    ⚠️ **新机那份不同**（`8f1e3c04…`，712 行）→ **绝不要覆盖**（新机只跑 5 个服务，且 `mall-seckill-2` **已经**配了 `172.29.193.239:8858`）。
+> ② **覆盖 + 重建（老机，低峰）**：
+>    ```bash
+>    cd /data/csmall && cp docker-compose.yml docker-compose.yml.bak-$(date +%Y%m%d_%H%M)   # 先备份
+>    # 用你的账号把仓库的 deploy/docker/docker-compose.yml 传成 /data/csmall/docker-compose.yml
+>    docker compose up -d --force-recreate mall-front mall-gateway mall-product mall-search mall-ums mall-ams mall-resource mall-ai
+>    ```
+> ③ **复核（一条命令）**：
+>    ```bash
+>    docker inspect csmall-front --format '{{range .Config.Env}}{{println .}}{{end}}' | grep SENTINEL_TRANSPORT
+>    # 期望：SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD=sentinel:8858
+>    ```
+> ④ ⚠️ **风险**：8 个服务重建 → 每个启动 **2~3 分钟**（见 §F1，别过早下结论）；`mall-front`/`mall-gateway` 在用户路径上会**短暂 502** → 低峰做、别在录像时做。
+> ⑤ **效果**：Sentinel 面板里会出现这 8 个 app → **浏览档的 pass 曲线也能在 Sentinel 看到**（在此之前请用 SkyWalking 看 pass）。
+
 
 > 🆕🆕 **2026-09-11 晚 · 进度更新（C-0 ~ C-9 脚本全部完成）** ✅
 > · **C-0~C-6 完成**：免 sudo 装 pymysql · 4 迁移文件 · 镜像重建（V3/V7/V6/V2 全部 success=1）· 脚本回填改造 · 只读预检 · 影子库 · 快照
@@ -955,6 +973,29 @@ ssh -i "%USERPROFILE%\AppData\Local\csmall-ssh\ai-deepseek_key" `
 > ③ 或改看 **SkyWalking**（`mall-front` 的 Load 曲线**确实在动** —— 用户截图实测 `Load 1520.846 calls/min`、`Latency 124ms`、`Apdex 0.983`）✅
 > 📌 **好消息**：**"限流档（block 曲线）"不受影响** —— 有流控规则且配了面板的正是 **`mall-order`（新增/支付订单 QPS 20）** 与 **`mall-seckill`（秒杀提交 QPS 10）**，它们**都会上报**。
 > ⇒ 已登记 **TODO #66**（补 8 个服务的 dashboard 地址）。
+
+#### 6.2.1 🎯 限流档"靶子"怎么选 —— **实测结论（2026-09-11，别凭直觉）**
+
+> 不是"有规则的接口就能压出 block"：**要看有没有别的闸门先把你拦住**。两个候选各压 8 秒实测：
+
+| 靶子 | resource / 规则 | 实测（并发×时长） | **被限流 `state=429`** | 其他失败 | 判定 |
+|---|---|---|---|---|---|
+| **`POST /admin/sso/login`** | `adminLogin` · QPS **10**（mall-sso） | 20 × 8s → RPS **165.5** | **1259 次（93.26%）** | `400`×91 | ✅ **推荐** |
+| `POST /oms/order/pay` | `支付订单` · QPS **20**（mall-order） | 30 × 8s → RPS **74.4** | **4 次（0.66%）** | **`409`×583** + `400`×23 | ❌ **压不出来** |
+
+**`pay` 为什么失败（根因）**：`@Idempotent(key = "pay", expire = 10)` 的切面**在 Sentinel 切面之外**先执行，
+于是绝大多数请求被**幂等锁**拦成 `409`，**根本没走到 `@SentinelResource`**。
+> 🔴 **判据陷阱（很容易讲错）**：**`409` 不是 block，只有 `429` 才是**（`OrderBlockHandler` /
+> `AdminSSOController.loginBlock` 都把限流写成 `state=429`）。把两者混起来会得出**完全相反**的结论。
+
+**因此限流档用 `adminLogin`**（`load_test.py --mode limit --target adminlogin`，默认靶子）：
+- ✅ **零业务数据**：假账号必然登录失败（`400`），**只有没被限流的请求才触达业务方法**
+  → 8 秒实测只写了 **91 行** `cs_mall_ams.ams_admin_login_log`（**日志表，且不属于 `data_source` 的 9 张表**）
+- ✅ **面板可见**：`mall-sso` **配了** dashboard 地址（#66 里它是"有配"的三个之一）→ block 曲线直接能看到
+- ⚠️ **清理**（可选，一次性）：`DELETE FROM cs_mall_ams.ams_admin_login_log WHERE username = 'adminfake01';`
+- ⚠️ **诚实披露**：这会留下"失败的管理员登录尝试"日志；在真生产里这种模式会触发告警/封禁 ——
+  **本项目是演示环境**才这么做，录像话术里建议如实说明"我用一个假管理员账号把限流闸门压出来"
+
 > ⚠️ **规则资源名不是 URL** —— 上面 6 条规则的 `resource` 是**注解埋点名**（`@SentinelResource`），与 URL 资源是**两套并存**；改规则要改 Nacos 里的 `mall-*-flow-rules`。
 
 ### 6.3 SkyWalking 侧已具备的条件（实测）

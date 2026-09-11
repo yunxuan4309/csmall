@@ -10,7 +10,7 @@
 | 文件 | 作用 |
 |---|---|
 | `simulate_data.py` | 造数主脚本（登记驱动 · 逆序清理 · dry-run · fail-fast 预检）—— **慢节奏 → 数据沉淀** |
-| `load_test.py` | 🆕 **可观测展示压测脚本**（只读浏览档 · 并发阶梯）—— **短时高峰 → 面板曲线**（§六 SOP） |
+| `load_test.py` | 🆕 **可观测展示压测脚本**（**两档**：`--mode browse` 只读浏览 → pass 曲线；`--mode limit` 打有流控规则的接口 → block 曲线）—— **短时高峰 → 面板曲线**（§六 SOP） |
 | `init_sim_db.sql` | 影子登记库 `cs_mall_sim` 的 DDL（`sim_batch` / `sim_entity` / `sim_baseline`） |
 | `requirements.txt` | 依赖（`requests==2.31.0` / `PyMySQL==1.1.1`，版本钉死） |
 | `README.md` | 本文件 |
@@ -180,6 +180,8 @@ python3 simulate_data.py --clean --batch sim_20260911_1530 --apply
 | 🆕 **第 5 次真跑：全部通过** | `浏览 38 / 加购 8 / 下单 4（已支付 4，支付失败 0）/ 失败 0` · 合计标记 **60 行** · 9 张表 SIM 与登记**逐一对齐**（含 **`oms_order_item` 4 行**、**`oms_payment_record` 4 行**）· 6 项漏标检查**全 0** · 4 单 `state=3`+`payment_type=2`+各有 1 项 1 支付记录 |
 | 🆕 **`load_test.py`（2026-09-11 新增）** | ✅ `python3 -m py_compile` 通过 · `--help` exit=0 · **`--check` 全绿**（① 不带 token → `HTTP 200` 但 `state=401`，**脚本正确判为未登录** ② 20/20 登录成功 ③ 自动发现 **19 个真实 SPU id** ④ 两个端点带 token 均 `state=200`）· **并发 5 冒烟**：`RPS 33.9 / 成功率 100% / p50 134ms / p95 255ms / p99 317ms`（175 请求 0 失败）· `--json` 落盘正常 |
 | 🆕 **load_test 的两个设计要点** | ① **只看 body 的 `state`，不看 HTTP 码**（本项目鉴权失败也是 HTTP 200）② **启动时用列表接口自动发现真实 SPU id** —— 硬编码 id 打到不存在的商品会被统计成失败、**污染成功率** |
+| 🆕 **限流档靶子实测（2026-09-11，8 秒 ×2）** | **`adminLogin`（推荐）**：20 并发 → RPS 165.5，**被限流 1259 次（93.26%）** ✅；只写 91 行 `ams_admin_login_log`（日志表，**零业务数据**）<br>**`支付订单`（不可用）**：30 并发 → RPS 74.4，**被限流仅 4 次（0.66%）** ❌ —— 根因是 `@Idempotent` 切面**在 Sentinel 之外**先拦 → 583 次拿到 **`409`（幂等锁）**<br>🔴 **判据陷阱**：**`409` 不是 block，只有 `429` 才是**（混起来会得出相反结论） |
+| 🆕 **清理限流档留痕（可选）** | `DELETE FROM cs_mall_ams.ams_admin_login_log WHERE username = 'adminfake01';` |
 | 🔴 **第 5 次真跑暴露的既有缺陷** | `sales`/`stock` **完全没变**（1456/83）→ 查明是 **普通订单库存扣减的 MQ 链路整体失效**（消费者 `@RabbitHandler` 收 `String`，而 JSON 转换器把消息变成 `ArrayList` → 死信消费者同样失败 → 消息丢失；日志 `订单库存扣减完成` **0 次**）→ 已登记 **TODO #65**。⚠️ 修正一个我早期写错的判断：**不是"库存支付时才扣"，而是这条链路根本没成功过**。另：`sales` 本就只由**秒杀**链路累加（`incrementSales` 唯一调用方在 `SeckillQueueConsumer`），普通订单不加 |
 | 🆕 **碰撞预检 SQL 实证** | ✅ 实测 `1390000`+`0001..0020` → 占用 **20**（正是 409 原因）；`1390009`/`1390090`/`1391111`/`1380000`/`1890000`/`1990000` → 占用 **0**（可用）；`testsim0001..0020` → 占用 **0** |
 | 旧路径被证伪 | ❌ `python3 -m venv` 实测**建不出 pip**（`ensurepip` 缺失）；`pypi.org`/`archive.ubuntu.com`/清华源**全不通** → 原"venv + requirements.txt"路径**双重死路**（2026-09-11 晚） |

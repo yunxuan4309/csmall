@@ -201,6 +201,7 @@ services:
     container_name: csmall-gateway
     ports: ["10087:10087"]
     environment:
+      SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -266,6 +267,7 @@ services:
     # 绑定宿主私网 IP（纵深防御：公网由安全组挡，绑定地址再挡一层；与 3306/6379 风格一致）
     ports: ["9010:9010", "172.29.193.239:20880:20880"]
     environment:
+      SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858
       SPRING_PROFILES_ACTIVE: prod
       # 2026-09-09 窗口A（阶段2b）：注册到 Nacos 的地址用宿主内网 IP + 映射端口
       # 否则消费者（含新机秒杀副本）拿到容器 IP 172.18.x → 跨机不可达
@@ -305,6 +307,7 @@ services:
     container_name: csmall-front
     ports: ["10004:10004"]
     environment:
+      SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -377,6 +380,7 @@ services:
     container_name: csmall-search
     ports: ["10008:10008"]
     environment:
+      SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858
       SPRING_PROFILES_ACTIVE: prod
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       SPRING_DATA_REDIS_HOST: redis
@@ -450,6 +454,7 @@ services:
     container_name: csmall-ums
     ports: ["10006:10006"]
     environment:
+      SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -482,6 +487,7 @@ services:
     container_name: csmall-ams
     ports: ["10003:10003"]
     environment:
+      SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -515,6 +521,7 @@ services:
     restart: unless-stopped
     ports: ["9060:9060"]
     environment:
+      SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -549,6 +556,7 @@ services:
     container_name: csmall-ai
     ports: ["10010:10010"]
     environment:
+      SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858
       SPRING_PROFILES_ACTIVE: prod
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       SPRING_DATA_REDIS_HOST: redis
