@@ -51,7 +51,9 @@ export SIM_RESOURCE_HOST='http://8.156.77.197/'      # 图片前缀
 ```bash
 # ⓪ 🔴 迁移先行（首次执行；否则 --preflight 会因"data_source 列缺失"直接拒绝）
 #    4 个 Flyway 迁移文件已入库：ums V3 / oms V7 / seckill V6 / resource V2（方案 §2.2.9）
-#    ① 低峰**逐个重启**（每个 ~40-60s）：mall-ums → mall-order → mall-seckill → mall-resource
+#    ① 低峰**逐个重启** 4 个服务（每个 ~40-60s）
+#       ⚠️ 容器名是 csmall-*（实测 docker ps），不是 mall-*（那是 SkyWalking 服务名/模块名）：
+#       docker restart csmall-ums csmall-order csmall-seckill csmall-resource
 #    ② 复核（期望输出 9 行）：
 #       docker exec -i csmall-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N -B \
 #         -e "SELECT CONCAT(table_schema,\".\",table_name) FROM information_schema.columns \

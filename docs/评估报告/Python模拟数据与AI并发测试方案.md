@@ -110,11 +110,11 @@
 | # | 事项 | 谁 | 状态 |
 |---|---|---|---|
 | 1 | 4 个 **Flyway 迁移文件**：`ums V3` / `oms V7` / `seckill V6` / `resource V2`，各表加 `data_source` | AI 写 | ✅ **已落盘**（2026-09-11 晚；只加文件、未手工 ALTER） |
-| 2 | 逐个**重启** `mall-ums` / `mall-order` / `mall-seckill` / `mall-resource` 使迁移生效（每个 ~40-60s，低峰） | ★用户 | ⏳ **待做（当前阻塞点）** |
+| 2 | 逐个**重启** 4 个服务让 Flyway 迁移生效（每个 ~40-60s，低峰）<br>⚠️ **容器名是 `csmall-*`**（实测 `docker ps`）：`csmall-ums` / `csmall-order` / `csmall-seckill` / `csmall-resource` —— **不是** `mall-*`（那是 SkyWalking 服务名与 Maven 模块名）<br>一条命令：`docker restart csmall-ums csmall-order csmall-seckill csmall-resource` | ★用户 | ⏳ **待做（当前阻塞点）** |
 | 3 | 脚本改「**按登记表回填 `data_source`**」+ **撤回**借用字段（`tag=SIM`、订单项 `data={"sim":…}`） | AI | ✅ **已完成**（新增 `backfill()` / `verify_backfill()`；借用字段已撤回；顺带修掉 `oms_payment_record` 漏删） |
 | 4 | 执行前**只读核对**：9 张表是否已存在 `data_source`（存在则先决策，别硬跑迁移） | AI | ✅ **已完成**（实测 6 个 schema **0 个** `data_source` 列 → 迁移可安全执行） |
 | 5 | 在**老机**建影子库（跑 `init_sim_db.sql`） | ★用户 | ⏳ 待做 |
-| 6 | 给凭据 `export SIM_DB_PASSWORD=…` + **快照** `mysqldump` 六库（实测仅 ~207M） | ★用户 | ⏳ 待做 |
+| 6 | **即时快照**：老机执行 `/data/csmall/backup/backup-db.sh`（复用 #29 脚本；🔴 `ai-deepseek` 对 `/data/csmall/backup` **无写权限**（实测 `Permission denied`）→ **必须你用 `ecs-user` 执行**）<br>ℹ️ cron 每天 02:30 已有备份（`cs_mall_20260911_0230.sql.gz` 52K），但造数前需**当下**再打一份；实测六库 gz 后仅 ~52KB，成本可忽略 | ★用户 | ⏳ 待做 |
 | 7 | **校准写链路**：`--days 1 --per-day 50`（约 2~3 单）→ 校准注册正则 / 加购下单字段 / 订单登记 / 拿 token | ★用户跑 · AI 复核 | ⏳ 待做 |
 | 8 | **dry-run 清理演练**（清理 → 比对照基线） | ★用户 · AI 复核 | ⏳ 待做 |
 | 9 | 写 `load_test.py` + 按 §6.4 三段式**录像**（浏览档可先做） | AI 写 · ★用户录 | ⏳ 待做 |
