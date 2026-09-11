@@ -49,6 +49,15 @@ export SIM_RESOURCE_HOST='http://8.156.77.197/'      # 图片前缀
 ## 四、SOP（严格按序，对应方案文档 §2.2.8 / §五）
 
 ```bash
+# ⓪ 🔴 迁移先行（首次执行；否则 --preflight 会因"data_source 列缺失"直接拒绝）
+#    4 个 Flyway 迁移文件已入库：ums V3 / oms V7 / seckill V6 / resource V2（方案 §2.2.9）
+#    ① 低峰**逐个重启**（每个 ~40-60s）：mall-ums → mall-order → mall-seckill → mall-resource
+#    ② 复核（期望输出 9 行）：
+#       docker exec -i csmall-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N -B \
+#         -e "SELECT CONCAT(table_schema,\".\",table_name) FROM information_schema.columns \
+#             WHERE column_name=\"data_source\" ORDER BY 1"'
+#    🔴 禁止手工 ALTER 加列：会与迁移冲突 → Duplicate column name → Flyway 失败 → 服务起不来
+
 # ① 建影子库（一次性；在老机执行）
 docker exec -i csmall-mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < init_sim_db.sql
 
@@ -73,15 +82,18 @@ docker exec -i csmall-mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < init_sim_db.
 | 设计点 | 实现 | 对应 |
 |---|---|---|
 | 登记驱动 | `Registry.register()`：**每个实体一行** `sim_entity`，与业务写入**同一连接/事务** | 方案 §2.2.3 ② |
-| 逆序清理 | `CLEAN_ORDER` 9 张表严格子→父；`oms_order_item` 按登记到的 `order_id` 反查（它自己没有 `user_id`） | 方案 §2.2.5 |
+| 逆序清理 | `CLEAN_ORDER` 9 张表严格子→父；`oms_order_item` 按登记到的 `order_id` 反查（它自己没有 `user_id`）；**服务端写的 5 张（登录日志/支付记录/秒杀成功/秒杀重试/上传记录）按 `user_id` 删** | 方案 §2.2.5 |
+| 🔴 **修掉一处漏删** | `oms_payment_record` 原挂 `pk`（按登记主键）模式，但脚本**从不登记支付记录** → 走"无登记 → 跳过" → **支付记录静默残留**（全库 0 外键，删漏不报错）。实测该表有 `user_id` → 改为 `user` 模式（2026-09-11） | 方案 §2.2.9「回填矩阵」 |
+| 🏷️ **回填专用列** | `backfill()`：造完数按登记表 `UPDATE … SET data_source='SIM'`（**服务端零改动**，幂等）；`verify_backfill()` 逐表比对"应标/实标"行数，**漏标与误标都报** | 方案 §2.2.9 |
+| 清理后自检 | `clean()` 删完再查 9 张表是否仍有 `data_source='SIM'` 残留（全库 0 外键，漏删不会报错，只能主动查） | 方案 §2.5 / §七 |
 | 分批 + 单批事务 | 每 500 个 id 一批，`commit`/`rollback` | 方案 §2.2.5 |
 | 默认 dry-run | 不带 `--apply` 只 `SELECT COUNT(*)` 打印将删行数 | 方案 §2.2.5 / §六 |
 | 幂等 | 已 `cleaned` 的批次会提示；删不到就跳过 | 方案 §2.2.5 |
-| fail-fast 预检 | 影子表在不在 / `test_sim_%` 是否为 0 / 库存够不够 / 地址模板在不在 / 目录非空 | §〇.1 D7 |
+| fail-fast 预检 | 影子表在不在 / `test_sim_%` 是否为 0 / 库存够不够 / 地址模板在不在 / 目录非空 / 🆕 **9 张表的 `data_source` 列是否已就位**（列缺 = 迁移没跑 → 拒绝执行） | §〇.1 D7 / §2.2.9 |
 | 库存预算 | `need_units = days × per_day × 5% × 2 件`，与 `SUM(pms_sku.stock)` 比对 | §〇.1 D7 |
 | 不可逆字段不硬算 | 只告警，交给快照整库还原 | 方案 §2.2.7 |
 | 凭据不落盘 | `SIM_DB_PASSWORD` 环境变量 | §〇.1 D6 |
-| 🏷️ **模拟数据标识** | **让数据自证身份**（零 DDL，复用现有自由字段）：用户名 `test_sim_*` · 手机号 `1390000xxxx`（假号段）· 昵称/地址/联系人含"模拟" · 邮箱 `@example.com` · **订单 `tag=SIM`** · **订单项 `data={"sim":true,…}`** · 支付 `extra_data`（服务端写，按 order_id 反查）· **权威登记表 `cs_mall_sim.sim_entity`** | 方案 **§2.2.9** |
+| 🏷️ **模拟数据标识** | **让数据自证身份**，分两级：<br>① **专用列 `data_source`**（`NULL`=常规 / `SIM`=模拟造数；9 张表统一，由 **4 个 Flyway 迁移**加列）→ 值由脚本**按登记表回填**（**4 张脚本写的按主键**、**5 张服务端写的按 `user_id`**）<br>② **人眼可辨档**：用户名 `test_sim_*` · 手机号 `1390000xxxx`（假号段）· 昵称/地址/联系人含"模拟" · 邮箱 `@example.com`<br>**权威仍是登记表 `cs_mall_sim.sim_entity`** —— `data_source` 只表达"是不是造的"，**不表达"哪一批"** | 方案 **§2.2.9** |
 
 ## 六、端点事实来源（2026-09-11 读码，`文件:行`）
 
@@ -122,7 +134,12 @@ docker exec -i csmall-mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < init_sim_db.
 | 目录 SQL（`pms_sku JOIN pms_spu`） | ✅ 命中 **36** 行在售 SKU（生产 38 个 SKU 中） |
 | 地址 SQL | ✅ 取到合法样本（`street_code` 可空 5/86，已 `COALESCE`；`street_name` 全非空） |
 | 图片字段真实格式 | ✅ `pictures` 是 **JSON 数组的相对文件名**（`["spu_1_1.jpg"]`）；已有订单项 `picture_url` 用的是**完整 URL** → 脚本统一拼 `SIM_RESOURCE_HOST` |
-| 未验证 | ❌ 涉及**写**的整条链路（注册/登录/加购/下单/支付/清理）—— 需要 DB 密码与生产写权限，由用户在窗口内执行 |
+| 🆕 **专用列只读预检（C-4）** | ✅ 查 `information_schema`：6 个业务 schema **0 个** `data_source` 列 → **迁移可安全执行**（不会 `Duplicate column`） |
+| 🆕 **Flyway 版本号核对** | ✅ 实测 `flyway_schema_history` 最高版本：ums **V2** / oms **V6** / seckill **V5** / resource **V1** → **V3 / V7 / V6 / V2 确认空闲** |
+| 🆕 **9 张表与关键列实测** | ✅ 表名确认（是 `success` **不是** `seckill_success`）；9 张表**都有 `id`**；服务端写的 5 张**都有 `user_id`**；`oms_order_item` **无** `user_id` → 故按 `order_id` 反查 |
+| 🆕 **迁移+脚本改动后自检** | ✅ 新机 `python3 -m py_compile` 通过；**md5 本地 = 远端 `640104bb…`**（字节一致）；导入模块断言 **9 张表 / 4+5 回填分组 / 清理表集 == 回填表集 / 无借用字段残留** → `STRUCT_CHECK_OK` |
+| 🆕 **4 个迁移文件已落盘** | ✅ `ums V3` / `oms V7` / `seckill V6` / `resource V2`，**只加文件、未手工 ALTER**（守 Flyway 纪律） |
+| 未验证 | ❌ 涉及**写**的整条链路（注册/登录/加购/下单/支付/**回填**/清理）—— 需要 DB 密码与生产写权限，由用户在窗口内执行；**且迁移本身尚未执行**（需先低峰重启 4 个服务） |
 
 ## 九、关联文档
 

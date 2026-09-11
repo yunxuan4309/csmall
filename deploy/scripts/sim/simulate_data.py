@@ -59,18 +59,42 @@ EMAIL_DOMAIN = os.environ.get("SIM_EMAIL_DOMAIN", "example.com")
 # 明显是假号段（139 + 8 位），既能过手机号正则，又不会撞到真实号码
 FAKE_PHONE_PREFIX = os.environ.get("SIM_PHONE_PREFIX", "1390000")
 
-# ===== 🏷️ 模拟数据标识（2026-09-11 新增）=========================================
-# 目的：让模拟数据**自证身份** —— 单表查询即可看出"这行是造的"，不必 JOIN。
-# 承载：**复用业务库现有的自由字段**（`oms_order.tag` / `oms_order_item.data` /
-#       `oms_payment_record.extra_data`），**不改任何表结构**（守住方案"对业务库零结构变更"的设计优势）。
-# 追批：标识里带日期；**精确批次由 `cs_mall_sim.sim_entity` 反查**（登记表始终是唯一权威）。
-# ⚠️ 边界：**新增的商品数据视为真实商品、不打模拟标记**（见《商品与秒杀扩容方案》）。
-SIM_TAG = os.environ.get("SIM_TAG", "SIM")
+# ===== 🏷️ 模拟数据标识：专用列 `data_source`（2026-09-11 定稿）=========================
+# 目的：让模拟数据**自证身份** —— 单表等值查询即可看出"这行是造的"，不必 JOIN。
+# 承载：**9 张业务表统一新增专用列** `data_source`（`NULL`=常规/真实 · `SIM`=模拟造数）。
+#       ⚠️ 早先"借用 `oms_order.tag` / `oms_order_item.data`"的写法**已撤回**：
+#          属语义借用（`tag` 本是展示标签、`data` 本是商品全属性 json），
+#          且 `tag` 会在订单页显示成标签 → 同一行挂两种标识，反而更易混。
+# 迁移：4 个 Flyway 迁移文件（ums V3 / oms V7 / seckill V6 / resource V2），见方案 §2.2.9。
+#       🔴 只走迁移文件、**禁止手工 ALTER** —— 手工加列后再跑迁移会
+#          `Duplicate column name` → Flyway 失败 → **应用启动失败**。
+# 谁写：**服务端零改动** —— 值由本脚本**按影子登记表回填**（见下方 backfill()）。
+# 追批：`data_source` 只表达"是不是造的"；**精确批次仍由 `cs_mall_sim.sim_entity` 反查**。
+# ⚠️ 边界：**新增的商品数据视为真实商品、不打 SIM 标记**（见《商品与秒杀扩容方案》）。
+DATA_SOURCE_SIM = os.environ.get("SIM_DATA_SOURCE", "SIM")
 
-
-def sim_item_mark() -> str:
-    """订单项 `data` 的标识（原来传 `'{}'`，现在自带身份）"""
-    return '{"sim":true,"date":"%s"}' % dt.date.today().isoformat()
+# 🔄 回填口径（2026-09-11 只读实测 `information_schema` 后确定）——
+#    ① 脚本直接 INSERT 的 4 张表 → 按**登记主键** `id` 回填；
+#    ② 服务端在业务链路中写的 5 张表（登录日志 / 支付记录 / 秒杀成功 / 秒杀重试 / 上传记录）
+#       脚本**没有插入点**，只能按 **`user_id`** 兜底回填 —— 实测这 5 张**全部有 `user_id`**，
+#       所以键可靠、**不需要 JOIN 订单**（唯一没有 user_id 的 `oms_order_item` 走 ① 的主键）。
+BACKFILL_BY_PK: Sequence[Tuple[str, str, str]] = (
+    ("cs_mall_ums", "ums_user", "id"),
+    ("cs_mall_oms", "oms_cart", "id"),
+    ("cs_mall_oms", "oms_order", "id"),
+    ("cs_mall_oms", "oms_order_item", "id"),
+)
+BACKFILL_BY_USER: Sequence[Tuple[str, str]] = (
+    ("cs_mall_ums", "ums_login_log"),
+    ("cs_mall_oms", "oms_payment_record"),
+    ("cs_mall_seckill", "success"),
+    ("cs_mall_seckill", "seckill_message_retry"),
+    ("cs_mall_resource", "res_upload_record"),
+)
+# 迁移应加 `data_source` 的 9 张表（预检用：列不在 = 迁移没跑，直接 fail-fast）
+DATA_SOURCE_TABLES: Sequence[Tuple[str, str]] = tuple(
+    (db_name, table) for db_name, table, _ in BACKFILL_BY_PK
+) + tuple(BACKFILL_BY_USER)
 
 # 资源站前缀：pictures 存的是**相对文件名**，需拼成完整 URL（实测既有订单项就是这个形态）
 SIM_RESOURCE_HOST = os.environ.get("SIM_RESOURCE_HOST", "http://8.156.77.197/")
@@ -89,14 +113,18 @@ SIM_DB = dict(
 FUNNEL = (("browse", 0.80), ("cart", 0.15), ("order", 0.05))
 
 # 清理顺序（严格逆序：子 → 父）。mode: pk=按登记主键 / user=按登记用户 / order_child=按登记的 order_id 反查
+# 🔴 2026-09-11 修正：`oms_payment_record` 原为 `pk`（按登记主键）模式，但**脚本从不登记支付记录**
+#    （它是支付时服务端写的）→ 清理会走"无登记 → 跳过" → **支付记录静默残留**（全库 0 外键，删漏不报错）。
+#    实测该表有 `user_id` → 改为 `user` 模式，与 data_source 回填口径统一。
+#    同理：`success` / `seckill_message_retry` / `res_upload_record` 也都是服务端写的，一并改为 `user`。
 CLEAN_ORDER: Sequence[Tuple[str, str, str, str]] = (
     ("cs_mall_oms", "oms_order_item", "order_child", "order_id"),
-    ("cs_mall_seckill", "success", "pk", "id"),
-    ("cs_mall_seckill", "seckill_message_retry", "pk", "id"),
-    ("cs_mall_oms", "oms_payment_record", "pk", "id"),
+    ("cs_mall_seckill", "success", "user", "user_id"),
+    ("cs_mall_seckill", "seckill_message_retry", "user", "user_id"),
+    ("cs_mall_oms", "oms_payment_record", "user", "user_id"),
     ("cs_mall_oms", "oms_cart", "pk", "id"),
     ("cs_mall_oms", "oms_order", "pk", "id"),
-    ("cs_mall_resource", "res_upload_record", "pk", "id"),
+    ("cs_mall_resource", "res_upload_record", "user", "user_id"),
     ("cs_mall_ums", "ums_login_log", "user", "user_id"),
     ("cs_mall_ums", "ums_user", "pk", "id"),
 )
@@ -170,6 +198,157 @@ class Registry:
 
 
 # =============================================================================
+# 🏷️ 回填专用列 `data_source='SIM'`（**服务端零改动** —— 值由脚本按登记表补写）
+# =============================================================================
+
+def has_column(conn, db_name: str, table: str, column: str) -> bool:
+    """列是否存在 —— **实测而不是猜**（迁移没跑就不能回填，也不该静默跳过）"""
+    with conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) AS c FROM information_schema.columns "
+                    "WHERE table_schema=%s AND table_name=%s AND column_name=%s",
+                    (db_name, table, column))
+        return cur.fetchone()["c"] > 0
+
+
+def _chunks(values: Sequence[Any], size: int = CHUNK) -> Iterable[Sequence[Any]]:
+    for i in range(0, len(values), size):
+        yield values[i:i + size]
+
+
+def _count_where(cur, full: str, where: str, params: Sequence[Any]) -> int:
+    cur.execute(f"SELECT COUNT(*) AS c FROM {full} WHERE {where}", tuple(params))
+    return cur.fetchone()["c"]
+
+
+def backfill(conn, batch: str) -> Dict[str, int]:
+    """把本批次登记到的实体标成 `data_source='SIM'`，返回 `{库.表: 标记行数}`。
+
+    **服务端零改动**：不要求服务端写标识，而是造完数按影子登记表回填 ——
+      ① 脚本直接 INSERT 的 4 张表 → 按**登记主键**；
+      ② 服务端在业务链路中写的 5 张表（登录日志/支付记录/秒杀成功/秒杀重试/上传记录）
+         → 脚本**没有插入点**，按**登记 user_id** 兜底（实测这 5 张都有 user_id）。
+    幂等：WHERE 已排除 `data_source='SIM'` 的行，可重复执行（重复跑得 0）。
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT db_name, table_name, pk_value, user_ref FROM cs_mall_sim.sim_entity "
+                    "WHERE batch_id=%s", (batch,))
+        rows = list(cur.fetchall())
+
+    by_pk: Dict[Tuple[str, str], List[Any]] = {}
+    user_ids: List[Any] = []
+    for r in rows:
+        by_pk.setdefault((r["db_name"], r["table_name"]), []).append(r["pk_value"])
+        if r["user_ref"]:
+            user_ids.append(r["user_ref"])
+    user_ids = sorted({str(u) for u in user_ids})
+
+    marked: Dict[str, int] = {}
+    with conn.cursor() as cur:
+        def _mark(db_name: str, table: str, key_col: str, values: Sequence[Any]) -> int:
+            full, total = f"{db_name}.{table}", 0
+            for part in _chunks(values):
+                ph = ",".join(["%s"] * len(part))
+                cur.execute(
+                    f"UPDATE {full} SET data_source=%s "
+                    f"WHERE {key_col} IN ({ph}) AND (data_source IS NULL OR data_source<>%s)",
+                    (DATA_SOURCE_SIM, *part, DATA_SOURCE_SIM))
+                total += cur.rowcount
+            return total
+
+        for db_name, table, key_col in BACKFILL_BY_PK:
+            values = by_pk.get((db_name, table))
+            if values:
+                marked[f"{db_name}.{table}"] = _mark(db_name, table, key_col, values)
+
+        if user_ids:
+            for db_name, table in BACKFILL_BY_USER:
+                if not has_column(conn, db_name, table, "data_source"):
+                    log(f"   ⚠️ 跳过 {db_name}.{table}：无 data_source 列（迁移未执行？）")
+                    continue
+                marked[f"{db_name}.{table}"] = _mark(db_name, table, "user_id", user_ids)
+
+    conn.commit()
+    return marked
+
+
+def verify_backfill(conn, batch: str) -> List[str]:
+    """回填校验（**方案的可行性边界之一：回填必须真的发生**）。
+
+    逐表比对"**应该标的行数**"与"**实际标了的行数**"，不一致即报（返回问题列表）：
+      · 按主键回填的表：应标 = 登记条数（1:1）
+      · 按 user_id 回填的表：应标 = **属于模拟用户的行数**（可能一单多行，故不能拿登记条数比）
+    另外反向查"**误标**"：标了 SIM 却不属于任何模拟用户/主键 → 说明口径错了。
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT db_name, table_name, pk_value, user_ref FROM cs_mall_sim.sim_entity "
+                    "WHERE batch_id=%s", (batch,))
+        rows = list(cur.fetchall())
+
+        by_pk: Dict[Tuple[str, str], List[Any]] = {}
+        user_ids: List[str] = []
+        for r in rows:
+            by_pk.setdefault((r["db_name"], r["table_name"]), []).append(r["pk_value"])
+            if r["user_ref"]:
+                user_ids.append(str(r["user_ref"]))
+        user_ids = sorted(set(user_ids))
+
+        problems: List[str] = []
+
+        def _sim_count(db_name: str, table: str) -> int:
+            return _count_where(cur, f"{db_name}.{table}", "data_source=%s", (DATA_SOURCE_SIM,))
+
+        # ① 按主键回填：登记 n 条 → 必须恰好标 n 行
+        for db_name, table, _key in BACKFILL_BY_PK:
+            values = by_pk.get((db_name, table))
+            if not values:
+                continue
+            full = f"{db_name}.{table}"
+            if not has_column(conn, db_name, table, "data_source"):
+                problems.append(f"{full} 缺 data_source 列 → 迁移没执行？")
+                continue
+            got = _sim_count(db_name, table)
+            if got != len(values):
+                problems.append(f"{full} 标识数不符：登记 {len(values)} 行，实标 {got} 行")
+            else:
+                log(f"   ✅ {full:38s} 登记 {len(values):5d} → 已标 {got:5d}")
+
+        # ② 按 user_id 回填：属于模拟用户的行**应全部**被标记
+        if user_ids:
+            for db_name, table in BACKFILL_BY_USER:
+                full = f"{db_name}.{table}"
+                if not has_column(conn, db_name, table, "data_source"):
+                    problems.append(f"{full} 缺 data_source 列 → 迁移没执行？")
+                    continue
+                should = 0
+                for part in _chunks(user_ids):
+                    ph = ",".join(["%s"] * len(part))
+                    should += _count_where(cur, full, f"user_id IN ({ph})", part)
+                got = _sim_count(db_name, table)
+                if got < should:
+                    problems.append(f"{full} 漏标：属于模拟用户 {should} 行，只标了 {got} 行")
+                elif got > should:
+                    problems.append(f"{full} 误标：标了 {got} 行，但只有 {should} 行属于模拟用户")
+                else:
+                    log(f"   ✅ {full:38s} 模拟用户 {should:5d} 行 → 已标 {got:5d}")
+
+        # ③ 反向总检：标了 SIM 但**不属于本批次主键**的行（跨批次/历史残留的粗筛）
+        for db_name, table, key_col in BACKFILL_BY_PK:
+            values = by_pk.get((db_name, table))
+            if not values:
+                continue
+            n = 0
+            for part in _chunks(values):
+                ph = ",".join(["%s"] * len(part))
+                n += _count_where(cur, f"{db_name}.{table}",
+                                  f"data_source=%s AND {key_col} NOT IN ({ph})",
+                                  (DATA_SOURCE_SIM, *part))
+            if n:
+                problems.append(f"{db_name}.{table} 有 {n} 行标了 SIM 但不属于本批次（别的批次？）")
+
+    return problems
+
+
+# =============================================================================
 # HTTP API（端点已按 2026-09-11 读码核对；见 README「端点事实来源」）
 # =============================================================================
 
@@ -225,7 +404,7 @@ class Api:
         total = round(price * qty, 2)
         return self._call("POST", "/oms/order/add", token_header=token_header, json={
             "contactName": f"模拟用户{random.randint(1000, 9999)}",   # 随机 → 避免 @Idempotent key 冲突
-            "tag": SIM_TAG,                                            # 🏷️ 标识：模拟数据（前端/后台一眼可辨）
+            # 🏷️ 不再借用 `tag` 传标识（已撤回）：标识统一走专用列 `data_source`，由 backfill() 回填
             "mobilePhone": FAKE_PHONE_PREFIX + f"{random.randint(0, 9999):04d}",
             "provinceCode": address["province_code"], "provinceName": address["province_name"],
             "cityCode": address["city_code"], "cityName": address["city_name"],
@@ -237,7 +416,7 @@ class Api:
             "amountOfDiscount": 0.0, "amountOfActualPay": total,
             "orderItems": [{
                 "skuId": sku["sku_id"], "title": sku["title"], "barCode": sku.get("bar_code") or "",
-                "data": sim_item_mark(), "mainPicture": sku["picture"], "price": price, "quantity": qty,
+                "data": "{}", "mainPicture": sku["picture"], "price": price, "quantity": qty,
             }],
         })
 
@@ -335,6 +514,15 @@ def preflight(conn, days: int, per_day: int, need_seckill: bool) -> List[Dict[st
             cur.execute("SELECT COUNT(*) AS c FROM cs_mall_seckill.seckill_sku WHERE seckill_stock > 0")
             if cur.fetchone()["c"] == 0:
                 problems.append("没有可用的秒杀 SKU（seckill_stock > 0）→ 去掉 --with-seckill")
+
+    # 7) 🔴 专用列 `data_source` 已就位（= 4 个 Flyway 迁移已执行）
+    #    列不在 → 回填无处可写 → 直接 fail-fast；**不静默跳过**，否则"自证身份"形同虚设
+    missing = [f"{d}.{t}" for d, t in DATA_SOURCE_TABLES
+               if not has_column(conn, d, t, "data_source")]
+    if missing:
+        problems.append(
+            f"data_source 列缺失 {len(missing)}/{len(DATA_SOURCE_TABLES)} 张表："
+            f"{', '.join(missing)} → 先重启对应服务让 Flyway 迁移生效（方案 §2.2.9）")
 
     if problems:
         log("❌ 预检未通过：")
@@ -504,6 +692,22 @@ def clean(conn, batch: str, apply_: bool) -> None:
             cur.execute("UPDATE cs_mall_sim.sim_batch SET status='cleaned', finished_at=NOW() WHERE batch_id=%s", (batch,))
             conn.commit()
     log(f"{'已删除' if apply_ else '将删除'}合计 {total} 行（分批 {CHUNK}/批，单批事务）")
+
+    # 🔴 清理后自检（全库 0 个外键 → 漏删**不会报错**，只能主动查）
+    if apply_:
+        left: List[str] = []
+        with conn.cursor() as cur:
+            for db_name, table in DATA_SOURCE_TABLES:
+                if not has_column(conn, db_name, table, "data_source"):
+                    continue
+                n = _count_where(cur, f"{db_name}.{table}", "data_source=%s", (DATA_SOURCE_SIM,))
+                if n:
+                    left.append(f"{db_name}.{table}={n}")
+        if left:
+            log(f"⚠️ 清理后仍残留 SIM 标识行：{', '.join(left)}")
+            log("   → 可能是**本批次之外**的批次（别的批次也标了 SIM），也可能是清理清单漏表；请人工核对")
+        else:
+            log("✅ 清理后自检通过：9 张表已无 data_source='SIM' 残留")
     log("⚠️ 未处理**不可逆字段**（pms_spu.sales / pms_sku.stock / Redis 秒杀预热键）——"
         "需要绝对干净请走整库还原快照（方案 §2.2.3）；Redis 只按登记 user id 精确删，禁止 pattern 全删")
 
@@ -558,10 +762,28 @@ def main() -> None:
         stat = run_funnel(api, conn, registry, catalog, users, args.days, args.per_day,
                          args.sleep_min, args.sleep_max, args.with_seckill)
 
+        # 🏷️ 回填专用列标识（**服务端零改动**）：造完数按影子登记表补写 data_source='SIM'
+        log("🏷️ 回填 data_source='SIM'（按登记表；服务端零改动）…")
+        marked = backfill(conn, batch)
+        for k, v in sorted(marked.items()):
+            log(f"   {k:38s} 已标 {v} 行")
+        log(f"   合计标记 {sum(marked.values())} 行")
+
+        # 校验"回填是否真的发生"（方案可行性边界①）—— 有问题只报不阻断，但必须处理
+        problems = verify_backfill(conn, batch)
+        if problems:
+            log("⚠️ 回填校验**未通过**（数据已造出，请先处理再进入清理/展示）：")
+            for p in problems:
+                log(f"   - {p}")
+        else:
+            log("✅ 回填校验通过：登记 ⇄ data_source 标识 一致")
+
+        note = (f"{json_stat(stat, registry)}; data_source_marked={sum(marked.values())}; "
+                f"backfill_problems={len(problems)}")
         with conn.cursor() as cur:
             cur.execute("UPDATE cs_mall_sim.sim_batch SET status='finished', finished_at=NOW(), "
                         "done_actions=%s, note=CONCAT(COALESCE(note,''), ' | ', %s) WHERE batch_id=%s",
-                        (sum(stat.values()) - stat["fail"], json_stat(stat, registry), batch))
+                        (sum(stat.values()) - stat["fail"], note, batch))
         conn.commit()
         log(f"✅ 造数结束（批次 {batch}）：{json_stat(stat, registry)}")
         log(f"清理预览：python {os.path.basename(__file__)} --clean --batch {batch}")

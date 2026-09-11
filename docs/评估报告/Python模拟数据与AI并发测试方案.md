@@ -103,22 +103,26 @@
 | **Flyway 下一个可用版本号** | `cs_mall_ums=`**V3** · `cs_mall_oms=`**V7** · `cs_mall_seckill=`**V6** · `cs_mall_resource=`**V2**（pms 已到 V14、ams 已到 V6，本次不用） |
 | Flyway 配置 | `enabled: true` + `baseline-on-migrate: true` + `baseline-version: 0`；迁移目录 `<模块>/src/main/resources/db/migration/`（**mall-resource 无 `-webapi` 后缀**） |
 | 数据基线 | `cs_mall_sim` **不存在**（待建）· `test_sim_%`=**0** · 全库 **0 外键** · 在售 SKU **36** 个 / 库存约 **1456** 件 |
-| 代码/分支 | `master` 与 `origin/master` **同步**（末次推送含 4 个提交）；⚠️ mall-ai 的"降级 + 启动自检"改动**仍未部署**（与本方案无关） |
+| 代码/分支 | `master` **ahead 3**（`6aafb1a` 交接章节 + `75f9dfb` 标识 + `0116001` §六；**未推送，等用户确认**）；⚠️ mall-ai 的"降级 + 启动自检"改动**仍未部署**（与本方案无关） |
 
 ### C. 待办清单（★ = **用户执行**，其余 AI 完成）
 
 | # | 事项 | 谁 | 状态 |
 |---|---|---|---|
-| 1 | 4 个 **Flyway 迁移文件**：`ums V3` / `oms V7` / `seckill V6` / `resource V2`，各表加 `data_source` | AI 写 | ⏳ 待做 |
-| 2 | 逐个**重启** `mall-ums` / `mall-order` / `mall-seckill` / `mall-resource` 使迁移生效（每个 ~40-60s，低峰） | ★用户 | ⏳ 待做 |
-| 3 | 脚本改「**按登记表回填 `data_source`**」+ **撤回**借用字段（`tag=SIM`、订单项 `data={"sim":…}`） | AI | ⏳ 待做 |
-| 4 | 执行前**只读核对**：9 张表是否已存在 `data_source`（存在则先决策，别硬跑迁移） | AI | ⏳ 待做 |
+| 1 | 4 个 **Flyway 迁移文件**：`ums V3` / `oms V7` / `seckill V6` / `resource V2`，各表加 `data_source` | AI 写 | ✅ **已落盘**（2026-09-11 晚；只加文件、未手工 ALTER） |
+| 2 | 逐个**重启** `mall-ums` / `mall-order` / `mall-seckill` / `mall-resource` 使迁移生效（每个 ~40-60s，低峰） | ★用户 | ⏳ **待做（当前阻塞点）** |
+| 3 | 脚本改「**按登记表回填 `data_source`**」+ **撤回**借用字段（`tag=SIM`、订单项 `data={"sim":…}`） | AI | ✅ **已完成**（新增 `backfill()` / `verify_backfill()`；借用字段已撤回；顺带修掉 `oms_payment_record` 漏删） |
+| 4 | 执行前**只读核对**：9 张表是否已存在 `data_source`（存在则先决策，别硬跑迁移） | AI | ✅ **已完成**（实测 6 个 schema **0 个** `data_source` 列 → 迁移可安全执行） |
 | 5 | 在**老机**建影子库（跑 `init_sim_db.sql`） | ★用户 | ⏳ 待做 |
 | 6 | 给凭据 `export SIM_DB_PASSWORD=…` + **快照** `mysqldump` 六库（实测仅 ~207M） | ★用户 | ⏳ 待做 |
 | 7 | **校准写链路**：`--days 1 --per-day 50`（约 2~3 单）→ 校准注册正则 / 加购下单字段 / 订单登记 / 拿 token | ★用户跑 · AI 复核 | ⏳ 待做 |
 | 8 | **dry-run 清理演练**（清理 → 比对照基线） | ★用户 · AI 复核 | ⏳ 待做 |
 | 9 | 写 `load_test.py` + 按 §6.4 三段式**录像**（浏览档可先做） | AI 写 · ★用户录 | ⏳ 待做 |
 | 10 | 秒杀动作实现（`--with-seckill` 目前只做预检） | AI | ⏸️ 未实现（可选，看是否要造秒杀数据） |
+
+> 🆕 **2026-09-11 晚 · 进度更新**：**C-1 / C-3 / C-4 已完成**（AI 侧全部做完，含自检：`py_compile` 通过 + md5 字节一致 + 结构断言 `STRUCT_CHECK_OK`）。
+> 🔴 **现在轮到用户侧**：**C-2（重启 4 个服务让迁移生效）→ C-5（建影子库）→ C-6（快照）**，之后跑 C-7 校准。
+> ⚠️ **顺序不可颠倒**：脚本已加"`data_source` 列缺失就 fail-fast"的门禁 → **迁移没生效前 `--preflight` 会直接拒绝执行**（这是有意的，避免造出无标识的数据）。
 
 ### D. 今晚目标
 
@@ -356,52 +360,87 @@ CREATE TABLE IF NOT EXISTS cs_mall_sim.sim_entity (
 > ⚠️ MySQL 8 **不支持** `ADD COLUMN IF NOT EXISTS` → "SQL 层幂等"这条路不通，**幂等只能靠 Flyway 的记录**；
 > 因此**执行前必须只读核对"这 9 张表还没有 `data_source` 列"**（有则先决策，别硬跑）。
 
-**4 个迁移文件（版本号已按实测 `flyway_schema_history` 核对为"下一个可用号"）**
+**4 个迁移文件（✅ 2026-09-11 已落盘；版本号已按实测 `flyway_schema_history` 核对为"下一个可用号"）**
 
 ```sql
 -- mall-ums/mall-ums-webapi/src/main/resources/db/migration/V3__add_data_source_to_ums.sql
-ALTER TABLE cs_mall_ums.ums_user       ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
-ALTER TABLE cs_mall_ums.ums_login_log  ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+ALTER TABLE `ums_user`       ADD COLUMN `data_source` varchar(16) DEFAULT NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+ALTER TABLE `ums_login_log`  ADD COLUMN `data_source` varchar(16) DEFAULT NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
 
 -- mall-order/mall-order-webapi/src/main/resources/db/migration/V7__add_data_source_to_oms.sql
-ALTER TABLE cs_mall_oms.oms_order           ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
-ALTER TABLE cs_mall_oms.oms_order_item      ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
-ALTER TABLE cs_mall_oms.oms_cart            ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
-ALTER TABLE cs_mall_oms.oms_payment_record  ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+ALTER TABLE `oms_order`           ADD COLUMN `data_source` varchar(16) DEFAULT NULL COMMENT '…';
+ALTER TABLE `oms_order_item`      ADD COLUMN `data_source` varchar(16) DEFAULT NULL COMMENT '…';
+ALTER TABLE `oms_cart`            ADD COLUMN `data_source` varchar(16) DEFAULT NULL COMMENT '…';
+ALTER TABLE `oms_payment_record`  ADD COLUMN `data_source` varchar(16) DEFAULT NULL COMMENT '…';
 
 -- mall-seckill/mall-seckill-webapi/src/main/resources/db/migration/V6__add_data_source_to_seckill.sql
-ALTER TABLE cs_mall_seckill.success                ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
-ALTER TABLE cs_mall_seckill.seckill_message_retry  ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+ALTER TABLE `success`                ADD COLUMN `data_source` varchar(16) DEFAULT NULL COMMENT '…';
+ALTER TABLE `seckill_message_retry`  ADD COLUMN `data_source` varchar(16) DEFAULT NULL COMMENT '…';
 
 -- mall-resource/src/main/resources/db/migration/V2__add_data_source_to_res_upload_record.sql
-ALTER TABLE cs_mall_resource.res_upload_record     ADD COLUMN data_source VARCHAR(16) NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
+ALTER TABLE `res_upload_record`   ADD COLUMN `data_source` varchar(16) DEFAULT NULL COMMENT '…';
 ```
+
+> ✅ **表名不带库名前缀** —— 与现有全部迁移一致（Flyway 用模块 datasource 的默认库；实测 `V5` 建的 `seckill_message_retry` 就落在 `cs_mall_seckill`）。带前缀也能跑，但会把"库名"硬编码进迁移、降低环境可移植性。
+> ✅ **列追加在表末尾**（不用 `AFTER`）—— 避免依赖某个具体列名，新老环境不会因此漂移。
+> ✅ **只读预检已实测通过（2026-09-11）**：`information_schema.columns` 中 6 个 schema **0 个** `data_source` 列 → 迁移可安全执行。
 
 > **索引**：**先不加**（数据量小；"按来源反查"是运维场景而非在线查询，将来量大再加 `KEY idx_data_source (data_source)`）。
 > **回滚**：`ALTER TABLE … DROP COLUMN data_source` + 删除 `flyway_schema_history` 对应行（列可空、无人读 → 回滚零影响）。
-> **值谁写**：**造数脚本按登记表回填**（服务端零改动）；回填后必须校验 **`data_source='SIM'` 行数 = 登记表条数**（不等即漏标）。
+> **值谁写**：**造数脚本按登记表回填**（服务端零改动）；**按什么键回填见下「回填矩阵」**（4 张脚本写的按主键、5 张服务端写的按 `user_id`）；回填后必须校验 **`data_source='SIM'` 行数 = 登记表条数**（不等即漏标）。
 > ✅ **改用专用列后，之前"`oms_cart`/`ums_login_log`/`res_upload_record` 没有合适自由字段"的限制消失了** —— **9 张表全部都有 `data_source`**。
+
+#### 🔄 回填矩阵（9 张表谁写的 / 按什么键回填）—— 2026-09-11 只读实测后补
+
+> 🔴 **`data_source` 不是"脚本 INSERT 时顺手写上"就完事**：9 张表里**只有 4 张是脚本直接写**的，另外 **5 张是服务端在业务链路中写的**（登录 / 支付 / 秒杀 / MQ 重试 / 上传），脚本**根本没有它们的插入点** → 必须按登记表**兜底回填**，否则这 5 张永远是 `NULL`。
+
+| 表 | 谁写 | 回填依据 | 依据从哪来 |
+|---|---|---|---|
+| `cs_mall_ums.ums_user` | 脚本 | `id IN (登记 pk)` | 脚本主动登记 ✅ |
+| `cs_mall_oms.oms_cart` | 脚本 | `id IN (登记 pk)` | ✅ |
+| `cs_mall_oms.oms_order` | 脚本 | `id IN (登记 pk)` | ✅ |
+| `cs_mall_oms.oms_order_item` | 脚本 | `id IN (登记 pk)` | ✅ |
+| `cs_mall_ums.ums_login_log` | **服务端**（登录） | `user_id IN (登记 user_ref)` | 登记表 |
+| `cs_mall_oms.oms_payment_record` | **服务端**（支付） | `user_id IN (登记 user_ref)` | 登记表 |
+| `cs_mall_seckill.success` | **服务端**（秒杀） | `user_id IN (登记 user_ref)` | 登记表 |
+| `cs_mall_seckill.seckill_message_retry` | **服务端**（MQ 重试） | `user_id IN (登记 user_ref)` | 登记表 |
+| `cs_mall_resource.res_upload_record` | **服务端**（上传） | `user_id IN (登记 user_ref)` | 登记表 |
+
+> ✅ **实测幸运点（2026-09-11 只读核对 `information_schema`）**：这 5 张"服务端写的"表**全部都有 `user_id`**（唯一没有 `user_id` 的是 `oms_order_item`，它已由脚本按主键登记）→ 所以回填**统一用 `user_id IN (登记 user_ref)`**，键可靠、**不需要 JOIN 订单**。
+> 🔴 **连带修复一处清理漏洞**：`oms_payment_record` 原先在清理清单里挂的是 `pk`（按登记主键）模式，但**脚本从不登记支付记录** → 清理时会走"无登记 → 跳过" → **支付记录静默残留**（全库 0 外键，删漏不会报错）。已改为 `user`（按 `user_id`）模式，与回填口径统一。
 
 #### 🔍 反查 SQL（标识只有配上"反查"才有用）
 
 ```sql
--- ① 订单 tag 标识
-SELECT COUNT(*) FROM cs_mall_oms.oms_order           WHERE tag LIKE 'SIM%';
--- ② 用户名前缀
-SELECT COUNT(*) FROM cs_mall_ums.ums_user            WHERE username LIKE 'test_sim_%';
--- ③ 假号段
-SELECT COUNT(*) FROM cs_mall_oms.oms_order           WHERE mobile_phone LIKE '1390000%';
--- ④ 订单项 data 标识
-SELECT COUNT(*) FROM cs_mall_oms.oms_order_item      WHERE data LIKE '%"sim":true%';
--- ⑤ 支付记录标识（服务端写，按 order_id 反查即可）
-SELECT COUNT(*) FROM cs_mall_oms.oms_payment_record  WHERE extra_data LIKE '%"sim":true%';
--- ⑥ 权威口径：影子登记表（前 5 路都应能在它里面找到对应主键）
-SELECT batch_id, db_name, table_name, COUNT(*)
-  FROM cs_mall_sim.sim_entity GROUP BY batch_id, db_name, table_name;
--- ⑦ 按 user_id JOIN，反查那些"没有字段标识"的表
-SELECT 'cart' t, COUNT(*) FROM cs_mall_oms.oms_cart c
-  JOIN cs_mall_ums.ums_user u ON u.id = c.user_id WHERE u.username LIKE 'test_sim_%';
+-- ① ✅ 主口径：专用列（9 张表等值查询；将来量大再加 KEY idx_data_source(data_source)）
+SELECT 'ums_user'            AS t, COUNT(*) AS n FROM cs_mall_ums.ums_user                WHERE data_source='SIM'
+UNION ALL SELECT 'ums_login_log',      COUNT(*) FROM cs_mall_ums.ums_login_log           WHERE data_source='SIM'
+UNION ALL SELECT 'oms_order',          COUNT(*) FROM cs_mall_oms.oms_order               WHERE data_source='SIM'
+UNION ALL SELECT 'oms_order_item',     COUNT(*) FROM cs_mall_oms.oms_order_item          WHERE data_source='SIM'
+UNION ALL SELECT 'oms_cart',           COUNT(*) FROM cs_mall_oms.oms_cart                WHERE data_source='SIM'
+UNION ALL SELECT 'oms_payment_record', COUNT(*) FROM cs_mall_oms.oms_payment_record      WHERE data_source='SIM'
+UNION ALL SELECT 'seckill.success',    COUNT(*) FROM cs_mall_seckill.success             WHERE data_source='SIM'
+UNION ALL SELECT 'seckill_msg_retry',  COUNT(*) FROM cs_mall_seckill.seckill_message_retry WHERE data_source='SIM'
+UNION ALL SELECT 'res_upload_record',  COUNT(*) FROM cs_mall_resource.res_upload_record   WHERE data_source='SIM';
+
+-- ② 权威口径：影子登记表（① 的每一行都应能在它里面找到对应主键）
+SELECT db_name, table_name, COUNT(*) AS n FROM cs_mall_sim.sim_entity
+ WHERE batch_id='sim_20260911_1530' GROUP BY db_name, table_name;
+
+-- ③ 🔴 漏标检查（**回填校验的核心**：登记了却仍是 NULL = 漏标 → 必须返回 0 行）
+--    逐表 LEFT JOIN 反查；示例给 oms_order，其余 8 张同构（换库名 / 表名 / 主键列）
+SELECT COUNT(*) AS 漏标行数 FROM cs_mall_oms.oms_order o
+  JOIN cs_mall_sim.sim_entity r
+    ON r.db_name='cs_mall_oms' AND r.table_name='oms_order'
+   AND r.batch_id='sim_20260911_1530' AND r.pk_value = CAST(o.id AS CHAR)
+ WHERE o.data_source IS NULL OR o.data_source <> 'SIM';
+
+-- ④ 人眼可辨档（辅助交叉核对：应与①指向同一批行）
+SELECT COUNT(*) FROM cs_mall_ums.ums_user  WHERE username LIKE 'test_sim_%';
+SELECT COUNT(*) FROM cs_mall_oms.oms_order WHERE mobile_phone LIKE '1390000%';
 ```
+
+> ⚠️ **本节已随定稿重写**：初版给的是"借用 `tag` / `data` / `extra_data`"的 7 条 SQL，**已随借用方案一并撤回**（否则文档自相矛盾：正文说用专用列、反查却查自由字段）。
 
 > **边界（用户 2026-09-11 明确）**：**新增的商品数据视为真实商品** —— `pms_spu` / `pms_sku` **不打 `SIM` 标记**，编号也**跟随现有约定**（`type_number` = `品牌缩写-型号-序号`，如 `MI-14-001`；`bar_code` = `SKU-{spuId}-001`），避免被 `SIM-` 前缀暴露"这是造的"。详见 [[商品与秒杀扩容方案]]。
 
@@ -829,6 +868,8 @@ ssh -i "%USERPROFILE%\AppData\Local\csmall-ssh\ai-deepseek_key" `
 - [ ] **基线确认**：跑前 `test_sim_%` = 0；跑后登记表行数 = 实际新增实体数
 - [ ] 🆕 **fail-fast 预检**：`cs_mall_sim` 存在 / 前缀=0 / 快照文件在 / `SUM(pms_sku.stock)` 够本批消耗 → **任一不过直接退出**
 - [ ] 🆕 **凭据不落盘**：DB 密码走环境变量或 `~/.my.cnf`(600)，脚本内不写明文
+- [ ] 🆕 **回填矩阵**：9 张表按"脚本写的按主键 / 服务端写的按 `user_id`"回填 `data_source='SIM'`（§2.2.9）
+- [ ] 🆕 **回填校验**：`data_source='SIM'` 行数 **=** 登记表条数；漏标检查 SQL 返回 **0 行**（§2.2.9 ③）
 - [ ] **禁止 pattern 删 Redis**：只按登记用户 id 精确删；**动手前先 `--scan | sort` 对一遍全清单**（§2.2.6）
 - [ ] **清理顺序**：严格 9 张表逆序；分批 500；单批事务
 - [ ] **不可逆字段不硬算**：`sales`/`stock`/预热键 交给快照还原，不做补偿运算
@@ -854,7 +895,8 @@ ssh -i "%USERPROFILE%\AppData\Local\csmall-ssh\ai-deepseek_key" `
 ## 八、面试话术（可直接用）
 
 > "造演示数据这事儿，我没有直接往生产库里灌——那会污染三个**不可逆**的东西：商品销量、真实库存、还有 Redis 的秒杀预热库存，事后删用户根本救不回来。我做了一套**规范隔离**：造数前先全量快照；造数时每创建一个实体就往一个**独立影子登记库** `cs_mall_sim` 写一行，清理完全由登记表驱动——**逆序删、分批、幂等、默认 dry-run**；Redis 也是按登记的模拟用户 id **精确删**，不是按 pattern 全删（那会误伤真实用户的购买标记）。至于销量/库存这种累加值我不做'减回去'的补偿运算，容易算错还不安全，直接走快照整库还原兜底。
-> 压测我也是把脚本放在**内网另一台机器**上打的——生产带宽只有 5Mbps，本机压自己是自压自伤，数据没意义。而且我**刻意避开**已有 Sentinel 限流的秒杀和 AI 接口，压的是浏览/加购/普通下单；秒杀和 AI 的限流我单独验证 429，不作为承载指标。"
+> 至于"怎么认出哪些是造的"，我**没有去蹭订单上现成的 `tag` 字段**——那会让同一行同时挂两种语义（展示标签 + 数据来源），反而更容易混。我**给 9 张表加了专用的 `data_source` 列**：`NULL` = 常规数据、`SIM` = 模拟造数，等值可查、能索引、将来还能扩展成 `LOADTEST`/`REPLAY` 这种数据血缘。值不是我手写的，**由造数脚本按影子登记表回填**——而且 9 张表里有 5 张是服务端在链路里写的（登录日志、支付记录、秒杀成功…），**脚本根本没有插入点，只能靠登记表兜底回填**，这一步不做它们就永远是空的；服务端代码一行都没改。
+> 压测我也是把脚本放在**内网另一台机器**上打的——生产带宽只有 5Mbps，本机压自己是自压自伤，数据没意义。另外我**没有把"限流触发"当成承载指标**：承载测试要回答的是"系统自己什么时候扛不住"，而入口那道 Sentinel 阈值会先把请求挡掉、把结论污染成"限流很有效"——所以我把阈值**临时放开**（Nacos 热改、测完改回、零重建）先排除这道干扰；限流本身我另外单独做了一组"故意撞闸门"的验证，用来展示保护确实生效。**这两件事结论不同，不能混着说。**"
 
 > "AI 并发这条路我踩过坑才想明白：**同一台服务上其实叠了三道保护，不先把干扰项证伪，压出来的数字是假的**——入口 Sentinel `ai-chat` 只有 5 QPS，还有每用户 60 秒 10 次的频控，再往里才是并发闸门 20。所以我先临时把入口阈值放开（**Nacos 热改，测完改回，零重建**），再用**一批不同的模拟用户**绕开频控，才真正量到"第几个并发开始降级"。压的时候也没打真实模型——内网放了个 mock LLM，用 compose override 临时把 base-url 指过去，**不改生产配置、一次 recreate 就能回滚**；而正因为走了 mock，放开限流几乎没有成本风险。最后还有个意外收获：Agent 那条链路每题要调两次模型（先调工具、再收敛），我对着固定流水线又各压了一遍，量出了**这条双轮链路多付出的那部分承载代价**。"
 
