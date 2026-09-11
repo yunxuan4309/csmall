@@ -17,22 +17,32 @@
 > ⚠️ **`deploy/` 在 `.gitignore` 里**（`.gitignore:49`）→ 本目录需 `git add -f deploy/scripts/sim/` 才入库，
 > 与 `deploy/docker/`、`deploy/scripts/graceful-stop.sh` 同一策略。
 
-## 二、为什么必须是"新机 + venv"（实测，见 §〇.1 D6）
+## 二、运行环境：用 **apt 装 pymysql**（🔴 不是 venv —— 2026-09-11 晚修订）
 
-| 事实 | 实测（2026-09-11 新机 `47.109.70.197`） |
+> 🔴 **原 README 写"必须用 venv"是错的，实测跑不通**，原因见下表。
+
+| 事实 | 实测（2026-09-11，**两台机器情况相同**） |
 |---|---|
 | Python | `python3 3.12.3` ✅ |
-| `requests` | `2.31.0` 已有 ✅ |
+| `requests` | `2.31.0` 系统已有 ✅ |
 | `pymysql` | **未装** ❌ |
-| `pip install` | 被 **PEP 668**（`externally-managed-environment`）拒绝 → **必须用 venv** |
+| `pip3 install` | 被 **PEP 668**（`externally-managed-environment`）拒绝 |
+| 🆕 **`ensurepip`** | **缺失** ❌（未装 `python3-venv` 包）→ **`python3 -m venv` 建出来没有 pip** |
+| 🆕 **外网** | `pypi.org` ❌ · `archive.ubuntu.com` ❌ · 清华源 ❌ —— **只有阿里云镜像可达** ✅ |
+| 🆕 **apt 源** | `mirrors.cloud.aliyuncs.com` ✅（`python3-pymysql` 1.0.2 实测 38.2KB 秒下） |
 | `mysql` 客户端 | **未装** ❌（所以脚本用 PyMySQL，不走命令行客户端） |
 | 新机 → 老机 | `3306` / `6379` / `10087` **全通**，网关 `/actuator/health` **26ms**（私网，不限速不计费）✅ |
 
 ```bash
-# 新机上准备一次即可
-python3 -m venv ~/sim-venv
-~/sim-venv/bin/pip install -r requirements.txt        # 需要外网；不通就用国内源 -i https://pypi.tuna.tsinghua.edu.cn/simple
+# 新机上准备一次即可（免 venv、免 PEP 668、免外网）
+sudo apt-get install -y python3-pymysql
+python3 -c "import pymysql, requests; print('pymysql', pymysql.__version__, '| requests', requests.__version__)"
 ```
+
+> 📌 **备用路径**（若坚持钉死版本）：`https://mirrors.aliyun.com/pypi/simple/` 实测 **HTTP 200** →
+> `pip3 install --index-url https://mirrors.aliyun.com/pypi/simple/ --break-system-packages pymysql==1.1.1`
+> ⚠️ `--break-system-packages` 是**故意绕过** PEP 668、会写进系统目录，**非首选**。
+> ℹ️ **版本差异（如实记录）**：apt 给 **PyMySQL 1.0.2**、`requirements.txt` 钉 **1.1.1**；脚本只用 `pymysql.connect` 与 `pymysql.cursors.DictCursor`，两版一致 → 不影响。
 
 ## 三、凭据（不落盘 —— §〇.1 D6）
 
@@ -71,19 +81,19 @@ export SIM_RESOURCE_HOST='http://8.156.77.197/'      # 图片前缀
 docker exec -i csmall-mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < init_sim_db.sql
 
 # ② 预检（不写任何数据；不通过直接退出）
-~/sim-venv/bin/python simulate_data.py --preflight --days 2 --per-day 1000
+python3 simulate_data.py --preflight --days 2 --per-day 1000
 
 # ③ ★ 快照先行：造数前做全量快照（老机 MySQL 数据目录实测仅 207M，成本极低）
 #    docker exec csmall-mysql mysqldump ... （复用 #29 的 cron 备份脚本）
 
 # ④ 造数（慢节奏；每创建一个实体都写一行 sim_entity）
-~/sim-venv/bin/python simulate_data.py --days 2 --per-day 1000 --users 20
+python3 simulate_data.py --days 2 --per-day 1000 --users 20
 
 # ⑤ 清理**预览**（默认 dry-run，只统计行数）
-~/sim-venv/bin/python simulate_data.py --clean --batch sim_20260911_1530
+python3 simulate_data.py --clean --batch sim_20260911_1530
 
 # ⑥ 真删（加 --apply）
-~/sim-venv/bin/python simulate_data.py --clean --batch sim_20260911_1530 --apply
+python3 simulate_data.py --clean --batch sim_20260911_1530 --apply
 ```
 
 ## 五、脚本做了什么（与方案文档条款一一对应）
@@ -137,7 +147,7 @@ docker exec -i csmall-mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < init_sim_db.
 |---|---|
 | `python3 -m py_compile`（新机 3.12.3 + 老机） | ✅ 通过 |
 | `--help` | ✅ 通过（依赖检查已后移到 `parse_args()` 之后，未装依赖也能看帮助） |
-| 依赖缺失时的守卫 | ✅ 输出 venv 安装提示并退出（非 traceback） |
+| 依赖缺失时的守卫 | ✅ 输出"`sudo apt-get install -y python3-pymysql`"提示并退出（非 traceback）；🆕 2026-09-11 晚修订：原提示指向 venv，已改 |
 | 无 `SIM_DB_PASSWORD` 时的守卫 | ✅ 明确提示"凭据不落盘"并退出 |
 | 清理 SQL 形态（显式 `IN` 列表，9 张表） | ✅ 在生产库上以 `SELECT COUNT(*)` 形式全部执行通过 |
 | 目录 SQL（`pms_sku JOIN pms_spu`） | ✅ 命中 **36** 行在售 SKU（生产 38 个 SKU 中） |

@@ -50,7 +50,7 @@
 
 | # | 项 | 实测（2026-09-11） | 修法 |
 |---|---|---|---|
-| **D6** | 脚本运行环境未验证 | 新机 `python3 3.12.3` ✅ / `requests 2.31.0` ✅ / **`pymysql` 未装** ❌ / **`mysql` 客户端未装** ❌；`pip3 install pymysql` 被 **PEP 668**（`externally-managed-environment`）拒绝。**好消息**：新机 → 老机 **3306 / 6379 / 10087 全通**，网关 `/actuator/health` **26ms**（私网不限速不计费）→ "内网执行位"这条通路**已实测可用** | **`python3 -m venv` + `requirements.txt`（版本钉死）**，不污染系统、可复现；DDL 与快照**不走脚本**，仍在老机用 `docker exec csmall-mysql` 执行 |
+| **D6** | 脚本运行环境未验证 | 新机 `python3 3.12.3` ✅ / `requests 2.31.0` ✅ / **`pymysql` 未装** ❌ / **`mysql` 客户端未装** ❌；`pip3 install pymysql` 被 **PEP 668**（`externally-managed-environment`）拒绝。**好消息**：新机 → 老机 **3306 / 6379 / 10087 全通**，网关 `/actuator/health` **26ms**（私网不限速不计费）→ "内网执行位"这条通路**已实测可用** | 🔴 **2026-09-11 晚修订（原"修法"是错的）**：原写 `python3 -m venv ~/sim-venv` + `requirements.txt` —— **实测跑不通**：① `ensurepip` 缺失（未装 `python3-venv` 包）→ venv 建出来**没有 pip**；② 新机 **`pypi.org` / `archive.ubuntu.com` / 清华源全不通**（只有阿里云镜像可达）。<br>✅ **改为 `sudo apt-get install -y python3-pymysql`**（apt 源 `mirrors.cloud.aliyuncs.com` 通；已实证 `python3-pymysql` 1.0.2 deb 38.2KB 秒下，含 `pymysql/{__init__,connections,cursors}.py` → 装进 `/usr/lib/python3/dist-packages/pymysql`）—— **免 venv、免 PEP 668、免外网**，`requests` 系统已有。备用：`mirrors.aliyun.com/pypi` 实测 HTTP 200。<br>DDL 与快照**不走脚本**，仍在老机用 `docker exec csmall-mysql` 执行 |
 | **D7** | 造数规模与库存/限购的耦合没量化 | `pms_sku` **38 条 / 合计 stock 1456 / max 100 / 已有 1 个为 0**；`seckill_sku` **12 条 / 合计 seckill_stock 822 / max 150 / 已有 1 个为 0**。原稿"每天 1000 行为 ≈ 50 单"× 2 天 ≈ 100 单 ≈ **消耗 100~300 件 = 总量的 7%~20% → 可行** ✅ | ① 脚本**必须跳过 `stock=0` 的 SKU**；② 启动时 `SELECT SUM(stock)` **fail-fast 预检**（不够就拒绝跑）；③ 库存口径改为实测值（§2.2.1 / §〇② 已更新） |
 
 ### C. 🟡 事实与引用漂移（不影响方案成立，但会误导实施者）
@@ -99,7 +99,7 @@
 | 老机 / 新机 | `8.156.77.197`（私网 `172.29.193.239`，21 容器） / `47.109.70.197`（私网 `172.29.193.240`，**造数与压测执行位**） |
 | **SSH 隧道（一条命令开全）** | `-L 8088:localhost:8088`（SkyWalking UI）`-L 8090:localhost:8090`（Sentinel Dashboard）`-L 8848:localhost:8848`（Nacos） |
 | 造数脚本 | `deploy/scripts/sim/`（`simulate_data.py` / `init_sim_db.sql` / `requirements.txt` / `README.md`）；⚠️ **`deploy/` 被 gitignore → 改动需 `git add -f`** |
-| 新机运行环境 | `python3 -m venv ~/sim-venv`（系统 pip 被 PEP 668 拦）；`pymysql` 未装需装；HTTP 走内网（新机→老机 3306/6379/10087 全通） |
+| 新机运行环境 | 🔴 **不用 venv**（2026-09-11 晚修订）：实测 `ensurepip` 缺失 → venv 无 pip；且 **无外网**（`pypi.org`/`archive.ubuntu.com` 不通，**仅阿里云镜像可达**）→ 改为 **`sudo apt-get install -y python3-pymysql`**（已实证 deb 38.2KB 秒下）；`requests 2.31.0` 系统已有；HTTP 走内网（新机→老机 3306/6379/10087 全通） |
 | **Flyway 下一个可用版本号** | `cs_mall_ums=`**V3** · `cs_mall_oms=`**V7** · `cs_mall_seckill=`**V6** · `cs_mall_resource=`**V2**（pms 已到 V14、ams 已到 V6，本次不用） |
 | Flyway 配置 | `enabled: true` + `baseline-on-migrate: true` + `baseline-version: 0`；迁移目录 `<模块>/src/main/resources/db/migration/`（**mall-resource 无 `-webapi` 后缀**） |
 | 🔴 **五层命名（最易错）** | 同一个服务实测有 **5 个不同名字**，而 `docker restart` **只认容器名**：容器名 **`csmall-ums`** ｜ compose `service:` 名 `mall-ums` ｜ 镜像名 `csmall-mall-ums` ｜ SkyWalking 服务名 `mall-ums`（ENTRYPOINT `-DSW_AGENT_NAME=mall-ums`）｜ Maven 模块目录 `mall-ums/`。🔴 实测**老机 21 个容器里没有任何 `mall-*`** → 照文档旧写法执行会 `No such container` |
@@ -110,6 +110,7 @@
 
 | # | 事项 | 谁 | 状态 |
 |---|---|---|---|
+| 0 | 🆕 **新机装依赖**：`sudo apt-get install -y python3-pymysql`<br>🔴 **不用 venv** —— 2026-09-11 晚实测：`ensurepip` 缺失 → venv 无 pip；且新机**无外网**（pypi/清华源全不通，仅阿里云镜像可达）→ 见 §〇.1 D6 修订 | ★用户 | ⏳ 待做（**C-7 的前置**） |
 | 1 | 4 个 **Flyway 迁移文件**：`ums V3` / `oms V7` / `seckill V6` / `resource V2`，各表加 `data_source` | AI 写 | ✅ **已落盘**（2026-09-11 晚；只加文件、未手工 ALTER） |
 | 2 | 逐个**重启** 4 个服务让 Flyway 迁移生效（每个 ~40-60s，低峰）<br>⚠️ **必须用容器名 `csmall-*`**（`docker restart` 不认 service 名）—— 详见 §B「五层命名」<br>一条命令：`docker restart csmall-ums csmall-order csmall-seckill csmall-resource` | ★用户 | ⏳ **待做（当前阻塞点）** |
 | 3 | 脚本改「**按登记表回填 `data_source`**」+ **撤回**借用字段（`tag=SIM`、订单项 `data={"sim":…}`） | AI | ✅ **已完成**（新增 `backfill()` / `verify_backfill()`；借用字段已撤回；顺带修掉 `oms_payment_record` 漏删） |
@@ -501,9 +502,11 @@ def main(days, per_day, clean, batch, apply_):
     ...
 ```
 
-> 🔴 **运行环境（2026-09-11 实测，见 §〇.1 D6）**：新机已有 `python3 3.12.3` + `requests 2.31.0`，但 **`pymysql` 未装、且 `pip install` 被 PEP 668 拒绝**、也**没有 `mysql` 客户端**。
-> 正确姿势：`python3 -m venv ~/sim-venv && ~/sim-venv/bin/pip install -r requirements.txt`
-> `requirements.txt`（**版本钉死**，避免"在我机器上能跑"）：`requests==2.31.0` / `PyMySQL==1.1.*`
+> 🔴 **运行环境（2026-09-11 实测 + 当晚修订，见 §〇.1 D6）**：新机已有 `python3 3.12.3` + `requests 2.31.0`，但 **`pymysql` 未装**、**`pip install` 被 PEP 668 拒绝**、也**没有 `mysql` 客户端**。
+> 🔴 **修订：不要用 venv**（原写的 `python3 -m venv` **跑不通**）—— 实测 `ensurepip` 缺失（未装 `python3-venv`）→ venv 建出来**没有 pip**；且新机 **`pypi.org` 与 `archive.ubuntu.com` 均不通**，只有**阿里云镜像可达**。
+> ✅ **正确姿势（已实证）**：`sudo apt-get install -y python3-pymysql` —— apt 源 `mirrors.cloud.aliyuncs.com` 通，`python3-pymysql` 1.0.2 deb（38.2KB）实测秒下，装进 `/usr/lib/python3/dist-packages/pymysql`，**免 venv、免 PEP 668、免外网**；之后直接 `python3 simulate_data.py` 即可。
+> 📌 **备用路径**：`https://mirrors.aliyun.com/pypi/simple/` 实测 **HTTP 200** → 如需钉死版本，可 `pip3 install --index-url https://mirrors.aliyun.com/pypi/simple/ --break-system-packages pymysql==1.1.1`（**故意绕过 PEP 668**，会写入系统目录，非首选）。
+> ℹ️ **版本差异（如实记录）**：apt 给 **PyMySQL 1.0.2**，而 `requirements.txt` 钉的是 1.1.1；脚本用到的 API（`pymysql.connect` / `pymysql.cursors.DictCursor`）两版一致 → 不影响。`requirements.txt` 保留作为"有 PyPI 外网的环境"的可复现清单。
 > DDL 与快照**不走脚本**，仍在老机用 `docker exec csmall-mysql` 执行。
 > ✅ **通路已实测**：新机 → 老机 `3306` / `6379` / `10087` **全通**，网关 `/actuator/health` **26ms**（私网，不限速不计费）。
 
@@ -737,9 +740,12 @@ ThreadingHTTPServer(("0.0.0.0", 9999), Handler).serve_forever()
 
 ```
 【① 校准写链路（~1h · 必做第一步，也是 ② 限流档的前置）】
+ 0. 🆕 **新机装依赖**：`sudo apt-get install -y python3-pymysql`
+      （🔴 **不要用 venv** —— 2026-09-11 晚实测：`ensurepip` 缺失 → venv 无 pip；且无外网，
+        仅阿里云镜像可达。详见 §〇.1 D6 修订）
  1. 老机建影子库：执行 deploy/scripts/sim/init_sim_db.sql
  2. 给凭据：export SIM_DB_PASSWORD=…（脚本只从环境变量取，不落盘）
- 3. 快照先行：mysqldump 六库全量（实测仅 ~207M，成本极低）
+ 3. 快照先行：`bash /data/csmall/backup/backup-db.sh`（复用 #29 脚本，须 **ecs-user** 执行）
  4. 小规模试跑：--days 1 --per-day 50（约 2~3 单），只校准 4 件事：
       · 注册接口的用户名/密码正则能否过
       · 加购 / 下单的字段是否被接受（金额、data、mainPicture）
@@ -779,6 +785,7 @@ ThreadingHTTPServer(("0.0.0.0", 9999), Handler).serve_forever()
 
 > ~~初稿的"步骤 2：服务器内存优化 R7，找 ecs-user 执行"~~ —— **R7 已于 2026-09-07 执行完毕，该步删除**。
 > **改动史**：2026-09-11 首轮补入 venv / mock 地址必查 / Nacos 备份 / 中止阈值 / 结果回填（对应 §〇.1 D1~D9）。
+> 🆕 **2026-09-11 晚修订**：**venv 路径作废**（实测 `ensurepip` 缺失 + 无外网）→ 改为 **`apt-get install -y python3-pymysql`**；步骤 3 的"~207M mysqldump"改为复用 #29 的 `backup-db.sh`（实测六库 gz 后仅 ~52KB）。详见 §〇.1 D6。
 > 🆕 **2026-09-11 二次重排**：把「**可观测展示与录像**」提为 **第 ② 步**（它才是本方案的**初衷交付物**，且 §6.2 实证表明**浏览档无需 token、可当天开录**），原「AI 并发」降为 **第 ⑤ 步**（投入最大、且 `ai-chat` 只有 5 QPS，展示直观性不如订单/秒杀）。
 
 ---

@@ -43,8 +43,9 @@ try:
 except ImportError:
     pymysql = None  # type: ignore[assignment]
 
-DEPS_HINT = ("缺少依赖：请先 `python3 -m venv ~/sim-venv && "
-             "~/sim-venv/bin/pip install -r requirements.txt`（见 §〇.1 D6）")
+DEPS_HINT = ("缺少依赖：请先 `sudo apt-get install -y python3-pymysql`"
+             "（🔴 免 venv —— 实测 ensurepip 缺失且无外网，venv 路径跑不通；"
+             "见方案 §〇.1 D6「2026-09-11 晚修订」）")
 
 
 # =============================================================================
