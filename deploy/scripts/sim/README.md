@@ -35,7 +35,14 @@
 
 ```bash
 # 新机上准备一次即可（免 venv、免 PEP 668、免外网）
-sudo apt-get install -y python3-pymysql
+# ── 方案 A（免 sudo，推荐；实测 import 无需 PYTHONPATH 即生效）──────────
+cd /tmp && apt-get download python3-pymysql \
+  && dpkg -x python3-pymysql_*.deb x \
+  && mkdir -p ~/.local/lib/python3.12/site-packages \
+  && cp -r x/usr/lib/python3/dist-packages/pymysql ~/.local/lib/python3.12/site-packages/
+# ── 方案 B（需 sudo 白名单里有 apt）─────────────────────────────────
+# sudo apt-get install -y python3-pymysql
+
 python3 -c "import pymysql, requests; print('pymysql', pymysql.__version__, '| requests', requests.__version__)"
 ```
 
@@ -158,6 +165,8 @@ python3 simulate_data.py --clean --batch sim_20260911_1530 --apply
 | 🆕 **9 张表与关键列实测** | ✅ 表名确认（是 `success` **不是** `seckill_success`）；9 张表**都有 `id`**；服务端写的 5 张**都有 `user_id`**；`oms_order_item` **无** `user_id` → 故按 `order_id` 反查 |
 | 🆕 **迁移+脚本改动后自检** | ✅ 新机 `python3 -m py_compile` 通过；**md5 本地 = 远端 `640104bb…`**（字节一致）；导入模块断言 **9 张表 / 4+5 回填分组 / 清理表集 == 回填表集 / 无借用字段残留** → `STRUCT_CHECK_OK` |
 | 🆕 **4 个迁移文件已落盘** | ✅ `ums V3` / `oms V7` / `seckill V6` / `resource V2`，**只加文件、未手工 ALTER**（守 Flyway 纪律） |
+| 🆕 **依赖安装路径实证（免 sudo）** | ✅ `apt-get download python3-pymysql`（阿里云镜像 **38.2KB 秒下**）→ `dpkg -x` → 拷进 `~/.local/lib/python3.12/site-packages/` → **`import pymysql` 1.0.2 无需 `PYTHONPATH` 即生效**（用户级 site-packages 默认在 `sys.path`），脚本依赖守卫**当场转为通过**（提示变为"未设置 SIM_DB_PASSWORD"）；验证后已清理干净 |
+| 🆕 **旧路径被证伪** | ❌ `python3 -m venv` 实测**建不出 pip**（`ensurepip` 缺失）；`pypi.org`/`archive.ubuntu.com`/清华源**全不通** → 原"venv + requirements.txt"路径**双重死路**（2026-09-11 晚） |
 | 未验证 | ❌ 涉及**写**的整条链路（注册/登录/加购/下单/支付/**回填**/清理）—— 需要 DB 密码与生产写权限，由用户在窗口内执行；**且迁移本身尚未执行**（需先低峰重启 4 个服务） |
 
 ## 九、关联文档

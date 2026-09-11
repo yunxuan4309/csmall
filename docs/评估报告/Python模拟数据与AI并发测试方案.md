@@ -50,7 +50,7 @@
 
 | # | 项 | 实测（2026-09-11） | 修法 |
 |---|---|---|---|
-| **D6** | 脚本运行环境未验证 | 新机 `python3 3.12.3` ✅ / `requests 2.31.0` ✅ / **`pymysql` 未装** ❌ / **`mysql` 客户端未装** ❌；`pip3 install pymysql` 被 **PEP 668**（`externally-managed-environment`）拒绝。**好消息**：新机 → 老机 **3306 / 6379 / 10087 全通**，网关 `/actuator/health` **26ms**（私网不限速不计费）→ "内网执行位"这条通路**已实测可用** | 🔴 **2026-09-11 晚修订（原"修法"是错的）**：原写 `python3 -m venv ~/sim-venv` + `requirements.txt` —— **实测跑不通**：① `ensurepip` 缺失（未装 `python3-venv` 包）→ venv 建出来**没有 pip**；② 新机 **`pypi.org` / `archive.ubuntu.com` / 清华源全不通**（只有阿里云镜像可达）。<br>✅ **改为 `sudo apt-get install -y python3-pymysql`**（apt 源 `mirrors.cloud.aliyuncs.com` 通；已实证 `python3-pymysql` 1.0.2 deb 38.2KB 秒下，含 `pymysql/{__init__,connections,cursors}.py` → 装进 `/usr/lib/python3/dist-packages/pymysql`）—— **免 venv、免 PEP 668、免外网**，`requests` 系统已有。备用：`mirrors.aliyun.com/pypi` 实测 HTTP 200。<br>DDL 与快照**不走脚本**，仍在老机用 `docker exec csmall-mysql` 执行 |
+| **D6** | 脚本运行环境未验证 | 新机 `python3 3.12.3` ✅ / `requests 2.31.0` ✅ / **`pymysql` 未装** ❌ / **`mysql` 客户端未装** ❌；`pip3 install pymysql` 被 **PEP 668**（`externally-managed-environment`）拒绝。**好消息**：新机 → 老机 **3306 / 6379 / 10087 全通**，网关 `/actuator/health` **26ms**（私网不限速不计费）→ "内网执行位"这条通路**已实测可用** | 🔴 **2026-09-11 晚修订（原"修法"是错的）**：原写 `python3 -m venv ~/sim-venv` + `requirements.txt` —— **实测跑不通**：① `ensurepip` 缺失（未装 `python3-venv` 包）→ venv 建出来**没有 pip**；② 新机 **`pypi.org` / `archive.ubuntu.com` / 清华源全不通**（只有阿里云镜像可达）。<br>✅ **改为 apt 路径（两种都实证过）**：<br>**A（免 sudo，推荐）** `apt-get download python3-pymysql`（38.2KB）→ `dpkg -x` 解包 → 拷 `pymysql/` 到 `~/.local/lib/python3.12/site-packages/` —— 实测 **`import pymysql` 无需 PYTHONPATH 即生效**（用户级 site-packages 默认在 `sys.path` 上），且脚本依赖守卫当场转为通过；<br>**B（需 sudo）** `sudo apt-get install -y python3-pymysql` 装进 `/usr/lib/python3/dist-packages/pymysql`。<br>两者均 **免 venv、免 PEP 668、免外网**；`requests 2.31.0` 系统已自带。备用：`mirrors.aliyun.com/pypi` 实测 HTTP 200。<br>DDL 与快照**不走脚本**，仍在老机用 `docker exec csmall-mysql` 执行 |
 | **D7** | 造数规模与库存/限购的耦合没量化 | `pms_sku` **38 条 / 合计 stock 1456 / max 100 / 已有 1 个为 0**；`seckill_sku` **12 条 / 合计 seckill_stock 822 / max 150 / 已有 1 个为 0**。原稿"每天 1000 行为 ≈ 50 单"× 2 天 ≈ 100 单 ≈ **消耗 100~300 件 = 总量的 7%~20% → 可行** ✅ | ① 脚本**必须跳过 `stock=0` 的 SKU**；② 启动时 `SELECT SUM(stock)` **fail-fast 预检**（不够就拒绝跑）；③ 库存口径改为实测值（§2.2.1 / §〇② 已更新） |
 
 ### C. 🟡 事实与引用漂移（不影响方案成立，但会误导实施者）
@@ -110,7 +110,7 @@
 
 | # | 事项 | 谁 | 状态 |
 |---|---|---|---|
-| 0 | 🆕 **新机装依赖**：`sudo apt-get install -y python3-pymysql`<br>🔴 **不用 venv** —— 2026-09-11 晚实测：`ensurepip` 缺失 → venv 无 pip；且新机**无外网**（pypi/清华源全不通，仅阿里云镜像可达）→ 见 §〇.1 D6 修订 | ★用户 | ⏳ 待做（**C-7 的前置**） |
+| 0 | 🆕 **新机装依赖**（二选一，均已实证）<br>**A（免 sudo，推荐）**：`cd /tmp && apt-get download python3-pymysql && dpkg -x python3-pymysql_*.deb x && mkdir -p ~/.local/lib/python3.12/site-packages && cp -r x/usr/lib/python3/dist-packages/pymysql ~/.local/lib/python3.12/site-packages/`<br>**B（需 sudo）**：`sudo apt-get install -y python3-pymysql`<br>🔴 **不用 venv** —— 2026-09-11 晚实测：`ensurepip` 缺失 → venv 无 pip；且新机**无外网**（pypi/清华源全不通，仅阿里云镜像可达）→ 见 §〇.1 D6 修订 | ★用户 | ⏳ 待做（**C-7 的前置**） |
 | 1 | 4 个 **Flyway 迁移文件**：`ums V3` / `oms V7` / `seckill V6` / `resource V2`，各表加 `data_source` | AI 写 | ✅ **已落盘**（2026-09-11 晚；只加文件、未手工 ALTER） |
 | 2 | 逐个**重启** 4 个服务让 Flyway 迁移生效（每个 ~40-60s，低峰）<br>⚠️ **必须用容器名 `csmall-*`**（`docker restart` 不认 service 名）—— 详见 §B「五层命名」<br>一条命令：`docker restart csmall-ums csmall-order csmall-seckill csmall-resource` | ★用户 | ⏳ **待做（当前阻塞点）** |
 | 3 | 脚本改「**按登记表回填 `data_source`**」+ **撤回**借用字段（`tag=SIM`、订单项 `data={"sim":…}`） | AI | ✅ **已完成**（新增 `backfill()` / `verify_backfill()`；借用字段已撤回；顺带修掉 `oms_payment_record` 漏删） |
@@ -740,9 +740,8 @@ ThreadingHTTPServer(("0.0.0.0", 9999), Handler).serve_forever()
 
 ```
 【① 校准写链路（~1h · 必做第一步，也是 ② 限流档的前置）】
- 0. 🆕 **新机装依赖**：`sudo apt-get install -y python3-pymysql`
-      （🔴 **不要用 venv** —— 2026-09-11 晚实测：`ensurepip` 缺失 → venv 无 pip；且无外网，
-        仅阿里云镜像可达。详见 §〇.1 D6 修订）
+ 0. 🆕 **新机装依赖**（二选一，均实证）：**A（免 sudo，推荐）** `apt-get download python3-pymysql` + `dpkg -x` + 拷进 `~/.local/lib/python3.12/site-packages/`；**B（需 sudo）** `sudo apt-get install -y python3-pymysql`
+      （🔴 **不要用 venv** —— 2026-09-11 晚实测：`ensurepip` 缺失 → venv 无 pip；且无外网，仅阿里云镜像可达。详见 §〇.1 D6 修订）
  1. 老机建影子库：执行 deploy/scripts/sim/init_sim_db.sql
  2. 给凭据：export SIM_DB_PASSWORD=…（脚本只从环境变量取，不落盘）
  3. 快照先行：`bash /data/csmall/backup/backup-db.sh`（复用 #29 脚本，须 **ecs-user** 执行）

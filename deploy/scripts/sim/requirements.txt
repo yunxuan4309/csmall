@@ -2,8 +2,13 @@
 # ⚠️ 本文件仅作"有 PyPI 外网的环境"的可复现清单；**本项目两台服务器都用不到它**：
 #    实测新机/老机均 **无外网**（pypi.org / archive.ubuntu.com / 清华源全不通，
 #    仅阿里云镜像可达），且 `ensurepip` 缺失 → `python3 -m venv` 建出来没有 pip。
-# ✅ 本项目实际安装方式（免 venv、免 PEP 668、免外网）：
-#    sudo apt-get install -y python3-pymysql      # 装 PyMySQL 1.0.2 到系统 dist-packages
+# ✅ 本项目实际安装方式（免 venv、免 PEP 668、免外网、**免 sudo**）：
+#    cd /tmp && apt-get download python3-pymysql \
+#      && dpkg -x python3-pymysql_*.deb x \
+#      && mkdir -p ~/.local/lib/python3.12/site-packages \
+#      && cp -r x/usr/lib/python3/dist-packages/pymysql ~/.local/lib/python3.12/site-packages/
+#    # 实测：import pymysql 1.0.2 无需 PYTHONPATH 即生效（用户级 site-packages 默认在 sys.path）
+#    # 需 sudo 的等价方案：sudo apt-get install -y python3-pymysql
 #    # requests 2.31.0 系统已自带，无需安装
 # 📌 备用（坚持钉死版本时，故意绕过 PEP 668）：
 #    pip3 install --index-url https://mirrors.aliyun.com/pypi/simple/ \
