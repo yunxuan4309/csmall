@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
  * 挂点：所有真实 LLM 调用的汇聚点——
  *   DeepSeekAiClient.chat(task, ...)（同步；覆盖 chat / json / expand / compare 各任务）
  *   DeepSeekAiClient.streamChat（SSE 流式，2026-09-10 由 ChatServiceImpl 收敛进来）
- *   SiliconFlowEmbeddingClient.embed / embedBatch（embedding）
+ *   EmbeddingClient.embed / embedBatch（embedding；实现 OpenAiCompatEmbeddingClient）
  */
 @Slf4j
 @Component

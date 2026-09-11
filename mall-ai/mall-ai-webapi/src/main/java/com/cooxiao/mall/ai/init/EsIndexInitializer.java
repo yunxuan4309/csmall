@@ -7,6 +7,7 @@ import com.cooxiao.mall.ai.config.AiProperties;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Component;
 
 import java.io.StringReader;
@@ -14,9 +15,19 @@ import java.io.StringReader;
 /**
  * ES 索引自动初始化
  * 启动时检查 cool_shark_mall_ai 索引是否存在，不存在则创建含 dense_vector 映射的索引
+ *
+ * <p>⚠️ <b>只在索引不存在时创建</b> —— 所以一旦线上索引的 mapping 与这里不一致（曾经真实发生过，见 TODO #63：
+ * 线上是 dynamic mapping、无 semanticVector、分词器也不是 IK），它<b>永远不会自愈</b>，
+ * 只能"删索引 → 重启"重建。核对方法见 {@code docs/评估报告/商品与秒杀扩容方案.md} §一。
+ *
+ * <p>P0（2026-09-11）：{@code @DependsOn("embeddingSelfCheck")} 让 {@link com.cooxiao.mall.ai.config.EmbeddingSelfCheck}
+ * <b>先跑</b> —— 避免"维度配置错了却先把索引按错误维度建出来"。
+ * ⚠️ {@code @DependsOn} 只接受 Bean **名字符串**，与类名 `EmbeddingSelfCheck` 隐式耦合：
+ * 若将来重命名该类，这里必须同步改（改错会**启动即报** "No bean named 'embeddingSelfCheck'"，不会静默）。
  */
 @Slf4j
 @Component
+@DependsOn("embeddingSelfCheck")
 public class EsIndexInitializer {
 
     private static final String INDEX_NAME = "cool_shark_mall_ai";

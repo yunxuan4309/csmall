@@ -6,7 +6,7 @@ import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.json.JsonData;
 import com.alibaba.fastjson.JSONArray;
 import com.cooxiao.mall.ai.client.AiClient;
-import com.cooxiao.mall.ai.client.SiliconFlowEmbeddingClient;
+import com.cooxiao.mall.ai.client.EmbeddingClient;
 import com.cooxiao.mall.ai.config.AiProperties;
 import com.cooxiao.mall.ai.service.TokenBudgetService;
 import com.cooxiao.mall.pojo.ai.vo.AskResultVO;
@@ -44,8 +44,9 @@ public class RagServiceImpl {
     @Autowired
     private AiClient aiClient;
 
+    /** 依赖的是**接口**（依赖倒置，P1 2026-09-11）—— 换平台/换模型/加本地模型都不需要改本类 */
     @Autowired
-    private SiliconFlowEmbeddingClient embeddingClient;
+    private EmbeddingClient embeddingClient;
 
     @Autowired
     private ElasticsearchClient esClient;
@@ -80,9 +81,7 @@ public class RagServiceImpl {
         // 1. 检索相关商品（根据配置选择全文检索或向量检索）
         List<Map<String, Object>> hits;
         if (aiProperties.isEmbeddingEnabled()) {
-            log.info("使用向量语义检索模式（硅基流动 BGE-M3）");
-            float[] queryVector = embeddingClient.embed(question);
-            hits = vectorSearch(queryVector, topK);
+            hits = vectorSearchWithFallback(question, topK);
         } else {
             log.info("使用 ES 全文检索模式");
             hits = fullTextSearch(question, topK);
@@ -316,11 +315,48 @@ public class RagServiceImpl {
     // ========== ES 向量语义检索（预留扩展） ==========
 
     /**
+     * 向量检索 + <b>真正的降级</b>（2026-09-11 修复）。
+     *
+     * <p><b>修的是什么</b>：原先 {@code ask()} 在向量模式下直接 {@code embed()} → {@code vectorSearch()}，
+     * 而 {@code vectorSearch()} 的 catch 只 {@code return List.of()}（日志却写"降级到全文检索"）——
+     * 结果是 <b>外部 embedding API 一挂，整个搜索直接报错</b>；向量检索失败则<b>静默返回空</b>。
+     *
+     * <p><b>现在的语义</b>：向量链路（embedding 调用 <i>或</i> ES 向量检索 <i>或</i> 结果为空）任一环节失败，
+     * 都<b>回落全文检索</b> —— 即"语义能力降级，但搜索仍然可用"。
+     * <p><b>包级可见（不是 private）</b>：为单测留的接缝 —— 同包测试只需重写
+     * {@link #vectorSearch} / {@link #fullTextSearch} 两个检索入口，就能覆盖三条降级分支，
+     * 而 embedding 调用、降级判断、日志**仍走真实代码**（见 {@code RagServiceImplVectorFallbackTest}）。
+     */
+    List<Map<String, Object>> vectorSearchWithFallback(String question, int topK) {
+        try {
+            log.info("使用向量语义检索模式（embedding 已开启，模型={}）", aiProperties.getEmbeddingModel());
+            float[] queryVector = embeddingClient.embed(question);
+            // 🛡️ 边界保护（2026-09-11 复核补）：外部接口可能返回 null / 空向量。
+            //    若不拦，null 会在 vectorSearch 里以 NPE 的形式被兜住（行为对、但日志难读），
+            //    空向量则会白跑一次 ES —— 这里直接回落，语义更清楚。
+            if (queryVector == null || queryVector.length == 0) {
+                log.warn("embedding 返回空向量（null 或长度 0），回落全文检索（query={}）", question);
+                return fullTextSearch(question, topK);
+            }
+            List<Map<String, Object>> hits = vectorSearch(queryVector, topK);
+            if (!hits.isEmpty()) {
+                return hits;
+            }
+            log.warn("向量检索返回空结果，回落全文检索（query={}）", question);
+        } catch (Exception e) {
+            log.error("向量检索链路失败（embedding 或 ES），回落全文检索：{}", e.toString());
+        }
+        return fullTextSearch(question, topK);
+    }
+
+    /**
      * ES 向量检索（余弦相似度）
      * 预留扩展点：接入 Embedding API 后将 switching 打开即可切到此模式
+     *
+     * <p><b>包级可见（不是 private）</b>：单测接缝，便于伪造"ES 挂了 / 返回空"两种情形。
      */
     @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> vectorSearch(float[] queryVector, int topK) {
+    List<Map<String, Object>> vectorSearch(float[] queryVector, int topK) {
         try {
             List<Float> vectorList = new ArrayList<>(queryVector.length);
             for (float v : queryVector) {
@@ -350,7 +386,9 @@ public class RagServiceImpl {
                     .collect(Collectors.toList());
 
         } catch (Exception e) {
-            log.error("ES 向量检索失败，降级到全文检索", e);
+            // ⚠️ 2026-09-11 日志纠偏：原写"降级到全文检索"，但这里**只返回空**、并没有降级；
+            //    真正的降级在 vectorSearchWithFallback 里（空结果也会回落全文），避免日志误导排查。
+            log.error("ES 向量检索失败（是否回落全文检索由调用方决定）: {}", e.toString());
             return List.of();
         }
     }

@@ -79,7 +79,13 @@ cooxiao:
     embedding-api-key: ${EMBEDDING_API_KEY:sk-placeholder}
     embedding-base-url: ${AI_EMBEDDING_BASE_URL:https://api.siliconflow.cn}
     embedding-model: ${AI_MODEL_EMBEDDING:BAAI/bge-m3}
+    # 🔴 维度与 ES mapping 的 dense_vector.dims 绑定，而 dims **建成后不可改**。换维度必须：
+    #    ① 同步改 embedding-model（新模型的实际维度要和这里一致）
+    #    ② 删掉 ES 索引 → 重启 mall-ai（EsIndexInitializer 重建 + 全量重同步写入新向量）
+    #    ⚠️ 启动自检 EmbeddingSelfCheck 会校验"模型实际返回维度 == 本值"，不一致**直接启动失败**（P0，2026-09-11）
     embedding-dimensions: 1024
+    # 少数 OpenAI 兼容平台不认 encoding_format 字段（会返 400）→ 置 false 即可（P3，2026-09-11）
+    embedding-send-encoding-format: ${AI_EMBEDDING_SEND_ENCODING_FORMAT:true}
     embedding-price-per-million: 0.0
 
     # ===== 预算（每日 2 元，Redis 日计数）=====

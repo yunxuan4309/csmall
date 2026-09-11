@@ -87,11 +87,29 @@ public class AiProperties {
     /** Embedding 服务基础地址（默认硅基流动） */
     private String embeddingBaseUrl = "https://api.siliconflow.cn";
 
-    /** Embedding 模型名称（硅基流动 BGE-M3）—— 与其他模型标识一致：**配置是唯一事实源**，代码不写默认值 */
+    /** Embedding 模型名称（生产用硅基流动 BGE-M3）—— 与其他模型标识一致：**配置是唯一事实源**，代码不写默认值 */
     private String embeddingModel;
 
-    /** 向量维度（BGE-M3 = 1024）；ES mapping 的 dense_vector dims 由它决定 */
+    /**
+     * 向量维度（BGE-M3 = 1024）；ES mapping 的 {@code dense_vector.dims} 由它决定。
+     *
+     * <p>🔴 <b>改这个值不是"改配置"那么简单</b>（P2，2026-09-11）：{@code dense_vector.dims}
+     * <b>建成后不可修改</b>，换维度必须：
+     * <ol>
+     *   <li>确认新模型的维度与这里一致，并同步改 {@code AI_MODEL_EMBEDDING}；</li>
+     *   <li><b>删掉 ES 索引</b>（{@code curl -X DELETE localhost:9200/cool_shark_mall_ai}）→ 重启 mall-ai
+     *       （{@code EsIndexInitializer} 用新 dims 重建 + 全量重同步写入新向量）。</li>
+     * </ol>
+     * <p>启动自检见 {@link com.cooxiao.mall.ai.config.EmbeddingSelfCheck}：{@code embeddingEnabled=true} 时
+     * 会校验"模型实际返回维度 == 本配置"，不一致<b>直接启动失败</b>并提示上述步骤（而不是等到检索时才炸）。
+     */
     private int embeddingDimensions = 1024;
+
+    /**
+     * 是否下发 OpenAI 扩展字段 {@code encoding_format: "float"}（默认 true）。
+     * <p>少数 OpenAI 兼容平台不认该字段、会返回 400 → 置 false 即可（P3，2026-09-11）。
+     */
+    private boolean embeddingSendEncodingFormat = true;
 
     /** 是否启用向量语义检索（默认关闭，使用 ES 全文检索） */
     private boolean embeddingEnabled = false;

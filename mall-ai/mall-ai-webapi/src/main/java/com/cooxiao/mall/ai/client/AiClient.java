@@ -17,9 +17,11 @@ import java.util.function.Consumer;
  * {@code role:"tool"} 消息要携带 {@code tool_call_id}，纯 String 装不下（TODO #32 校正②）。
  *
  * <p>说明：本接口原先还有 {@code embed / embedBatch}（按"可切换 AI 供应商"设想）。
- * 实测全项目 embedding 一律走 {@code SiliconFlowEmbeddingClient}（不同供应商 + 不同 baseUrl），
- * 该两方法属<b>死代码</b>（且实现打的是 DeepSeek 地址 + 硅基流动模型名，真调用必失败），
+ * 实测全项目 embedding 一律走独立抽象 {@link EmbeddingClient}（实现 {@link OpenAiCompatEmbeddingClient}，
+ * 不同供应商 + 不同 baseUrl），该两方法属<b>死代码</b>（且实现打的是 DeepSeek 地址 + 硅基流动模型名，真调用必失败），
  * 已于 2026-09-10 删除（TODO #58 §5.3）。
+ * <p>2026-09-11（P1）：embedding 的"可替换性"改由 {@link EmbeddingClient} 承担 ——
+ * 上游只依赖该接口，换平台/换模型/加本地模型都不用改调用方。
  */
 public interface AiClient {
 
