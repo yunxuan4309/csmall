@@ -112,7 +112,7 @@
 |---|---|---|---|
 | 0 | 🆕 **新机装依赖**（二选一，均已实证）<br>**A（免 sudo，推荐）**：`cd /tmp && apt-get download python3-pymysql && dpkg -x python3-pymysql_*.deb x && mkdir -p ~/.local/lib/python3.12/site-packages && cp -r x/usr/lib/python3/dist-packages/pymysql ~/.local/lib/python3.12/site-packages/`<br>**B（需 sudo）**：`sudo apt-get install -y python3-pymysql`<br>🔴 **不用 venv** —— 2026-09-11 晚实测：`ensurepip` 缺失 → venv 无 pip；且新机**无外网**（pypi/清华源全不通，仅阿里云镜像可达）→ 见 §〇.1 D6 修订 | ★用户 | ⏳ 待做（**C-7 的前置**） |
 | 1 | 4 个 **Flyway 迁移文件**：`ums V3` / `oms V7` / `seckill V6` / `resource V2`，各表加 `data_source` | AI 写 | ✅ **已落盘**（2026-09-11 晚；只加文件、未手工 ALTER） |
-| 2 | 🔴 **重建镜像并重建容器**让 Flyway 迁移生效<br>⚠️ **`docker restart` 无效！**（2026-09-11 实测踩到）—— 迁移文件在 **jar 里**，而 jar 是 `COPY` 烘进镜像的（`/data/csmall/dockerfiles/mall-*.Dockerfile` → `COPY mall-<svc>.jar /app/app.jar`，构建上下文 `/data/csmall/jars/`）。容器重启只是**用旧镜像跑旧 jar** → Flyway 报 `Schema is up to date. No migration necessary.` → 新迁移永不执行。<br>**正确步骤**：① 本地 `mvn -o -B -DskipTests -pl <4 个模块> -am package` ② scp 4 个 jar → `/data/csmall/jars/`（改名 `mall-ums.jar` / `mall-order.jar` / `mall-seckill.jar` / `mall-resource.jar`）③ 服务器 `docker compose build mall-ums mall-order mall-seckill mall-resource` ④ `docker compose up -d mall-ums mall-order mall-seckill mall-resource`<br>⚠️ 容器名是 `csmall-*`（`docker restart` 只认容器名）；⚠️ `/data/csmall/jars/` **ai-deepseek 不可写，须 ecs-user** | ★用户 | ⏳ **待做（当前阻塞点）** |
+| 2 | 🔴 **重建镜像并重建容器**让 Flyway 迁移生效<br>⚠️ **`docker restart` 无效！**（2026-09-11 实测踩到）—— 迁移文件在 **jar 里**，而 jar 是 `COPY` 烘进镜像的（`/data/csmall/dockerfiles/mall-*.Dockerfile` → `COPY mall-<svc>.jar /app/app.jar`，构建上下文 `/data/csmall/jars/`）。容器重启只是**用旧镜像跑旧 jar** → Flyway 报 `Schema is up to date. No migration necessary.` → 新迁移永不执行。<br>**正确步骤**：① 本地 `mvn -o -B -DskipTests -pl <4 个模块> -am package` ② scp 4 个 jar → `/data/csmall/jars/`（改名 `mall-ums.jar` / `mall-order.jar` / `mall-seckill.jar` / `mall-resource.jar`）③ 服务器 `docker compose build mall-ums mall-order mall-seckill mall-resource` ④ `docker compose up -d mall-ums mall-order mall-seckill mall-resource`<br>⚠️ 容器名是 `csmall-*`（`docker restart` 只认容器名）；⚠️ `/data/csmall/jars/` **ai-deepseek 不可写，须 ecs-user** | ★用户 | ✅ **已完成**（2026-09-11 19:05；4 库迁移 V3/V7/V6/V2 全部 success=1，9 列就位 —— 复核实录见 §F） |
 | 3 | 脚本改「**按登记表回填 `data_source`**」+ **撤回**借用字段（`tag=SIM`、订单项 `data={"sim":…}`） | AI | ✅ **已完成**（新增 `backfill()` / `verify_backfill()`；借用字段已撤回；顺带修掉 `oms_payment_record` 漏删） |
 | 4 | 执行前**只读核对**：9 张表是否已存在 `data_source`（存在则先决策，别硬跑迁移） | AI | ✅ **已完成**（实测 6 个 schema **0 个** `data_source` 列 → 迁移可安全执行） |
 | 5 | 在**老机**建影子库（跑 `init_sim_db.sql`） | ★用户 | ⏳ 待做 |
@@ -122,9 +122,16 @@
 | 9 | 写 `load_test.py` + 按 §6.4 三段式**录像**（浏览档可先做） | AI 写 · ★用户录 | ⏳ 待做 |
 | 10 | 秒杀动作实现（`--with-seckill` 目前只做预检） | AI | ⏸️ 未实现（可选，看是否要造秒杀数据） |
 
-> 🆕 **2026-09-11 晚 · 进度更新**：**C-1 / C-3 / C-4 已完成**（AI 侧全部做完，含自检：`py_compile` 通过 + md5 字节一致 + 结构断言 `STRUCT_CHECK_OK`）。
-> 🔴 **现在轮到用户侧**：**C-2（重启 4 个服务让迁移生效）→ C-5（建影子库）→ C-6（快照）**，之后跑 C-7 校准。
-> ⚠️ **顺序不可颠倒**：脚本已加"`data_source` 列缺失就 fail-fast"的门禁 → **迁移没生效前 `--preflight` 会直接拒绝执行**（这是有意的，避免造出无标识的数据）。
+> 🆕 **2026-09-11 晚 · 进度更新**：**C-0 / C-1 / C-2 / C-3 / C-4 / C-5 / C-6 全部完成** ✅
+> · C-1/C-3/C-4（AI）：4 迁移文件 + 脚本回填改造 + 只读预检；自检 `py_compile` 通过 · md5 字节一致 · 结构断言 `STRUCT_CHECK_OK`
+> · **C-2（用户）**：镜像重建 `19:05` → 4 库迁移 **V3/V7/V6/V2** 全部 `success=1`，**9 张表 `data_source` 就位**（AI 已独立复核，见 §F）
+> · **C-0（用户）**：新机 `pymysql 1.0.2`（免 sudo 路径）
+> · **C-5（用户）**：`cs_mall_sim` + `sim_baseline`/`sim_batch`/`sim_entity` 三表
+> · **C-6（用户）**：快照 `/data/csmall/backup/cs_mall_20260911_1856.sql.gz`（52K，含 6 库；**不含 `data_source` 属正常** —— 它正是"迁移前"的基线）
+> 🔴 **下一步 = C-7 校准写链路**（`--preflight` 再 `--days 1 --per-day 50`），跑完进入 C-8 dry-run 清理演练。
+> ⚠️ **顺序不可颠倒**：脚本有"`data_source` 列缺失即 fail-fast"的门禁；现在迁移已生效，门禁会通过。
+> 📌 **回滚点**：`/data/csmall/jars/backup-20260911-datasource/`（4 个旧 jar）+ `cs_mall_20260911_1856.sql.gz`（迁移前快照）。
+
 
 ### D. 今晚目标
 
@@ -136,6 +143,17 @@
 1. 读 **§〇.1 / §〇.2 / §五 / §六 / §2.2.9**（这五节决定"怎么做"）
 2. `git log --oneline -3` + `git status` 确认工作区状态（末次提交应为"#48 交接：专用列标识 + Flyway 方案"）
 3. 从 **C-1 / C-3 / C-4** 开始（AI 写迁移 + 改脚本 + 只读核对），用户并行做 **C-5 / C-6**（建影子库 + 快照）
+
+### F. 🔎 复核方法（2026-09-11 实战争出来的 3 条，**不遵守会误判**）
+
+| # | 坑 | 正确做法 |
+|---|---|---|
+| **F1** | **别按固定等待时间猜"生效了没有"** | 这 4 个服务**启动要 2~3 分钟**（实测 `Started …Application in`：ums **151.9s** / order **170.3s** / seckill **176.5s** / resource **106.5s**），且 **Flyway 依赖 DataSource，要等 `HikariPool-1 - Starting...` 之后才跑**。<br>👉 **判定标准 = 日志里出现 `Started …Application in`**；否则你会看到"容器 running 但日志为空"的假故障（我第一次复核就在启动 2.5 分钟时误判为"迁移没执行/疑似崩溃"）。 |
+| **F2** | **Nacos/Dubbo 报错不要当成自己改坏了** | `Server check fail, please check server nacos ,port 9848 is available` 与 `Failed register interface application mapping ... error code: 5-10` 是**既有环境噪声**。<br>👉 **做对照实验**：拿**本次没重建**的服务比。实测未动的 `csmall-product` 有 **7 条** Dubbo 报错 + 126 行栈、`csmall-front` 134 行栈，比重建的 4 个服务**更多** → 证明与本次变更无关。 |
+| **F3** | **别用 `grep 'Caused by'` 数异常** | 会命中 Dubbo 提示语里的 "This may be **caused by** configuration server disconnected" → 计数虚高（我靠它得出过错误的"异常链 7~9 条"）。<br>👉 用 **异常类型指纹** `grep -oE '[a-zA-Z][a-zA-Z0-9._]*\.(Exception\|Error)' \| sort -u`，并与未动服务逐类比对**有没有新面孔**。 |
+
+> ✅ **2026-09-11 晚复核实录（4 项全绿）**：镜像重建于 `19:05`、镜像内 `app.jar` 字节数与新 jar 逐一相符；`flyway_schema_history` 出现 **V3/V7/V6/V2（success=1）**；Flyway 日志 `Migrating schema … to version "3/7/6/2 …"` + `Successfully applied 1 migration`；**9 张表** `data_source` 全部 `varchar(16) nullable=YES`（总数=9）；4 条网关路由冒烟全 **200**。
+
 
 ---
 
