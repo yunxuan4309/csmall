@@ -19,7 +19,7 @@
 
 | # | 初稿问题 | 证据（2026-09-10 实测） | 本次修正 |
 |---|---|---|---|
-| ① | **清理 SQL 顺序错误 → 订单删不掉**：先 `DELETE ums_user`，再 `DELETE oms_order WHERE user_id IN (SELECT id FROM ums_user WHERE username LIKE 'test_sim_%')` —— 用户已删，子查询返回**空集** | 初稿 §2.4 原文 | 改为**逆序删除**（子表→主表）+ 登记表驱动（§2.2.5） |
+| ① | **清理 SQL 顺序错误 → 订单删不掉**：先 `DELETE ums_user`，再 `DELETE oms_order WHERE user_id IN (SELECT id FROM ums_user WHERE username LIKE 'test_sim_%')`（初稿用的旧前缀）—— 用户已删，子查询返回**空集** | 初稿 §2.4 原文 | 改为**逆序删除**（子表→主表）+ 登记表驱动（§2.2.5） |
 | ② | **只靠前缀删不掉"不可逆污染"** | `pms_spu.sales` 已有 **81 / 1 / 1**…（累加值，**无"谁贡献多少"记录**）；`pms_sku.stock` **38 SKU / 合计 1456 / max 100（1 个已 0）**；`seckill_sku.seckill_stock` **12 条 / 合计 822 / max 150（1 个已 0）**〔库存口径 2026-09-11 复核修正，见 §〇.1 D7〕；Redis `mall:seckill:sku:stock:*` **12 个** | 新增**快照回滚兜底**（§2.2.3 / §2.2.7） |
 | ③ | **Redis 清理会误伤真实数据**：`--scan --pattern 'mall:seckill:reseckill:*' \| xargs del` 删**全部**用户的购买标记 | 初稿 §2.4 | 改为**按登记的用户 id 精确删**（§2.2.6） |
 | ④ | **全库 0 个外键** → 删除顺序无数据库保护，漏表即静默残留 | `information_schema` 外键数 = **0**；含 `user_id` 的表实测 **7 张** | 清理清单**精确到 9 张表**（§2.5） |
@@ -62,7 +62,7 @@
 | **D8c** | §四 内存 available 3.6G / 磁盘 49G(52%) | 实测 **available 3.4G**；磁盘 **51G(54%)、avail 44G**；**MySQL 数据目录仅 207M** | 已更新 §四，并补"**全量 6 库快照成本极低 → 快照兜底很轻**" |
 | **D9** | §2.2.6 Redis 清单不完整 | 实测 `db0` 共 **25 个 key** = 12 个 `mall:seckill:sku:stock:*` + **4 个 `ai:*`** + **3 个 `spu:bloom:filter:2026-09-09/10/11`** + 6 个 `mall:seckill:spu:url:rand:code:*`；而 `mall:seckill:reseckill/ordered/orderLock:*` **当前各 0 个** | 已补全 §2.2.6；`SeckillCacheUtils` 键结构**本次未核对** → 文中标为"待核" |
 
-> ✅ **复核为真（原稿这些关键事实全部通过，不用改）**：`cs_mall_sim` 不存在 ✅ · `test_sim_%` = 0 ✅ · 全库 **0 个外键** ✅ · 含 `user_id` 的表**正好 7 张** ✅ · `pms_spu.sales` = **81/1/1** ✅ · Redis 秒杀预热键 **12 个** ✅ · `ums_user` 110 / `oms_order` 86 / `success` 58（精确计数）✅ · 并发闸门 **20** ✅ · SSE 按 `data: ` 分片解析 ✅
+> ✅ **复核为真（原稿这些关键事实全部通过，不用改）**：`cs_mall_sim` 当时不存在 ✅（现已建） · `test_sim_%` = 0 ✅（现用前缀 `testsim%` 亦为 0） · 全库 **0 个外键** ✅ · 含 `user_id` 的表**正好 7 张** ✅ · `pms_spu.sales` = **81/1/1**（合计 83）✅ · Redis 秒杀预热键 **12 个** ✅ · `ums_user` 110 / `oms_order` 86 / `success` 58（精确计数）✅ · 并发闸门 **20** ✅ · SSE 按 `data: ` 分片解析 ✅
 > ✅ **额外正面结论（原稿没写，建议当成指标）**：`TokenBudgetService:60` 用 Redis `incr`（**原子操作**）→ **高并发下预算记账不会少记/多记**，可作为"AI 治理在高并发下仍正确"的实测结论。
 
 ### D. 两项决策（2026-09-11 用户拍板）
@@ -103,7 +103,7 @@
 | **Flyway 下一个可用版本号** | `cs_mall_ums=`**V3** · `cs_mall_oms=`**V7** · `cs_mall_seckill=`**V6** · `cs_mall_resource=`**V2**（pms 已到 V14、ams 已到 V6，本次不用） |
 | Flyway 配置 | `enabled: true` + `baseline-on-migrate: true` + `baseline-version: 0`；迁移目录 `<模块>/src/main/resources/db/migration/`（**mall-resource 无 `-webapi` 后缀**） |
 | 🔴 **五层命名（最易错）** | 同一个服务实测有 **5 个不同名字**，而 `docker restart` **只认容器名**：容器名 **`csmall-ums`** ｜ compose `service:` 名 `mall-ums` ｜ 镜像名 `csmall-mall-ums` ｜ SkyWalking 服务名 `mall-ums`（ENTRYPOINT `-DSW_AGENT_NAME=mall-ums`）｜ Maven 模块目录 `mall-ums/`。🔴 实测**老机 21 个容器里没有任何 `mall-*`** → 照文档旧写法执行会 `No such container` |
-| 数据基线 | `cs_mall_sim` **不存在**（待建）· `test_sim_%`=**0** · 全库 **0 外键** · 在售 SKU **36** 个 / 库存约 **1456** 件 |
+| 数据基线 | `cs_mall_sim` **已建**（C-5 完成）· **`testsim%` = 0**（旧前缀 `test_sim_%` 亦为 0）· 全库 **0 外键** · 在售 SKU **36** 个 / `stock>0` 的 SKU **37** 个 / 库存合计 **1456** 件 |
 | 代码/分支 | `master` **ahead 3**（`6aafb1a` 交接章节 + `75f9dfb` 标识 + `0116001` §六；**未推送，等用户确认**）；⚠️ mall-ai 的"降级 + 启动自检"改动**仍未部署**（与本方案无关） |
 
 ### C. 待办清单（★ = **用户执行**，其余 AI 完成）
@@ -153,6 +153,28 @@
 | **F3** | **别用 `grep 'Caused by'` 数异常** | 会命中 Dubbo 提示语里的 "This may be **caused by** configuration server disconnected" → 计数虚高（我靠它得出过错误的"异常链 7~9 条"）。<br>👉 用 **异常类型指纹** `grep -oE '[a-zA-Z][a-zA-Z0-9._]*\.(Exception\|Error)' \| sort -u`，并与未动服务逐类比对**有没有新面孔**。 |
 
 > ✅ **2026-09-11 晚复核实录（4 项全绿）**：镜像重建于 `19:05`、镜像内 `app.jar` 字节数与新 jar 逐一相符；`flyway_schema_history` 出现 **V3/V7/V6/V2（success=1）**；Flyway 日志 `Migrating schema … to version "3/7/6/2 …"` + `Successfully applied 1 migration`；**9 张表** `data_source` 全部 `varchar(16) nullable=YES`（总数=9）；4 条网关路由冒烟全 **200**。
+
+### G. 🧪 校准实测发现（2026-09-11 19:14 · **第一次真跑的产出 —— 这正是 C-7 的目的**）
+
+> **一次真跑就抓出 2 个"必然失败"的字段不匹配 + 1 个我自己的转录错误**，并已把它们**前置到预检阶段**（不再"跑一次撞一个"）。
+
+| # | 发现 | 证据（代码 `文件:行`） | 处置 |
+|---|---|---|---|
+| **G1** | **用户名不许有下划线** | `mall-common/.../validation/RegExpressions.java:14` → `^[a-zA-Z]{1}[0-9a-zA-Z]{3,15}$`（只允许字母数字）<br>实测报错：`state=400 用户名必须是由字母、数字组成的4~16字符，且第1个字符必须是字母！` | `USER_PREFIX`：`test_sim_` → **`testsim`**（生成 `testsim0001`） |
+| **G2** | **联系人姓名只能 2~4 字符**（提前读码发现，**下一次跑必然会撞**） | `mall-pojo/.../valid/order/OrderRegExpression.java:6` → `REGEXP_CONTACT_NAME = ".{2,4}"`；原传 `模拟用户1234`（8 字符）→ **下单必失败** | `contactName` → **`模拟42`**（4 字符；仍随机，保持 argsDigest 可变） |
+| **G3** | 🔴 **我自己手抄正则抄错了**：phone 多抄了一组 `[0-9]`（写成 **12 位**，而真值是 11 位） | 用脚本从 Java 源抽 `String REGEXP_X = "…"` 字面量、与脚本内 `SERVER_REGEX` **逐条机器比对** → 7 条里**只错这 1 条**；再用库里真实数据交叉验证（`ums_user.phone` / `oms_order.mobile_phone` **全是 11 位**、现有用户名 **0 个**不匹配正则） | 修正为 9 组 `[0-9]` → **7/7 机器比对一致** |
+
+**因此新增两道防线（都在脚本里）**
+1. **`SERVER_REGEX` + `validate_local()`**：把服务端 **7 条真实正则**抄进脚本，`preflight()` 第一步就**一次性验完全部字段**（不碰网络、不碰数据）→ 把"跑一次撞一个"变成"预检一次全暴露"
+2. **G3 的教训：禁止手抄正则** → 已写入脚本注释的"机器比对法"（从 Java 源抽字面量逐条 diff；服务端改校验后必须重跑）
+
+**顺带读码确认的 3 件事（都是"会不会白跑一轮"的关键）**
+- ✅ **注册接口确实返回用户 id**：`UserController.java:59` → `JsonResult.ok(new RegisterUserVO(user.getId(), user.getUsername(), user.getNickname()))` → 脚本能拿到 id 做登记
+- ✅ **`@Idempotent` 不会让不同用户互顶**：`IdempotentAspect.java:69` → `String.format("idempotent:%s:%s:%s", key, userId, argsDigest)` —— **含 userId**；contactName 随机仍保留（让 `argsDigest` 变化）
+- ✅ **订单项 `data` 不会被服务端解析**：`OmsOrderServiceImpl` 全文**无 `data` 字段处理** → 传 `"{}"` 原样落库（`@NotNull`，非空即合规）
+
+**失败留下的痕迹（完全可精确清理）**：`sim_batch` 多 **1 行**（`sim_20260911_1914`, status=running, done=0）；`sim_entity` **0 行**；`ums_user`/`oms_order`/`oms_cart`/`oms_payment_record` **零写入**；`pms_spu.sales`/`pms_sku.stock` **未动**。
+
 
 
 ---
@@ -277,7 +299,7 @@ CREATE TABLE IF NOT EXISTS cs_mall_sim.sim_entity (
 -- 6) cs_mall_oms.oms_order                 （有 user_id）
 -- 7) cs_mall_resource.res_upload_record    （有 user_id；本方案若不传图可跳过）
 -- 8) cs_mall_ums.ums_login_log             （有 user_id）
--- 9) cs_mall_ums.ums_user                  （按 username LIKE 'test_sim_%'）
+-- 9) cs_mall_ums.ums_user                  （按 username LIKE 'testsim%'）
 ```
 
 **算法要点**：
@@ -332,7 +354,7 @@ CREATE TABLE IF NOT EXISTS cs_mall_sim.sim_entity (
 
 ```
 【造数前】
- 1. 确认基线干净：SELECT COUNT(*) FROM cs_mall_ums.ums_user WHERE username LIKE 'test_sim_%'  → 0（2026-09-10 实测 = 0 ✅）
+ 1. 确认基线干净：SELECT COUNT(*) FROM cs_mall_ums.ums_user WHERE username LIKE 'testsim%'  → 0（2026-09-11 实测 = 0 ✅）
  2. mysqldump 6 库全量 → 记录文件名到 sim_batch.dump_file
  3. 记录"基线快照"（行数 + 计数器）到临时表/文件，供清理后比对
  4. 确认低峰时段（避开每日 12 点高峰窗口）
@@ -354,9 +376,9 @@ CREATE TABLE IF NOT EXISTS cs_mall_sim.sim_entity (
 
 | 级别 | 承载字段 | 值 | 说明 |
 |---|---|---|---|
-| 人眼可辨 · 用户 | `ums_user.username` | `test_sim_0001` | **前缀即身份** |
-| 人眼可辨 · 文案 | `ums_user.nickname` / `email` / `oms_order.contact_name` / `detailed_address` | `模拟用户0001` / `test_sim_0001@example.com`（**保留域名**，误发也发不出去） / `模拟用户1234` / `模拟地址 5 号` | 打开单据就知道是造的 |
-| 人眼可辨 · 号段 | `oms_order.mobile_phone` / `seckill.success.user_phone` | **`1390000xxxx`** | **假号段**：能过手机号正则、又不撞真实号码 |
+| 人眼可辨 · 用户 | `ums_user.username` | **`testsim0001`** | 🔴 **2026-09-11 校准修正**：服务端正则 `^[a-zA-Z]{1}[0-9a-zA-Z]{3,15}$`（`RegExpressions.java:14`）**只允许字母与数字** → 原 `test_sim_0001` 的**下划线会被拒**（实测 `state=400 用户名必须是由字母、数字组成的4~16字符…`），改为 `testsim` 前缀 |
+| 人眼可辨 · 文案 | `ums_user.nickname` / `email` / `oms_order.contact_name` / `detailed_address` | `模拟用户0001` / `testsim0001@example.com`（**保留域名**，误发也发不出去） / **`模拟42`** / `模拟地址 5 号` | 🔴 **校准修正**：`REGEXP_CONTACT_NAME = ".{2,4}"`（`OrderRegExpression.java:6`）→ 原 `模拟用户1234`（8 字符）**下单会被拒**，联系人**只能 2~4 字符** |
+| 人眼可辨 · 号段 | `ums_user.phone`（注册口） / `oms_order.mobile_phone`（下单口） / `seckill.success.user_phone` | **`13900000001`（11 位）** | **假号段**：能同时过两条手机号正则（注册口 `^1[34589][0-9]{9}$`、下单口 `^1(?:3\d\|…)\d{8}$`，**两条都要求 11 位**）、又不撞真实号码；实测库里真实手机号也都是 11 位 |
 | ✅ **字段标识（新）** | **9 张表统一加 `data_source`** | **`NULL`**（常规/真实）· **`SIM`**（模拟造数） | 🔴 **2026-09-11 定稿**：专用列 = 契约（等值可查、可索引、零副作用）；**造数后按登记表回填**。⚠️ 早先"借用 `tag`/`data`"的写法**已撤回**（见下"关键设计选择"） |
 | **机器权威** | **`cs_mall_sim.sim_entity`** | 批次 + 库 + 表 + 主键 + `user_ref` | **清理与审计的唯一依据** —— 字段标识只是"便于人看/便于粗筛"，**权威始终是登记表** |
 
@@ -474,7 +496,7 @@ SELECT COUNT(*) AS 漏标行数 FROM cs_mall_oms.oms_order o
  WHERE o.data_source IS NULL OR o.data_source <> 'SIM';
 
 -- ④ 人眼可辨档（辅助交叉核对：应与①指向同一批行）
-SELECT COUNT(*) FROM cs_mall_ums.ums_user  WHERE username LIKE 'test_sim_%';
+SELECT COUNT(*) FROM cs_mall_ums.ums_user  WHERE username LIKE 'testsim%';
 SELECT COUNT(*) FROM cs_mall_oms.oms_order WHERE mobile_phone LIKE '1390000%';
 ```
 
@@ -495,7 +517,7 @@ simulate_data.py — CoolShark 业务数据模拟器（规范设计版）
 import argparse, os, random, time, uuid, datetime, requests, pymysql
 
 BASE        = os.environ.get("SIM_BASE", "http://172.29.193.239:10087")  # ⚠️ 内网 + Gateway；脚本必须在内网跑（5Mbps 约束，见 §3.4）
-USER_PREFIX = "test_sim_"
+USER_PREFIX = "testsim"     # 🔴 服务端只允许字母数字（原 "test_sim_" 的下划线会被拒，实测 400）
 BATCH       = "sim_" + datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
 # 🔴 凭据不落盘（2026-09-11 复核新增，见 §〇.1 D6）：密码只从环境变量取，
@@ -527,7 +549,7 @@ def main(days, per_day, clean, batch, apply_):
     if clean:
         preview_or_delete(batch, apply_)   # 逆序 + 分批 + 幂等；不 apply 则只打印行数
         return
-    # 建批次行 → 预置 test_sim_ 用户（登记 ums_user.id）→ 按 80/15/5 循环
+    # 建批次行 → 预置 testsim* 用户（登记 ums_user.id）→ 按 80/15/5 循环
     ...
 ```
 
@@ -543,7 +565,7 @@ def main(days, per_day, clean, batch, apply_):
 
 | 点 | 说明 |
 |----|------|
-| **可清理** | 三层保障：`test_sim_` 前缀（人眼可辨）+ **影子登记表**（机器精确）+ **快照**（兜底不可逆字段） |
+| **可清理** | 三层保障：`testsim` 前缀（人眼可辨）+ **影子登记表**（机器精确）+ **快照**（兜底不可逆字段） |
 | **秒杀对齐窗口** | 当前 6 场全年有效（2026-01-01~12-31），脚本随机时间即可；跨年后需先更新窗口 |
 | **秒杀限购** | 同一用户同一 SKU 支付后**永久不能再买**（`reseckill` 永久标记 + `success` 唯一索引）→ 脚本要换 SKU 或换用户。⚠️ 已知局限见 TODO **#3**（场次维度购买标记） |
 | **支付用模拟模式** | 项目已支持模拟支付（`simulated: true`），脚本走模拟支付即可，不碰支付宝沙箱 |
@@ -572,7 +594,7 @@ DELETE FROM cs_mall_resource.res_upload_record WHERE user_id IN (<本批 user_id
 -- 8
 DELETE FROM cs_mall_ums.ums_login_log   WHERE user_id IN (<本批 user_id 列表>);
 -- 9（最后）
-DELETE FROM cs_mall_ums.ums_user        WHERE username LIKE 'test_sim_%';
+DELETE FROM cs_mall_ums.ums_user        WHERE username LIKE 'testsim%';   -- 旧前缀 test_sim_ 已废弃（下划线过不了服务端正则）
 ```
 
 > ⚠️ **演示前是否清理要想清楚**：压测卖点（100 并发 0 超卖）依赖干净数据；几万条模拟订单会让列表页变慢、秒杀"已购买"误伤。
@@ -908,7 +930,7 @@ ssh -i "%USERPROFILE%\AppData\Local\csmall-ssh\ai-deepseek_key" `
 - [ ] **默认 dry-run**：清理必须 `--apply` 才真删；先看行数预览
 - [ ] **快照先行**：第一次造数前必须有当日/即时 `mysqldump`（6 库全量，实测仅 ~207M）
 - [ ] **低峰执行**：避开每日 12 点高峰窗口与维护窗口（**高峰压测是另一件事**，见 §3.4 说明）
-- [ ] **基线确认**：跑前 `test_sim_%` = 0；跑后登记表行数 = 实际新增实体数
+- [ ] **基线确认**：跑前 `testsim%` = 0；跑后登记表行数 = 实际新增实体数
 - [ ] 🆕 **fail-fast 预检**：`cs_mall_sim` 存在 / 前缀=0 / 快照文件在 / `SUM(pms_sku.stock)` 够本批消耗 → **任一不过直接退出**
 - [ ] 🆕 **凭据不落盘**：DB 密码走环境变量或 `~/.my.cnf`(600)，脚本内不写明文
 - [ ] 🆕 **Flyway 行尾纪律**：**不改**已被应用过的迁移文件行尾（checksum 会变 → 服务起不来）；新文件保持 LF（§2.2.9）

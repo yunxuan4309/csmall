@@ -54,7 +54,12 @@ DEPS_HINT = ("缺少依赖：请先 `sudo apt-get install -y python3-pymysql`"
 
 BASE = os.environ.get("SIM_BASE", "http://172.29.193.239:10087").rstrip("/")  # ⚠️ 内网 + Gateway
 
-USER_PREFIX = os.environ.get("SIM_USER_PREFIX", "test_sim_")
+USER_PREFIX = os.environ.get("SIM_USER_PREFIX", "testsim")
+# 🔴 2026-09-11 校准实测教训：服务端用户名校验是 `^[a-zA-Z]{1}[0-9a-zA-Z]{3,15}$`
+#    （mall-common/src/main/java/com/cooxiao/mall/common/validation/RegExpressions.java:14）
+#    → **只允许字母与数字**。原来的 `test_sim_` 含下划线 → 注册直接 400：
+#      "用户名必须是由字母、数字组成的4~16字符，且第1个字符必须是字母！"
+#    → 改为 `testsim`：生成 `testsim0001`（11 字符，全字母数字，首字符为字母）✅
 USER_PASSWORD = os.environ.get("SIM_USER_PASSWORD", "Sim123456")
 EMAIL_DOMAIN = os.environ.get("SIM_EMAIL_DOMAIN", "example.com")
 # 明显是假号段（139 + 8 位），既能过手机号正则，又不会撞到真实号码
@@ -419,7 +424,12 @@ class Api:
         price = float(sku["price"])
         total = round(price * qty, 2)
         return self._call("POST", "/oms/order/add", token_header=token_header, json={
-            "contactName": f"模拟用户{random.randint(1000, 9999)}",   # 随机 → 避免 @Idempotent key 冲突
+            # 🔴 2026-09-11 校准实测教训：`REGEXP_CONTACT_NAME = ".{2,4}"`
+            #    （mall-pojo/.../valid/order/OrderRegExpression.java:6）—— **联系人只能 2~4 字符**！
+            #    原来传 `模拟用户1234`（8 字符）→ 下单会 400。这里随机取 2 位数字：
+            #    既合规，又保持参数可变（@Idempotent 的 key = idempotent:<key>:<userId>:<argsDigest>，
+            #    args 一变 key 就不同，不会互相顶掉）
+            "contactName": f"模拟{random.randint(0, 99):02d}",         # 4 字符，合规且随机
             # 🏷️ 不再借用 `tag` 传标识（已撤回）：标识统一走专用列 `data_source`，由 backfill() 回填
             "mobilePhone": FAKE_PHONE_PREFIX + f"{random.randint(0, 9999):04d}",
             "provinceCode": address["province_code"], "provinceName": address["province_name"],
@@ -487,11 +497,70 @@ def load_address_template(conn) -> Dict[str, str]:
 
 
 # =============================================================================
+# 🔴 服务端 DTO 校验规则（**照抄代码**，用于本地预校验 —— 2026-09-11 校准踩坑后新增）
+# =============================================================================
+# 为什么要有这一段：校准第一次真跑时，`test_sim_0001` 的下划线被服务端拒绝
+# （state=400），而脚本直到"写下第一个实体"那一刻才暴露 → **跑一次撞一个**。
+# 现在把服务端的真实正则抄进脚本，**在预检阶段一次性把所有字段验完**。
+#
+# 来源（`文件:行`；**服务端改校验后必须同步这里**）：
+#   username    mall-common/src/main/java/com/cooxiao/mall/common/validation/RegExpressions.java:14
+#   password    同文件:17
+#   nickname    mall-pojo/src/main/java/com/cooxiao/mall/pojo/valid/ums/UserRegistryRegExpression.java:6
+#   phone       同文件:9
+#   email       同文件:12
+#   contactName mall-pojo/src/main/java/com/cooxiao/mall/pojo/valid/order/OrderRegExpression.java:6
+#   mobilePhone 同文件:9
+#
+# ⚠️ **本表已与 Java 源逐条机器比对（7/7 一致）**，因为 2026-09-11 我**手抄**时把 phone 的
+#    `[0-9]` 多抄了一组（写成 12 位），差点让预检报出假故障。**改完请重跑比对**：
+#      PowerShell：从上述文件抽 `String REGEXP_X = "..."` 的字面量，与本节的正则逐条 diff
+SERVER_REGEX: Dict[str, Tuple[str, str]] = {
+    "username": (r"^[a-zA-Z]{1}[0-9a-zA-Z]{3,15}$",
+                 "用户名必须由字母、数字组成、4~16 字符、首字符必须是字母"),
+    "password": (r"^[\u0020-\u007e]{4,16}$", "密码长度 4~16"),
+    "nickname": (r".{2,16}", "昵称 2~16 字符"),
+    "phone": (r"^1[34589][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]$",
+              "中国大陆手机号（注册口，**11 位**：1 + [34589] + 9 位）"),
+    "email": (r"^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$", "邮箱格式"),
+    "contactName": (r".{2,4}", "联系人姓名必须 2~4 字符"),
+    "mobilePhone": (r"^1(?:3\d|4[4-9]|5[0-35-9]|6[67]|7[013-8]|8\d|9\d)\d{8}$",
+                    "中国大陆有效手机号（下单用的这条更严）"),
+}
+
+
+def validate_local() -> List[str]:
+    """用**服务端 DTO 的真实正则**在本地预校验"将要提交的字段值"。
+
+    返回问题列表（空 = 全过）。目的是把"跑一次撞一个"变成"预检一次全暴露"。
+    """
+    problems: List[str] = []
+    u = f"{USER_PREFIX}{1:04d}"                       # 第 1 个模拟用户（与 ensure_users 同构）
+    samples = {
+        "username": u,
+        "password": USER_PASSWORD,
+        "nickname": f"模拟用户{1:04d}",
+        "phone": FAKE_PHONE_PREFIX + f"{1:04d}",
+        "email": f"{u}@{EMAIL_DOMAIN}",
+        "contactName": f"模拟{0:02d}",                # 与 order_add 同构（最短形态）
+        "mobilePhone": FAKE_PHONE_PREFIX + f"{1:04d}",
+    }
+    for field, value in samples.items():
+        pattern, desc = SERVER_REGEX[field]
+        if re.fullmatch(pattern, value) is None:
+            problems.append(
+                f"字段 {field} 过不了服务端校验：本次会提交 {value!r}，"
+                f"但它不匹配 {pattern}（{desc}）→ 服务端将返回 400")
+    return problems
+
+
+# =============================================================================
 # 预检（fail-fast：任一不过直接退出 —— §〇.1 D7 / §六 清单）
 # =============================================================================
 
 def preflight(conn, days: int, per_day: int, need_seckill: bool) -> List[Dict[str, Any]]:
-    problems: List[str] = []
+    # 0) 🔴 先用服务端真实正则把"要提交的字段值"全验一遍（不碰网络、不碰数据）
+    problems: List[str] = validate_local()
 
     with conn.cursor() as cur:
         # 1) 影子库/表就位
