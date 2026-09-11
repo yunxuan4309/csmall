@@ -135,8 +135,8 @@ python3 simulate_data.py --clean --batch sim_20260911_1530 --apply
 |---|---|---|
 | 注册模拟用户 | `POST /ums/user/register` | `mall-ums/.../controller/UserController.java:42,55`（`UserRegistryDTO` 必填 `username/nickname/email/phone/password/ackPassword`） |
 | 登录 | `POST /user/sso/login` → `TokenVO{tokenHeader, tokenValue}` | `mall-sso/.../UserSSOController.java:26,35` |
-| 浏览：全部 SPU | `GET /front/spu/list/all?page=&pageSize=` | `mall-front/.../FrontSpuController.java:26,47` |
-| 浏览：SPU 详情 | `GET /front/spu/{spuId}` | 同上 `:61` |
+| 浏览：全部 SPU | `GET /front/spu/list/all?page=&pageSize=` | `mall-front/.../FrontSpuController.java:26,47`；🔴 **需带 `Authorization`**（`ResourceWebSecurityConfiguration.java:64` `.anyRequest().authenticated()`；无 token → `state=401 您没有登录！`，**HTTP 仍 200**） |
+| 浏览：SPU 详情 | `GET /front/spu/{spuId}` | 同上 `:61`；🔴 **同上，需带 token** |
 | 加购 | `POST /oms/cart/add`（`CartAddDTO`：`skuId/title/price/quantity` 必填） | `mall-order/.../OmsCartController.java:24,30`；`mall-pojo/.../CartAddDTO.java:22,29,42,49` |
 | 下单 | `POST /oms/order/add`（`OrderAddDTO` + `OrderItemAddDTO{skuId,title,data,mainPicture,price,quantity}`） | `mall-order/.../OmsOrderController.java:35,45`；`OrderItemAddDTO.java:23,29,40,46,53,60` |
 | 支付（模拟） | `POST /oms/order/pay`（`PayOrderDTO{id, paymentType}`） | `OmsOrderController.java:76`；`PayOrderDTO.java:19` |

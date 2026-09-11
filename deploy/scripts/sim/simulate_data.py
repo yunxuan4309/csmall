@@ -411,12 +411,23 @@ class Api:
         data = self._call("POST", "/user/sso/login", json={"username": username, "password": password})
         return f"{data.get('tokenHeader') or 'Bearer '}{data.get('tokenValue')}"
 
-    # --- 浏览（80%，无需登录）---
-    def spu_list_all(self, page: int = 1, page_size: int = 10):
-        return self._call("GET", "/front/spu/list/all", params={"page": page, "pageSize": page_size})
+    # --- 浏览（80%：**也需要登录**）---
+    # 🔴 2026-09-11 实测踩坑：浏览接口**不是公开接口**！
+    #    mall-front 的安全配置是 `.anyRequest().authenticated()`
+    #    （mall-front/.../security/config/ResourceWebSecurityConfiguration.java:64），
+    #    permitAll 白名单只有 `/` `/favicon.ico` `/error` `/swagger-resources/**`
+    #    `/v2|v3/api-docs/**` `/doc.html`。
+    #    不带 token → `{"state":401,"message":"您没有登录！"}`，**而 HTTP 状态码仍是 200**
+    #    （本项目鉴权失败不改 HTTP 码）→ **只看 HTTP 码会把 401 误判成成功**（我上一轮就这么误判过）。
+    #    实测：带 token 后 `/front/spu/list/all` 返回 state=200 + 真实商品数据；
+    #          `Authorization: Bearer<token>` 与 `Bearer <token>` **两种都能过**
+    #          （服务端用 `startsWith(tokenHead)` + `substring(...).trim()`）。
+    def spu_list_all(self, page: int = 1, page_size: int = 10, token_header: Optional[str] = None):
+        return self._call("GET", "/front/spu/list/all", token_header=token_header,
+                          params={"page": page, "pageSize": page_size})
 
-    def spu_detail(self, spu_id: int):
-        return self._call("GET", f"/front/spu/{spu_id}")
+    def spu_detail(self, spu_id: int, token_header: Optional[str] = None):
+        return self._call("GET", f"/front/spu/{spu_id}", token_header=token_header)
 
     # --- 加购 / 下单 ---
     def cart_add(self, token_header: str, sku: Dict[str, Any], qty: int):
@@ -689,9 +700,11 @@ def run_funnel(api: Api, conn, registry: Registry, catalog, users, days: int, pe
         user = random.choice(users)
         sku = random.choice(catalog)
         try:
-            if kind == "browse":                      # 80%：只读，不产生业务数据
-                (api.spu_detail if random.random() < 0.5 else
-                 (lambda sid: api.spu_list_all(random.randint(1, 3), 10)))(sku["spu_id"])
+            if kind == "browse":                      # 80%：只读（**需登录**，见 Api 注释），不产生业务数据
+                if random.random() < 0.5:
+                    api.spu_detail(sku["spu_id"], user["token"])
+                else:
+                    api.spu_list_all(random.randint(1, 3), 10, user["token"])
             elif kind == "cart":                      # 15%：加购但不结算
                 api.cart_add(user["token"], sku, random.randint(1, 2))
                 with conn.cursor() as cur:            # 取回刚插入的 cartId 并登记
