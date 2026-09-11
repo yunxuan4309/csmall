@@ -1,0 +1,6 @@
+# #48 造数脚本依赖（版本钉死，避免"在我机器上能跑"）
+# 安装（新机）：python3 -m venv ~/sim-venv && ~/sim-venv/bin/pip install -r requirements.txt
+# 说明：新机实测 python3 3.12.3 + requests 2.31.0 已有，但 pymysql 未装，
+#       且系统 pip 被 PEP 668（externally-managed-environment）拦截 → 必须用 venv。
+requests==2.31.0
+PyMySQL==1.1.1
