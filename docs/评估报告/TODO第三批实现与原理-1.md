@@ -1,11 +1,11 @@
 # TODO 第三批实现与原理 · 补册 1（AI 导购 Agent + Python 模拟数据）
 
 > **创建日期**: 2026-09-10
-> **状态**: ✅ **#32（AI 导购 Agent：P0 + P1 + 生产加固）全部完成并部署验证**（2026-09-11 收口）—— **#58 已完成并部署生产**、**#32 全阶段已上线**（56 项测试全绿；生产开关 `true`；2026-09-11 复核通过）、**#48 仍待实施**、**#60 仅评估**
-> **📖 本册同时是"AI 模块升级"的执行记录**：**§三·6/§三·7** 记录 P0/P1 的**真实实现**（与计划骨架的差异、生产挖出的问题与加固均已如实标注）；**§八 小插曲**记录两次**非计划内**的生产事件；**逐类实现说明见 [[AI导购Agent实现详解]]**
+> **状态**: ✅ **#32（AI 导购 Agent：P0 + P1 + 生产加固）全部完成并部署验证**（2026-09-11 收口）—— **#58 已完成并部署生产**、**#32 全阶段已上线**（生产开关 `true`；2026-09-11 复核通过）、**#60 仅评估**；🛠 **#48 待实施**（规范设计定稿 + **09-11 实施前复核 §〇.1 共 9 条** + **第一层造数骨架已落地**）；✅ **#63 已修复并独立复核**（**§九**，验收全绿 + 召回回归无异常）；✅ **#59 已通过充值解决 → #31 前置解除**（实测 200 / 1024 维，**§十**）；✅ **向量链路降级已补**（**§10.4**）+ **Embedding 可替换性加固 P0~P3 已完成**（**§十一 评估 / §十二 实施**）；🧪 **当前 mall-ai 测试：82 项全绿**（56 原有 + `EmbeddingSelfCheckTest` 6 + `RagServiceImplVectorFallbackTest` 6 + `VectorSyncServiceImplDegradeTest` 14）
+> **📖 本册同时是"AI 模块升级"的执行记录**：**§三·6/§三·7** 记录 P0/P1 的**真实实现**（与计划骨架的差异、生产挖出的问题与加固均已如实标注）；**§八 小插曲**记录两次**非计划内**的生产事件；**§九/§十**记录 **ES 索引缺陷（#63）的复核与修复** 与 **#31 前置解除（#59）**；**§十一/§十二**记录 **Embedding 可替换性（依赖倒置）的评估与实施**；**逐类实现说明见 [[AI导购Agent实现详解]]**
 > **为什么另开一册**: 原 [[TODO第三批实现与原理]] 已 946 行、以跨机集群为主；按用户要求把 **Agent 与模拟数据**这两块"新东西"单独成册，**原册不动**，两册互链
 > **用途**: 与三个「实现与原理」正册格式对齐 —— 「**选型/原理 → 本项目设计 → 实测证据 → 疑惑点 → 面试话术**」；**本册的特色是"技术选型过程"被完整记录**（为什么不跟风上框架）
-> **关联**: [[TODO文件]] #32/#48/#58/#60/#61/#62、[[AI导购Agent升级方案]]（计划与清单）、**[[AI导购Agent实现详解]]（实现说明书：架构/类/取舍/排障/面试底稿）**、[[Python模拟数据与AI并发测试方案]]、[[AI模型名停用风险与thinking参数改造方案]]、[[TODO第三批实现与原理]]（正册）、[[TODO已完成]]
+> **关联**: [[TODO文件]] #32/#48/#58/#59/#60/#61/#62/**#63/#64**、[[AI导购Agent升级方案]]（计划与清单）、**[[AI导购Agent实现详解]]（实现说明书：架构/类/取舍/排障/面试底稿）**、[[Python模拟数据与AI并发测试方案]]、**[[商品与秒杀扩容方案]]（#63 修复 + 商品/秒杀扩容的实施方案）**、[[AI模型名停用风险与thinking参数改造方案]]、[[TODO第三批实现与原理]]（正册）、[[TODO已完成]]
 
 ---
 
@@ -15,7 +15,10 @@
 |---|---|---|---|
 | **#58** | 模型名停用风险 + `thinking` 开关改造 | **前置**：给 Agent 一个稳定的模型契约 | ✅ **已完成并部署生产**（2026-09-10，见 [[TODO已完成]] §十四）|
 | **#32** | AI 导购升级 Agent（Function Calling + ReAct） | 让 LLM 有"动作决策权"，而非只当解析器 | ✅ **全部完成并部署**（P0 `09d22b1`/`0fe1a1e` + P1 `10a4ab0` + 加固 `2fd305d`）；生产开关 `true`、**56 项测试全绿**、2026-09-11 复核通过（同步 200 + 流式 211 事件）；**待办条目已归档** → [[TODO已完成]] §十六/§十七（见 §三·5~§三·7）|
-| **#48** | Python 模拟数据 + AI 并发测试 | 造运营数据 + 验证 AI 承载 | 📋 规范设计定稿；待实施 |
+| **#48** | Python 模拟数据 + AI 并发测试 | 造运营数据 + 验证 AI 承载 | 🛠 **规范设计定稿 + 09-11 实施前复核（§〇.1，9 条）+ 第一层造数骨架已落地**（`deploy/scripts/sim/`）；待实施 |
+| **#63** 🆕 | **ES 商品索引 mapping 与代码期望不符** | **AI 检索的"地基"是错的**（单字分词 / 品牌过滤恒失效 / 补全恒空 / 无向量字段） | 🔴 **已复核属实，修复中**（2026-09-11 用户要求二次验证）→ **§九** |
+| **#64** 🆕 | 秒杀预热两套 `spu_id` 语义冲突 | **同一字段两种含义**（`seckill_spu.id` vs pms `spu_id`） | 🔴 已登记（4/12 秒杀 SKU 从不预热，靠凌晨永久 key 兜住）；**不在本批夹带** |
+| **#59/#31** 🆕 | 硅基流动余额 → 向量检索开关 | 外部额度是**功能的前置条件** | ✅ **#59 已解决**（充值 10 元，实测 **200 / 1024 维**）→ **#31 前置解除** → **§十** |
 | **#60** | Spring AI 引入评估 | **结论：暂不引入**（前置 = Boot 全站升级） | ✅ 评估完成，仅记录 |
 | **插曲** | nginx 静态上游 IP → 全站 502 / 前端 conf 漂移 | **非计划内**：调用方持有"过期地址" | ✅ 已抢修并复盘（见 **§八**）|
 
@@ -117,7 +120,7 @@ pom.xml（根，artifactId = csmall）
 | 预算控制 | ♻️ **已有** | `TokenBudgetService`（2 元/天，`doChat` 内已自动记账） |
 | 并发闸门 | ♻️ **已有** | `AiConcurrencyGuard`（上限 20，满即降级） |
 | 限流 / 频控 | ♻️ **已有** | Sentinel 三组规则 + `AiUserRateLimiter` |
-| SSE 流式 + thinking 卡片 | ♻️ **已有** | `doStreamDeepSeek` + 前端已有组件 |
+| SSE 流式 + thinking 卡片 | ♻️ **已有** | `DeepSeekAiClient.doStream` / `openSseStream`（原写 `doStreamDeepSeek` 已不存在，09-11 复核修正）+ 前端已有组件 |
 | 检索 / 召回 / 重排 | ♻️ **已有** | `RagServiceImpl` / `SearchPipeline` / ES |
 | 降级兜底 | ♻️ **已有** | 既有 RAG 快速路径（双路径设计） |
 
@@ -407,12 +410,15 @@ public ToolRound chatWithTools(List<Map<String,Object>> messages) {
 
 ## 四、Python 模拟数据设计（#48）
 
+> 🔄 **2026-09-11 实施前复核已更新 → 本章为 09-10 的"设计过程记录"，实施请以方案文档为准**
+> 实施前逐条实测 + 读码又查出 **9 条**（mock 注入变量名不生效 / Agent 已上生产但 mock 无 `tool_calls` / 每用户频控 10·60s 污染并发结论 / Sentinel `ai-chat=5` 冲突 / mock 单线程 `HTTPServer` 自己是瓶颈 / 新机无 pymysql 且被 PEP 668 拦 …）→ 见 **[[Python模拟数据与AI并发测试方案]] §〇.1**，含两项决策：**生产 + 临时放开限流**、**Agent 双链路各压一遍**。
+
 ### 4.1 为什么必须有"隔离层"（三类**不可逆**污染，实测）
 
-| 类别 | 实测现状（2026-09-10） | 造数后果 | 删用户能还原吗 |
+| 类别 | 实测现状（2026-09-10；库存口径 09-11 复核修正） | 造数后果 | 删用户能还原吗 |
 |---|---|---|---|
 | **累加计数器** | `pms_spu.sales`：81 / 1 / 1 … | 下单/秒杀**累加** | ❌ 没有"谁贡献多少"的记录 |
-| **真实库存** | `pms_sku.stock` 30/25/20/15；`seckill_sku.seckill_stock` 25~150（1 个已 0） | 下单扣减 | ❌ |
+| **真实库存** | `pms_sku` **38 SKU / 合计 stock 1456 / max 100（1 个已 0）**；`seckill_sku` **12 条 / 合计 seckill_stock 822 / max 150（1 个已 0）** | 下单扣减 | ❌ |
 | **Redis 状态** | `mall:seckill:sku:stock:*` **12 个** | 秒杀扣预热库存 | ❌ |
 | 可追踪实体 | `ums_user` 110 / `oms_order` 86 / `success` 58 | 新增记录 | ✅ 可按登记精确删 |
 
@@ -421,7 +427,7 @@ public ToolRound chatWithTools(List<Map<String,Object>> messages) {
 2. 🔴 **前缀删不掉不可逆污染**（上表三类）
 3. 🟠 **Redis 清理想按 pattern 全删** → 会**误伤真实用户**的购买标记
 4. 🟠 **全库 0 个外键**（实测）→ 删除顺序无数据库保护，漏表即静默残留；含 `user_id` 的表实测 **7 张**
-5. 🟠 **mock LLM 未实现 SSE 格式** → `doStreamDeepSeek` 按 `data: ` 解析，普通 JSON **收不到任何 chunk**
+5. 🟠 **mock LLM 未实现 SSE 格式** → SSE 解析在 **`DeepSeekAiClient.openSseStream:349`**（`line.startsWith("data: ")`；原写的 `ChatServiceImpl.doStreamDeepSeek` **已不存在**，09-11 复核修正），普通 JSON **收不到任何 chunk**
 
 ### 4.2 选型（本轮"选型过程"的第二处记录）
 
@@ -453,9 +459,9 @@ CREATE TABLE cs_mall_sim.sim_entity ( id PK, batch_id, db_name, table_name, pk_v
 | 要素 | 正确做法 |
 |---|---|
 | mock 放哪 | **新机内网** `172.29.193.240:9999`（容器内 `127.0.0.1` = 容器自身，**不可达**） |
-| 怎么接 | **compose override** 注入 `COOXIAO_AI_BASEURL` 环境变量；**不改 prod yml**，测完 `up -d mall-ai` 恢复 |
-| mock 必须支持 | **SSE 分片**（`data: {…}\n\n` + `data: [DONE]`）+ 非流式 JSON + 可选 usage |
-| 压测三约束 | ① 脚本**跑新机/内网**（老机 5 Mbps，本机压自己=自压自伤）② **避开 Sentinel 限流接口**（秒杀 QPS=10、ai-chat=5）→ 主压浏览/加购/普通下单 ③ **20→50→100 阶梯** + 盯 `docker stats`/`free -h` |
+| 怎么接 | **compose override** 注入 **`AI_API_BASE_URL`** 环境变量（⚠️ 2026-09-11 复核修正：本节原写的 `COOXIAO_AI_BASEURL` **不生效**，yml 实际读 `${AI_API_BASE_URL}`，且 compose 的 `mall-ai` 当时**未透传**该变量）；**不改 prod yml**，测完 `up -d mall-ai` 恢复 |
+| mock 必须支持 | **SSE 分片**（`data: {…}\n\n` + `data: [DONE]`）+ 非流式 JSON + usage + 🔴 **`tool_calls` 分片**（2026-09-11 复核补：生产 `AI_AGENT_ENABLED=true`，不带工具轮测的就不是生产链路）；且**必须线程化**（`ThreadingHTTPServer`，单线程会自己成为瓶颈） |
+| 压测三约束 | ① 脚本**跑新机/内网**（老机 5 Mbps，本机压自己=自压自伤）② **先证伪干扰项再测承载**：入口 Sentinel（秒杀 QPS=10、ai-chat=5）+ **每用户频控 10/60s** → 需临时放开阈值 + 用多用户 token ③ **20→50→100 阶梯** + 盯 `docker stats`/`free -h` + **中止阈值**（available<1.5G / 5xx+429>1% / p99>10s） |
 
 > 📄 完整方案（DDL / 清理 SQL / mock 代码 / 纪律清单 12 项 / 面试话术）见 [[Python模拟数据与AI并发测试方案]]
 
@@ -560,4 +566,307 @@ A：**不能（现状）**——它没有任何数据库栈（无 JDBC/MyBatis/F
 
 ---
 
-**关联文档**：[[TODO文件]]（状态源 #32/#48/#58/#60/#61）、[[AI导购Agent升级方案]]（Agent 完整方案 + P0 清单与实施记录）、[[Python模拟数据与AI并发测试方案]]（模拟数据完整方案）、[[AI模型名停用风险与thinking参数改造方案]]（§3.1 实验 / §4.5 可配化 / §4.6-4.7 Spring AI 与 Boot 升级评估 / §十一 实施与部署记录）、**[[问题解决--服务注册与网关路由]]（§八 插曲 1/2 的完整排查与话术）**、[[问题解决--容器构建与编排卫生]]（配置不在版本控制这一类问题）、[[TODO第三批实现与原理]]（正册：跨机集群等）、[[TODO已完成]]、[[TODO第二批实现与原理]]（§5.4.5 #21 当初为何改用 `deepseek-chat`）
+## 九、ES 商品索引 mapping 复核与修复（#63 · 2026-09-11）
+
+> **为什么记在本册**：这条缺陷**直接决定 AI 导购的检索质量** —— `search_products` 工具、`/ai/search`、建议补全**全都读这一个索引**，它是 Agent 效果的**上游**。
+> **完整实施方案（备份/停机/删索引/重建/验收/回滚）见 [[商品与秒杀扩容方案]] §一**；本节只记「怎么发现的 / 证据 / 对 Agent 的影响」。
+
+### 9.1 发现路径：一次"顺带发现"
+
+起因**不是排查故障**，而是要评估「**要不要把商品从 20 个扩到 60 个**」。一评估就发现：**光扩商品没用** —— 搜索体验上不去的根因在索引本身是错的。这也是一次很好的"选型/评估顺带挖出存量缺陷"的实例。
+
+### 9.2 证据（两轮实测；第二轮是用户明确要求"这个问题很重要，再上服务器验证"）
+
+| 复核项 | 实测 | 意义 |
+|---|---|---|
+| 索引唯一性 | `cool_shark*` 只有 `cool_shark_mall_ai`（19 docs，71.8kb）、**无别名** | ✅ 排除"查错索引" |
+| **IK 插件是否可用** | `_cat/plugins` → **`analysis-ik 8.6.0` 已加载**；显式 `{"analyzer":"ik_max_word"}` → **`小米`/`手机` 正确分词（`CN_WORD`）** | ✅ **排除"最坏情况（插件不可用）"** → 重建后 IK 一定生效 |
+| 字段实际分词 | `{"field":"name","text":"小米手机"}` → **4 个 `<IDEOGRAPHIC>` 单字** | 索引确实没用 IK |
+| 品牌过滤 | `term brandName` = **0** ／ `term brandName.keyword` = **4** ／ `match` = **4** | ✅ **最强证据形态**：数据没问题，是**查询打错了字段形态** |
+| 补全数据形状 | 文档里 `suggestField` 是**字符串数组**（`["小米 RedmiBook Pro","小米 小米 RedmiBook Pro",…]`） | ✅ 正是 `completion` 期望的 `inputs` 形状 → 重建后补全立刻可用 |
+| `semanticVector` | mapping 无、文档也无（`embedding-enabled=false`） | 🔴 与 #31 直接相关 |
+| 创建时间 | `creation_date` = 1785520267975 ≈ **2026-07-31** | 早于当前初始化代码上线 |
+| 启动日志 | `ES索引 [cool_shark_mall_ai] 已存在` | ✅ **永不自愈**（初始化代码只在索引不存在时创建） |
+| 反推（**推断，非实测**） | 线上 `shards=1 / replicas=0` **与代码期望一致**但 mapping 全空 | 那次创建**带了 settings、没带 mappings**（历史版本），**不是 ES 自动建的**（自动建 replicas 会是 1）；**是哪个版本无法确定** |
+
+### 9.3 对 Agent 的具体影响（本册关心的部分）
+
+1. **`search_products` 的召回质量被"单字分词"拖累** —— 写入与查询用同一套分词器，所以**能匹配上**（这也正是它一直没被发现的原因），但 `name^5 / title^4 / semanticText^3 / description^2` 这套**权重设计在单字粒度上基本失效**。
+2. **品牌维度（`intentSearch` 的 `term brandName` 过滤）恒不生效** → 只能靠 `fullTextSearchNoPrice` 兜底。
+3. **`/ai/search/suggest` 补全恒返回空**（completion suggester 打 `text` 字段 → 异常被吞）。
+4. **`semanticVector` 字段不存在 → 向量检索的"地"是空的**（#31 的前置之一）。
+
+### 9.4 验收的两条硬指标
+
+- `_analyze {"field":"name","text":"小米手机"}` → **`小米`/`手机` 两个词**（不再是 4 个单字）
+- `term brandName="小米"` → **4**（原来 **0**）
+
+### 9.5 ⚠️ 必须盯的一个回归
+
+重建后 `brandName / categoryName / tags` 从 `text` 变 **`keyword`**，而 `multiMatch` **包含这三个字段** → 它们从"部分匹配"变"**整值匹配**"：
+**好处**是 `term` 过滤开始生效；**风险**是查询串"小米手机"不再命中 keyword 值"小米" → **召回可能变少**。
+### 9.6 修复执行与复核结果（2026-09-11 07:37 · 用户执行 + AI 独立复核）
+
+| 验收项 | 修前 | 修后（实测） |
+|---|---|---|
+| `dynamic` | 未设置（= `true`） | **`false`** ✅ |
+| `name/title/description/semanticText` 分词 | 4 个单字 `<IDEOGRAPHIC>` | **`小米`/`手机`（`CN_WORD`）** ✅（4 个字段全过） |
+| `brandName/categoryName/pictures/tags` | `text` | **`keyword`** ✅ |
+| `listPrice` / `sales` | `float` / `long` | **`double` / `integer`** ✅ |
+| `semanticVector` | **不存在** | **`dense_vector` `dims=1024` `index=true` `similarity=cosine`** ✅ |
+| `suggestField` | `text` | **`completion` + `analyzer=ik_max_word`** ✅ |
+| `term brandName="小米"` | **0** | **4** ✅ |
+| **补全（`/ai/search/suggest`）** | **恒返回空** | **实测 `prefix=小米` → 返回「小米 14」** ✅ |
+| 文档总数 | 19 | **19** ✅ |
+| 带向量文档数 | 0 | **0**（`embedding-enabled=false`，符合预期） |
+| 索引本体 | 旧的 dynamic 索引 | 日志 `ES索引 [cool_shark_mall_ai] 创建成功`（初始化器**真正执行了**）+ 新 uuid |
+
+> ⭐ **一条方法论教训（AI 自己犯的）**：我给的验收命令写的是 `grep -c ik_max_word` 期望 **4** —— **错了两层**：
+> ① `grep -c` 数的是**行数**，而 mapping 是**单行 JSON** → 永远只返回 0 或 1；
+> ② 实际出现次数是 **5**（4 个 text 字段 + `suggestField` 也用 `ik_max_word`）。
+> 正确写法：`grep -o ... | wc -l`。**"验收命令本身也要被验收"** —— 幸好关键那一条 `_analyze` 是确定性的，它一出词就证明了修复成立（否则用户会看到"1 ≠ 4"而误判失败）。
+
+### 9.7 召回回归（修复后实测：担心的"keyword 化导致召回塌"**没有发生**）
+
+| 查询（模拟 `SEARCH_FIELDS` multiMatch） | 命中 | 样例 |
+|---|---|---|
+| 小米手机 | **8** | 小米 14 / 小米 14 Pro / 小米 RedmiBook Pro |
+| 小米 | **4** | — |
+| 手机 | **7** | 小米 14 / iPhone 15 / iPhone 15 Pro |
+| 华为 | **3** | 华为 MatePad Pro / Mate 60 Pro / P60 Pro |
+| 笔记本 | **5** | MacBook Pro 14 / 戴尔 XPS 13 / MacBook Air 15 |
+| 旗舰 | **3** | 小米 14 / Redmi K70 Pro / 华为 P60 Pro |
+| 价格 ≤5000 + 升序 | ✅ | `listPrice` 现为 `double`，区间过滤与排序正常 |
+
+**为什么没塌（关键论据）**：`brandName/categoryName/tags` 变 `keyword` 后，`multiMatch` 打它们确实退化成"整值匹配"（实测：只打 `brandName` 时 query `"小米手机"` = **0**）；**但 `semanticText` 里本身就写着「品牌：小米 | 分类：手机 | 标签：…」** → 品牌/分类召回由 **`semanticText`（权重 3）兜住**（实测只打 `semanticText` 的 `"小米"` = **4** 命中）。
+
+> ✅ **结论：#63 修复完成、验收全绿、无召回回归**（`grep -c` 那一条是我命令写错，不是修复失败）。
+
+---
+
+## 十、#31 前置解除：#59 充值验证通过（2026-09-11）
+
+| 项 | 结果 |
+|---|---|
+| **探针** | `POST https://api.siliconflow.cn/v1/embeddings`，生产 key + `BAAI/bge-m3` |
+| **结果** | **HTTP 200**，`dims = 1024`，`usage{prompt_tokens:7,completion_tokens:0}`，`model=BAAI/bge-m3` |
+| **意义 ①** | **#59 关闭**（原为 **402** `Sorry, your account balance is insufficient`） |
+| **意义 ②** | **维度 1024 与 mapping 的 `dense_vector dims=%d`（=`embedding-dimensions: 1024`）完全吻合** → #63 重建出的向量字段与后端要写的向量**同维，不会错配** |
+
+### 10.1 顺序决策（**仍分两步做**）
+
+| 步骤 | 动作 | 为什么这样切 |
+|---|---|---|
+| **先** | **#63**：删索引 → 重建（`EsIndexInitializer` 的 mapping 常量**始终包含** `semanticVector`，所以这一步就把向量的"地基"打好了） | 它是**唯一需要停机 + 删索引**的动作，风险集中在这里 |
+| **后** | **#31**：改 `embedding-enabled=true` + recreate + 同步写入向量 | 只改配置 + 一次同步，**不需要再删索引**，随时可回滚 |
+
+**为什么不合并成一个窗口**（虽然合并能省约 1 分钟停机）：#63 与 #31 **都会改变召回行为**（一个换分词器、一个换检索路径）→ 合在一起**分不清是谁的影响**；且违反「**一次只动一个组件**」（CLAUDE.md §3.5）与「**不夹带**」（§6.1-5）。
+
+### 10.2 #31 实施时的验证清单（预置）
+
+- [ ] 同步后 **带 `semanticVector` 的文档数 = 有效 SPU 数**（19）：`{"query":{"exists":{"field":"semanticVector"}}}`
+- [ ] `vectorSearch` 真能返回结果（不是 catch 后返回 `List.of()`）
+- [ ] 相似度检索的**结果集变化**符合预期（与纯文本检索对比）
+- [ ] 日志里"商品同步完成，共 N 条"的 N 等于有效 SPU 数（**防止 402 式静默失败**）
+- [ ] embedding 成本核对：`embedding-price-per-million: 0.0`（当前配置不记预算），确认不会异常消耗 `ai:daily_cost`
+
+### 10.3 🔴 读码发现：**目前没有真正的降级链路**（开 #31 前建议先补）
+
+| 位置 | 代码事实 | 后果 |
+|---|---|---|
+| `RagServiceImpl.ask()` L82-89 | `embeddingEnabled=true` 时**直接** `embed()` → `vectorSearch()`，**向量分支外没有 try-catch** | **硅基流动一挂，`ask()` 直接抛错 → 搜索报错**（不是降级） |
+| `RagServiceImpl.vectorSearch()` L352-355 | catch 里日志写 **"ES 向量检索失败，降级到全文检索"**，但 **`return List.of()`** —— **实际没有降级** | **日志与行为不符**：检索变空 → 回答变成"未检索到相关商品信息"；**排查时会被这条日志误导** |
+
+> ⇒ **建议：开 #31 之前先补这两处**（向量路径加 try-catch → 失败回落 `fullTextSearch()`；并修正那条日志），否则 #31 会把"外部 API 依赖"变成**搜索可用性的单点**。
+> ⚠️ 这是**改代码**，按 [[TODO文件]] #31 与纪律要求**单独窗口、不夹带**。
+
+### 10.4 ✅ 降级链路已补（2026-09-11，用户授权"你顺便处理了"）
+
+| # | 位置 | 修改前 | 修改后 |
+|---|---|---|---|
+| ① | `RagServiceImpl.ask()` | 向量模式下直接 `embed()` → `vectorSearch()`，**无 try-catch** → 外部 API 挂了**搜索直接报错** | 改为调 **`vectorSearchWithFallback(question, topK)`** |
+| ② | `RagServiceImpl` 新增 `vectorSearchWithFallback()` | — | **三种失败都回落 `fullTextSearch()`**：embedding 调用失败 / ES 向量检索失败 / 向量结果为空 → **语义能力降级，但搜索仍可用**；并 WARN/ERROR 说明原因 |
+| ③ | `RagServiceImpl.vectorSearch()` catch | 日志写 **"降级到全文检索"**，实际 `return List.of()`（**日志与行为不符**） | 日志改为 **"ES 向量检索失败（是否回落全文检索由调用方决定）"**，与实际行为一致，不再误导排查 |
+| ④ | `VectorSyncServiceImpl.syncAll()` | `embedBatch()` 抛错 → 整批 `catch` 跳过 → **该批商品完全进不了索引** | **降级为"仅全文索引"**（商品照旧写入 ES，只是不带向量）+ 新增 `vectorDegraded` 计数 → 汇总 **WARN 显式暴露"其中 N 条向量化失败"** |
+| ⑤ | `VectorSyncServiceImpl.syncSpu()` | `embed()` 在 try **之外** → 抛错会让**单个商品更新完全不同步** | 包 try-catch → **降级为仅全文索引**（该商品仍能被 BM25 搜到） |
+
+**设计原则（为什么这么改）**：**外部依赖故障不应放大成"功能不可用"** —— 语义检索是**增强**、全文检索是**基线**；embedding 挂了就掉到基线，而不是让搜索/同步整体失败。
+同时**降级必须是可见的**（日志显式写"降级/失败条数"）—— 否则就变成**静默降级**，那是比报错更难查的故障形态。
+
+### 10.5 测试结果（2026-09-11，**已跑**）
+
+```
+mvn -B -o -pl mall-ai/mall-ai-webapi -am test
+[INFO] mall-common ......... Tests run: 5,  Failures: 0, Errors: 0
+[INFO] mall-ai-webapi ...... Tests run: 56, Failures: 0, Errors: 0
+[INFO] BUILD SUCCESS     （8 个反应堆模块全 SUCCESS）
+```
+
+- ✅ **56 项原单测全绿 → 降级改动无回归**（`DeepSeekAiClientRequestBodyTest` 9 / `AiPropertiesBindingTest` 3 / `ChatServiceImplAgentTest` 19 / `CompareProductsToolTest` 8 / `GetStockToolTest` 8 / `SearchProductsToolTest` 7 / `ToolRegistryTest` 2）
+- ⚠️ **已知缺口（如实记录）**：本次**没有为新的降级逻辑补单测**（`vectorSearchWithFallback` 需要伪造 `embeddingClient` 的失败路径）。**待补**：给"embedding 抛错 → 回落全文"与"向量结果为空 → 回落全文"各写一条用例。
+- 🐞 **踩坑记录（环境类）**：`mvn install` 在本项目 AI 沙箱里**必然失败** —— 它要写 `C:\Users\<用户>\.m2\repository`（**工作区之外**，被文件策略拒绝），报错形态是 `Failed to install artifact …csmall-0.0.1-SNAPSHOT.pom.<随机>.tmp`（**看起来像 Maven 故障，其实是沙箱**）。
+  **正确姿势**：用**反应堆内构建** `-pl mall-ai/mall-ai-webapi -am test` —— 模块间依赖走反应堆的 `target/classes`，**不需要 install**，只写工作区内 `target/`。
+  （另：不带 `-am` 的离线跑会拿到 `.m2` 里的**旧 `mall-pojo`**，报一堆"找不到符号 SearchDTO/SearchResultVO/SuggestVO" —— 也不是代码问题。）
+
+---
+
+## 十一、⭐ 架构评估：Embedding「换平台 / 换模型」的可替换性（2026-09-11 用户提问）
+
+> **用户的原始问题**：
+> 「当前这个代码是否支持未来如果更换平台或者模型来计算向量？有没有做适配？我的意思是**上游业务不依赖下游实现**这种。」
+
+### 11.1 结论一句话
+
+> **"换供应商/换模型"这一层做到了（改配置即可，不动代码）；但"依赖倒置"这一层没做到（上游直接依赖具体类，没有抽象）。**
+> 即：**能换"同一协议的另一家"，换不了"另一种协议/另一种部署形态"。**
+
+### 11.2 ✅ 已经做到的（配置层解耦 · 这部分是加分项）
+
+| # | 事实 | 证据 |
+|---|---|---|
+| 1 | **供应商的"三个坐标"全部外部化**：base-url / api-key / model 都能用环境变量注入 | `AiProperties:85-91`；yml `embedding-api-key: ${EMBEDDING_API_KEY}`、`embedding-base-url: ${AI_EMBEDDING_BASE_URL:…}`、**`embedding-model: ${AI_MODEL_EMBEDDING:BAAI/bge-m3}`（代码里没有默认模型名）** |
+| 2 | **内部契约是供应商无关的**：`float[]` / `List<float[]>` | `SiliconFlowEmbeddingClient:40,49` |
+| 3 | **协议是通用 OpenAI 兼容格式**：`POST {base}/v1/embeddings` + `{model,input,encoding_format}`；解析 `data[i].embedding` 与 `usage.total_tokens` | `SiliconFlowEmbeddingClient:59-91` → **任何 OpenAI 兼容平台（通义/智谱/OpenAI/本地 vLLM/Ollama 的兼容层）换 base-url + model 即通** |
+| 4 | **超时可配**（不会因外部平台慢而永久挂住） | `RestTemplateConfig:14-17` 用 `aiProperties.getTimeout()` 设 connect/read timeout |
+| 5 | **并发闸门覆盖 embedding** | `AiConcurrencyGuard`（`embed`/`embedBatch` 都过闸门） |
+| 6 | **成本记账可配**（`embedding-price-per-million`，当前 `0.0`） | `SiliconFlowEmbeddingClient:82-88` → `TokenBudgetService.record` |
+| 7 | **维度由单一配置驱动**（`embedding-dimensions` → ES mapping 的 `dims`） | `AiProperties:93-94` + `EsIndexInitializer` 的 `dims=%d` |
+
+### 11.3 ❌ 没做到的（抽象层 · 真正的"依赖倒置"缺口）
+
+| # | 缺口 | 证据 | 后果 |
+|---|---|---|---|
+| **1** | **没有接口**：上游直接依赖**具体类** | `RagServiceImpl:9,48` 与 `VectorSyncServiceImpl:5,36` 都是 `import …SiliconFlowEmbeddingClient;` + 按具体类型注入 | 换**协议**（非 OpenAI 兼容）、加**多供应商并存**、加**本地模型**、加**缓存/降级装饰器** 都得改上游源码 |
+| **2** | **命名与文案泄漏厂商** | 类名 `SiliconFlowEmbeddingClient`；日志 `"Calling SiliconFlow Embedding API"`；javadoc 写 **"使用 BGE-M3 模型，兼容 OpenAI API 格式，免费调用"** | 用词会误导维护者（"免费"这条**已经过期**——正是 #59 误判的来源）；将来换平台会出现"名字叫 SiliconFlow、实际打的是别家" |
+| **3** | 🔴 **维度没有运行时自检** | 全仓 `embeddingDimensions` 只出现在 `AiProperties` 与 `EsIndexInitializer`；**没有任何地方校验"返回向量长度 == 配置维度"** | 换成 **768/1536 维**的模型时：① 忘改配置 → 写 ES 报维度不匹配；② 改了配置但**没删索引重建** → 同样失败（`dims` **建成后不可改**）。**两种错都只在运行时暴露** |
+| **4** | `embeddingDimensions` 注释没写"改维度必须删索引重建" | `AiProperties:93` 只说"ES mapping 的 dims 由它决定" | 配置变更的**操作要求**没写进代码，靠人记 |
+| **5** | `encoding_format: "float"` 是 OpenAI **扩展**字段 | `SiliconFlowEmbeddingClient:67` | 少数平台不认该字段会 400（影响小，可配置化） |
+
+### 11.4 修复建议（分档，均未实施 —— 按纪律"不夹带"）
+
+| 档 | 动作 | 成本 | 收益 |
+|---|---|---|---|
+| **P0** ⭐ | **启动自检**：`embeddingEnabled=true` 时启动探针 `embed("probe")`，校验 `length == embeddingDimensions`，不一致**启动即失败并给出可操作报错**（"模型返回 N 维，配置为 M 维；若已换模型请同步改 `embedding-dimensions` 并**删索引重建**"）；顺手删掉 javadoc 里的"免费调用" | ~30 分钟 | 把"运行时才炸"变成"启动就报"，这是本次 #59/#63 两次踩坑的**共同教训** |
+| **P1** | **抽接口 `EmbeddingClient`**（`float[] embed(String)` / `List<float[]> embedBatch(List<String>)`）；`SiliconFlowEmbeddingClient` → 改名 `OpenAiCompatEmbeddingClient implements EmbeddingClient`；两处注入改**接口** | 1~2 小时 | 真正做到**依赖倒置**：换协议只加实现、加缓存/降级只加装饰器、上游零改动；**面试可直接讲"我依赖抽象而非厂商 SDK"** |
+| **P2** | 注释补齐"改维度 → 必须删索引重建"；把"重启 + 重建索引"写进配置变更 SOP | ~30 分钟 | 防止 #63 这类"配置与索引不一致"再次发生 |
+| **P3** | `encoding_format` 可配化或去掉 | ~15 分钟 | 兼容更多平台 |
+
+### 11.5 面试话术（本节的复用价值）
+
+> "我的业务代码**不应该**知道向量是谁算的。现在的情况是：**配置层面已经解耦**——供应商地址、Key、模型名、维度全在配置里，换一家 OpenAI 兼容的平台**只改环境变量、不动一行代码**；内部契约是 `float[]`，不绑任何 SDK 类型。
+> 但**抽象层面还差一步**：上游是直接注入具体类的，没有 `EmbeddingClient` 接口，所以'换协议、加多供应商、加本地模型、加缓存'这几件事还得改上游——这就是**依赖倒置还没做透**。
+> 另外我踩过一个真实的坑：**向量维度在建索引时是不可变的**，而代码里**没有校验'模型实际返回的维度'和'配置维度'是否一致**，所以我给它的加固是 **P0 加启动自检** —— 让配置错误在**启动时**就暴露，而不是等到检索时才炸。"
+
+## 十二、Embedding 可替换性加固：P0~P3 实施记录（2026-09-11）
+
+> **起因**：**§十一的评估结论**（配置层已解耦、抽象层未做透）→ 用户当日要求**直接实施 P0~P3**（不再停留在评估）。
+
+### 12.1 改动清单（7 处）
+
+| 档 | 改了什么 | 文件 |
+|---|---|---|
+| **P1** ⭐ | **新增接口 `EmbeddingClient`**（`float[] embed(String)` / `List<float[]> embedBatch(List<String>)`，出参**不暴露任何 SDK/HTTP 类型**）；原类 **`git mv` 改名 `OpenAiCompatEmbeddingClient` 并 `implements EmbeddingClient`**（git 历史保留，状态 `R`）；两处注入**由具体类改为接口** | 新增 `client/EmbeddingClient.java`；`client/OpenAiCompatEmbeddingClient.java`（重命名）；`RagServiceImpl`（import + 字段）；`VectorSyncServiceImpl`（同） |
+| **P0** ⭐ | **新增 `EmbeddingSelfCheck` 启动自检**（策略见 12.2） | 新增 `config/EmbeddingSelfCheck.java` |
+| **P0** | `EsIndexInitializer` 加 **`@DependsOn("embeddingSelfCheck")`** → **自检先跑、建索引后跑** | `init/EsIndexInitializer.java` |
+| **P0** | 删掉 javadoc 里**已过期的"免费调用"**（#59 误判来源），并把厂商名从**类名 / 日志 / 注释**里清掉 | `OpenAiCompatEmbeddingClient` |
+| **P2** | `embeddingDimensions` 注释补全 **"改维度 = 改配置 + 删索引重建"** 的完整操作步骤；yml 同步加注释 | `config/AiProperties.java`；`resources/application.yml` |
+| **P3** | **`encoding_format` 可配**：新增 `embedding-send-encoding-format`（默认 true；个别平台不认该字段时置 false） | `AiProperties` + `OpenAiCompatEmbeddingClient` + yml |
+| 附带 | 同步更新被重构影响的注释引用 | `AiClient`（§5.3 说明）、`AiConcurrencyGuard`（闸门挂点清单） |
+| **测试** ⭐ | **检索侧测试接缝**：`vectorSearchWithFallback` / `vectorSearch` 由 `private` → **包级可见（只改可见性、不改行为）**；新增 `RagServiceImplVectorFallbackTest` **6 条** | `RagServiceImpl`；新增 `src/test/.../impl/RagServiceImplVectorFallbackTest.java` |
+| **测试** ⭐ | **同步侧测试接缝**：`getAllSpus` / `listIndexedDocIds` / `cleanupInvalidDocs` 放开为**包级可见**，并把 ES 的 **bulk 写入 / 单条写入**各抽成一个方法（`bulkUpsert` / `indexDoc`，**行为与异常语义均不变**）；新增 `VectorSyncServiceImplDegradeTest` **14 条** | `VectorSyncServiceImpl`；新增 `src/test/.../impl/VectorSyncServiceImplDegradeTest.java` |
+| 🛡️ **边界 / 加固** ⭐ | 复核共修 **3 处真实问题**（见 **§12.6**）：① `syncAll` 的 `vectors.get(i)` **越界保护**；② `vectorSearchWithFallback` 的 **null/空向量**显式回落；③ **`getAllSpus()` 两处 NPE**（`getList()` 可空 + **`getTotalPage()` 是可空 `Integer`**）→ 改为"**空页即到底**"主终止条件 + `MAX_PAGES` 防御上限 + 触顶告警 | `VectorSyncServiceImpl`；`RagServiceImpl` |
+
+### 12.2 P0 的两条设计决策（为什么这么做）
+
+**① 只有"维度不一致"才让启动失败，外部调用失败只 WARN** —— 延续 §10.4 那条原则
+
+| 情形 | 处置 | 理由 |
+|---|---|---|
+| 返回维度 ≠ 配置 | **抛异常 → 启动失败**，报错含"实际维度 / 配置维度 / 删索引重建步骤" | **确定性配置错误**；带着它启动只会往 ES 写维度不符的向量 |
+| 网络 / 余额 / 401 / 超时 | **WARN，启动继续** | **瞬态外部故障**；若阻断启动，就把"外部 API 挂了"放大成"**服务起不来**"—— 比降级更严重 |
+| 返回空向量 / null | WARN，启动继续 | 不是维度问题；保持"**只有维度不一致才致命**"这条规则足够简单 |
+| `embedding-enabled=false` | **完全不调用外部接口** | 没开向量检索就该零副作用、零 token 消耗 |
+
+**② 用 `@DependsOn` 而不是各自 `@PostConstruct`**
+两个 `@PostConstruct` 之间**没有顺序保证**；若 `EsIndexInitializer` 先跑，就会**按错误维度把索引建出来**（`dims` 建成后不可改 → 还得再删一次）。显式声明依赖，比"靠巧合"可靠。
+
+### 12.3 收益对照（§11.4 的预期 → 实际落地）
+
+| 预期收益 | 落地 |
+|---|---|
+| 换平台 / 换模型 = 改配置 | ✅ 原有能力保留 |
+| 换**协议** / 加**本地模型** / 加**缓存装饰器** = 只加实现，上游零改动 | ✅ **接口已就位** |
+| 配置错误**启动即暴露** | ✅ `EmbeddingSelfCheck` |
+| 配置变更的**操作步骤写进代码** | ✅ `AiProperties` + yml 注释 |
+| 兼容更多平台 | ✅ `encoding_format` 可关 |
+| **可测性**（意外收获） | ✅ 抽接口后 fake 只需实现 2 个方法 → 新增 `EmbeddingSelfCheckTest` **6 条用例**（**手写 fake、不用 Mockito**，顺带绕开本项目 Mockito inline MockMaker 加载失败的环境限制） |
+
+### 12.4 测试结果（2026-09-11 · 改完**立即自检**，并补上降级分支的用例）
+
+```
+mvn -B -o -pl mall-ai/mall-ai-webapi -am test
+mall-common ......... Tests run: 5
+mall-ai-webapi ...... Tests run: 82     ← 56 原有 + EmbeddingSelfCheckTest 6 + VectorFallbackTest 6 + SyncDegradeTest 14
+Failures: 0, Errors: 0, Skipped: 0  →  BUILD SUCCESS（8 个反应堆模块全 SUCCESS）
+```
+
+| 用例集 | 条数 | 覆盖 |
+|---|---|---|
+| `EmbeddingSelfCheckTest` | **6** | 没开就不调用 · 维度一致放行 · **维度不一致 → 启动失败且报错可操作（含 `DELETE` 步骤）** · 瞬态失败不阻断启动 · 空向量按瞬态 · `null` 向量按瞬态 |
+| `RagServiceImplVectorFallbackTest` | **6** | **三条降级分支**（embedding 失败 / 向量检索失败 / 向量结果为空 → 全部回落全文检索）+ **反向保护**（向量有结果时**不得**再多打一次全文，防止被改成"永远回落"）+ **边界**（null 向量 / 空向量） |
+| `VectorSyncServiceImplDegradeTest` | **14** | **同步侧降级**（embedding 失败仍写入全部文档 / 少返向量不越界 / 一条都没回 / 关闭时不调用 / **空 SPU 列表**）+ **`syncSpu` 单条容错**（写入失败不向上抛 / 可搜索写文档 / 不可搜索走删除）+ **`cleanupInvalidDocs` 差集逻辑**（只删 stale / 无 stale 返回 0 / 跳过非数字 id / 跳过 null id / ES 抛错兜底返回 0） |
+
+#### 🔧 补这两组用例时用到的手法：**测试接缝（test seam）**
+
+`vectorSearchWithFallback()` 原是 `private` 且依赖 `ElasticsearchClient`（具体类、难伪造）—— 这就是它一开始"**想测就得先动生产代码**"的原因，当时我选择**先记录而不是擅自扩大改动面**。
+现在的做法是**最小侵入**：把 `vectorSearchWithFallback` / `vectorSearch` 由 `private` 放开为**包级可见**（**不改任何行为**，`fullTextSearch` 本来就是包级可见），同包测试**只重写两个检索入口**：
+
+- 被替换掉的：`vectorSearch`（伪造"ES 挂了 / 返回空"）、`fullTextSearch`（返回可识别的标记结果）
+- **仍然走真实代码的**：`embeddingClient.embed()` 调用、**三条降级判断**、日志 —— 所以测到的是真实降级逻辑，而不是"把整个类 mock 掉"的空壳
+
+> **可讲的经验**：遇到"private + 依赖具体类"导致不可测时，不必上重型 mock 框架，**把方法放开一级可见性**就够；前提是**改动只涉及可见性、不涉及行为**。本项目沙箱里 Mockito 的 inline MockMaker 本就加载失败（见 [[本地双实例锁验证报告-2026-09-09]]），这套"手写 fake + 测试接缝"反而是更稳的路子。
+
+> ✅ **同步侧也已覆盖（2026-09-11 追问后补上）**：`VectorSyncServiceImplDegradeTest` 用同一套手法（放开 `getAllSpus` / `cleanupInvalidDocs` 可见性 + 把一行 `esClient.bulk(...)` 抽成 `bulkUpsert(...)`）测到了"**embedding 失败 → 仍写仅全文文档**"这条核心降级 —— **原实现下这种情况这批商品一条都进不了 ES（`synced=0`），现在能全量写入**。
+
+### 12.6 🔍 复核检查记录（逻辑 / 越界 / 注释 —— 2026-09-11 用户要求"最后再检查一下"）
+
+#### A. 真实问题（**发现即修 + 补用例**）
+
+| # | 问题 | 为什么会出问题 | 处置 |
+|---|---|---|---|
+| **1** | 🛡️ **`syncAll` 的 `vectors.get(i)` 越界** | `embedBatch` 的返回**不保证**"条数 == 入参条数"（少返、部分失败都可能）→ `get(i)` 抛 `IndexOutOfBoundsException`，被外层 catch 成"整批同步失败" → **该批商品又是全部进不了 ES**，等于把刚修好的降级又绕回去了 | 改为 `i < vectors.size()` 才取，取不到按"仅全文"处理并**计入 `vectorDegraded`**；补 2 条用例（**入参 3 条只回 1 条** / **一条都不回**） |
+| **2** | 🛡️ **`vectorSearchWithFallback` 的 null / 空向量** | `embed()` 若返回 `null` → 进 `vectorSearch` 后以 **NPE** 形式被 catch（行为对、但日志难读）；返回**空数组**则白跑一次 ES 向量检索 | 显式判断 `null || length == 0` → 直接回落全文并打清楚日志；补 2 条用例 |
+
+#### B. ✅ 原"发现但未改"的一项 —— 已在你确认后一并修复
+
+| # | 位置 | 隐患 | 处置（本次已改） |
+|---|---|---|---|
+| **3** | `getAllSpus()`（分页循环） | ① `spuPage.getList()` 为 `null` → **NPE**；② 🔴 **`getTotalPage()` 声明是 `Integer`（可空）**，原来直接 `totalPage <= page` 会**自动拆箱 NPE**；③ totalPage 异常大 → 持续翻空页 | 改为：`getList()` 为 null/空即 `break`（**"空页 = 到底"作为主终止条件，不再依赖 totalPage 可信**）+ `getTotalPage()` 显式判 `null` + 新增 `MAX_PAGES = 200` 防御上限 + 触顶打 **WARN**（既不会无限循环，也不会静默截断） |
+
+#### C. 注释完整性检查（逐项）
+
+| 检查点 | 结论 |
+|---|---|
+| 新增/改动的方法是否解释**"为什么"**（而非只说 what） | ✅ `vectorSearchWithFallback`（修的是什么 / 现在的语义）、`bulkUpsert`（为什么抽这一行）、`EmbeddingSelfCheck`（两类失败为何区别对待）、`EmbeddingClient`（为什么要有这个接口） |
+| **测试接缝**是否标注清楚（避免后人误以为是漏写 `private`） | ✅ 4 处都写了"**包级可见（不是 private）：单测接缝**" |
+| 每个测试类是否有**覆盖矩阵** | ✅ 3 个测试类都有表格说明"覆盖什么、为什么" |
+| "未来维护注意"是否写明 | ✅ 补了两处：① `EmbeddingClient` 加**第二个实现**时上游按类型注入会歧义 → 需 `@Primary`/`@Qualifier`；② `@DependsOn("embeddingSelfCheck")` 与**类名隐式耦合**，改名不同步会**启动即报错（不静默）** |
+| 配置项的操作要求是否写进代码 | ✅ `AiProperties.embeddingDimensions` 与 `application.yml` 都写明"**改维度 = 改配置 + 删索引重建**"两步 |
+| 历史误导是否清掉 | ✅ 删掉"**免费调用**"（#59 误判来源）；厂商名从类名/日志/注释移除，只保留"原名是什么、为什么改"的说明 |
+
+#### D. 原"未覆盖"两项 —— 已全部补上
+
+| 项 | 现状 |
+|---|---|
+| `syncSpu()` 单条的**写入失败容错**（含"向量维度不对被 ES 拒绝"） | ✅ 已测：把 ES 单条写入抽成 `indexDoc` 接缝 → **断言不向上抛异常**（只记 error）；另加两条："可搜索 → 写文档"、"不可搜索 → 从 ES 删除" |
+| `cleanupInvalidDocs` 的**差集逻辑** | ✅ 已测：把 ES 拉取抽成 `listIndexedDocIds` 接缝 → **5 条用例**覆盖：只删 stale / 无 stale 返回 0 / 跳过非数字 id / 跳过 `null` id / **ES 抛错兜底返回 0 不影响主流程** |
+
+### 12.5 面试话术（P0~P3 完成后的版本）
+
+> "向量化这块我做过一次'可替换性'加固。**配置层**早就解耦了：平台地址、Key、模型名、维度全在配置里，换一家 OpenAI 兼容的平台**只改环境变量**。
+> 但我发现**抽象层还差一步** —— 上游直接注入的是具体类，于是我抽了 `EmbeddingClient` 接口，实现改名 `OpenAiCompatEmbeddingClient`（原名把**厂商写进了类名**，注释里甚至写着'免费调用'，那条早就过期了，还害我们误判过一次）。现在换协议、加本地模型、加缓存装饰器都**只加实现，上游一行不改**。
+> 更关键的是我加了**启动自检**：向量维度**建索引时不可变**，而代码原来**不校验'模型实际维度 vs 配置维度'**，这种错只会在检索时才炸。我的策略是**区分两类失败** —— **维度不一致是确定性配置错误，直接让启动失败**并给出'删索引重建'的步骤；**网络/余额这类瞬态故障只告警、不阻断启动**，因为把'外部 API 挂了'放大成'服务起不来'是更严重的故障；运行期我已经有降级兜底（向量失败 → 回落全文检索）。"
+
+---
+
+**关联文档**：[[TODO文件]]（状态源 #32/#48/#58/#59/#60/#61/#63/#64）、[[商品与秒杀扩容方案]]（#63 修复 + 商品/秒杀扩容实施方案）、[[AI导购Agent升级方案]]（Agent 完整方案 + P0 清单与实施记录）、[[Python模拟数据与AI并发测试方案]]（模拟数据完整方案 + §〇.1 复核）、[[AI模型名停用风险与thinking参数改造方案]]（§3.1 实验 / §4.5 可配化 / §4.6-4.7 Spring AI 与 Boot 升级评估 / §十一 实施与部署记录）、**[[问题解决--服务注册与网关路由]]（§八 插曲 1/2 的完整排查与话术）**、[[问题解决--容器构建与编排卫生]]（配置不在版本控制这一类问题）、[[TODO第三批实现与原理]]（正册：跨机集群等）、[[TODO已完成]]、[[TODO第二批实现与原理]]（§5.4.5 #21 当初为何改用 `deepseek-chat`）

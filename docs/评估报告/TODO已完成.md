@@ -537,3 +537,71 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 **⚠️ 生产开关当前为 `true`**；**回滚三级**：① 关开关（改 `.env` + `docker compose up -d mall-ai`，~45s）② 换回 jar + 镜像（`before-step4`）③ 连 compose 一起回。
 **已知边界**：Agent 路径不发 `categories` 事件；`get_stock` 只含常规库存（不含秒杀）；成本约为旧路径 2~3 倍（工具轮 + 收敛轮）。
 **衍生/未了**：**#61 外部端到端探活**、**#62 mall-ai 偶发 500（`AccessDeniedException`，已定性为 ERROR 派发次生现象，非 Agent 问题）** 仍在 [[TODO文件]] 跟踪。
+
+---
+
+## 十八、#63 ES 索引 mapping 缺陷修复 + #59 余额问题解决 + 向量链路加固（2026-09-11 完成并复核）
+
+> **来源**：为评估"是否把商品从 20 扩到 60"而对 ES 链路做**只读取证**时**顺带发现**的存量缺陷。
+> **完整叙述**：[[TODO第三批实现与原理-1]] **§九**（#63 复核与修复）/ **§十**（#59 → #31 前置解除）/ **§十一·§十二**（Embedding 可替换性评估与实施）；**实施方案**：[[商品与秒杀扩容方案]] §一。
+> **本条由 [[TODO文件]] 正文迁出**（2026-09-11，原 `### 63.` 段与 `#59` 表行）。
+
+### 18.1 #63 —— ES `cool_shark_mall_ai` 的 mapping 与代码期望完全不符 ✅ 已修复并复核
+
+**缺陷**：线上索引是 **dynamic mapping**（无 `semanticVector`、无 IK 分词、`brandName` 是 `text`、`suggestField` 是 `text`、`listPrice` 是 `float`），而 `EsIndexInitializer` 期望的是 `dynamic:false` + `ik_max_word` + `keyword` + `dense_vector(1024)` + `completion`。
+🔴 **该初始化器只在索引"不存在"时才创建 → 这份漂移永不自愈**（索引 `creation_date` ≈ 2026-07-31，早于初始化类上线）。
+
+**实测后果**：① **品牌过滤恒失效**（`term brandName` = 0 命中）② **`/ai/search/suggest` 补全恒返回空** ③ **中文被切成单字**（`name^5/title^4/…` 的权重设计在单字粒度上失效，能匹配但精度差）④ **`semanticVector` 字段不存在 → #31 无处写入向量**。
+
+**修复动作**（用户执行，2026-09-11 07:37）：备份现场（`_mapping`/`_settings`/`_count` 落盘）→ `docker compose stop mall-ai` → `curl -X DELETE …/cool_shark_mall_ai` → `up -d`（`EsIndexInitializer` 重建索引 + `SyncOnStartupRunner` 全量同步 19 条）。
+
+**验收（AI 用 `ai-deepseek` 账号独立复验，不是只看用户回贴）**
+
+| 项 | 修前 | 修后 |
+|---|---|---|
+| `dynamic` | 未设置（= `true`） | **`false`** ✅ |
+| `name/title/description/semanticText` | 4 个单字 `<IDEOGRAPHIC>` | **`小米`/`手机`（`CN_WORD`）** ✅ |
+| `brandName/categoryName/pictures/tags` | `text` | **`keyword`** ✅ |
+| `listPrice` / `sales` | `float` / `long` | **`double` / `integer`** ✅ |
+| `semanticVector` | **不存在** | **`dense_vector dims=1024 similarity=cosine index=true`** ✅ |
+| `suggestField` | `text` | **`completion` + `analyzer=ik_max_word`** ✅ |
+| `term brandName="小米"` | **0** | **4** ✅ |
+| 补全 | **恒空** | **`prefix=小米` → 返回「小米 14」** ✅ |
+| 文档数 / 带向量文档数 | 19 / 0 | 19 / 0（`embedding-enabled=false`，符合预期）✅ |
+
+**召回回归（担心的"keyword 化导致召回塌"未发生）**：`小米手机` 8 · `小米` 4 · `手机` 7 · `华为` 3 · `笔记本` 5 · `旗舰` 3；价格 ≤5000 + 升序排序正常。
+**原因**：`semanticText` 里本身就写着「品牌：小米 | 分类：手机 | 标签：…」→ 品牌/分类召回由它（权重 3）兜住。
+
+**⚠️ 方法论教训（AI 自己犯的）**：验收命令 `grep -c ik_max_word` 期望 **4** 是错的 —— ① `grep -c` 数的是**行数**，而 mapping 是**单行 JSON**（永远只返回 0/1）；② 实际出现次数是 **5**（4 个 text 字段 + `suggestField`）。正确写法 `grep -o … | wc -l`。
+→ **"验收命令本身也要被验收"**；所幸关键那条 `_analyze` 是确定性的，用户看到 "1 ≠ 4" 时没有误判为失败。
+
+**🔴 风险已解除**：`semanticVector` 字段就位 → **#31 之后只需改配置 + 同步，零停机、不必再删索引**。
+
+### 18.2 #59 —— 硅基流动余额不足（embedding 402）✅ 已充值解决
+
+| 项 | 内容 |
+|---|---|
+| 原问题（2026-09-10） | 新 key 认证有效（`GET /v1/models` = 200），但 `POST /v1/embeddings` 返 **402** `{"code":30001,"message":"Sorry, your account balance is insufficient"}` → **`BAAI/bge-m3` 调用被拒**；生产 `embedding-enabled: false` 故**线上零影响**，但**阻断 #31** |
+| 处置 | 用户 **2026-09-11 充值 10 元** |
+| 验证（AI 用生产 key 实测） | `POST https://api.siliconflow.cn/v1/embeddings`（`BAAI/bge-m3`）→ **HTTP 200**、**`dims = 1024`**、`usage{prompt_tokens:7}`、`model=BAAI/bge-m3` |
+| ⭐ 额外收获 | **1024 维与 mapping 的 `dense_vector dims=1024`（=`cooxiao.ai.embedding-dimensions: 1024`）完全吻合** → #63 重建出的向量字段与后端要写的向量**同维、不会错配** |
+| 结论 | **#59 关闭；#31 前置正式解除**（顺序决策见 [[商品与秒杀扩容方案]] §十：**先 #63 → 再 #31**） |
+
+### 18.3 衍生加固（无 TODO 编号，同日完成）：向量链路降级 + Embedding 可替换性 P0~P3
+
+**为什么顺手做**：#63 的复核暴露出**同一类根问题** —— "**代码/配置与真实环境的契约不一致，却没有任何一方主动校验**"（#59 的 402、#63 的 mapping 漂移，都是这个模式）。
+
+| 块 | 内容 | 落点 |
+|---|---|---|
+| **向量链路降级** | `ask()` 三种失败（embedding 失败 / 向量检索失败 / 结果为空）**全部回落全文检索**；`syncAll`/`syncSpu` 向量化失败**降级为"仅全文索引"**（原实现下这批商品**一条都进不了 ES**，`synced=0`）并在汇总**显式暴露降级条数**；修正 `vectorSearch()` 那条"日志说降级、实际只 return 空"的日志 | 补册 **§10.4** |
+| **Embedding 可替换性 P0~P3** | **P1** 抽 `EmbeddingClient` 接口（**依赖倒置**）+ 实现 `git mv` 改名 `OpenAiCompatEmbeddingClient` + 两处注入改接口；**P0** 新增 `EmbeddingSelfCheck` 启动自检（**维度不一致 → 启动失败**并给出"删索引重建"步骤；**瞬态失败只 WARN 不阻断**）+ `EsIndexInitializer` 用 `@DependsOn` 保证"自检先跑"；**P2** 维度变更步骤写进 `AiProperties`/yml 注释；**P3** `encoding_format` 可配 | 补册 **§十一 / §十二** |
+| **3 处真实边界修复** | ① `syncAll` 的 `vectors.get(i)` **越界**（外部接口少返向量 → 整批商品进不了 ES）② `vectorSearchWithFallback` 的 **null/空向量** ③ **`getAllSpus()` 两处 NPE**（`getList()` 可空 + **`getTotalPage()` 是可空 `Integer`，原直接比较会拆箱 NPE**）→ 改为"**空页即到底**"主终止 + `MAX_PAGES` 防御上限 + 触顶告警 | 补册 **§12.6** |
+| **测试** | **56 → 82 项全绿**（新增 3 个测试类 **26 条**：`EmbeddingSelfCheckTest` 6 · `RagServiceImplVectorFallbackTest` 6 · `VectorSyncServiceImplDegradeTest` 14）；手法 = **最小侵入的测试接缝**（只放开可见性 / 抽方法，不改行为），Dubbo 用 `java.lang.reflect.Proxy` 伪造，**不用 Mockito** | 补册 **§12.4** |
+
+> **⚠️ 部署状态**：本轮代码改动**尚未构建镜像、未部署**。`embedding-enabled=false` 时"降级 + 自检"均为**死代码**，故可**先单独部署验证零回归**，再翻 #31 开关。
+
+### 18.4 关联
+
+- **原理 / 过程**：[[TODO第三批实现与原理-1]] **§九**（#63 复核与修复，含 §9.6 验收、§9.7 召回回归）/ **§十**（#59 → #31 前置解除）/ **§十一·§十二**（Embedding 可替换性评估与实施）
+- **实施方案**：[[商品与秒杀扩容方案]]（§一 #63 前置修复 · §十 #31 顺序决策 · §1.7 修复执行结果）
+- **仍在跟踪（[[TODO文件]]）**：**#31**（可实施、未实施）· **#64**（秒杀预热 `spu_id` 语义冲突，本次新登记）· **#57**（补两处 schema 漂移发现）
