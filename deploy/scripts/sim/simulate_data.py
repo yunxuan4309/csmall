@@ -62,8 +62,13 @@ USER_PREFIX = os.environ.get("SIM_USER_PREFIX", "testsim")
 #    → 改为 `testsim`：生成 `testsim0001`（11 字符，全字母数字，首字符为字母）✅
 USER_PASSWORD = os.environ.get("SIM_USER_PASSWORD", "Sim123456")
 EMAIL_DOMAIN = os.environ.get("SIM_EMAIL_DOMAIN", "example.com")
-# 明显是假号段（139 + 8 位），既能过手机号正则，又不会撞到真实号码
-FAKE_PHONE_PREFIX = os.environ.get("SIM_PHONE_PREFIX", "1390000")
+# 假号段（**7 位前缀** + 4 位序号 = 11 位）—— 必须同时过服务端两条手机号正则：
+#   注册口 `^1[34589][0-9]{9}$`   下单口 `^1(?:3\d|4[4-9]|…)\d{8}$`（都要求 11 位）
+# 🔴 2026-09-11 实测踩坑：原默认 `1390000` 已被既有 `benchuser01..100` **占满 100 个**
+#    （13900000001~13900000100）→ 注册直接 409「注册手机号已存在」。
+#    实测空闲段：**1390009** / 1390090 / 1390100 / 1391111 / 1380000 / 1890000 / 1990000
+#    → 默认改为 `1390009`（生成 13900090001…），并由 preflight 第 9 项做碰撞预检兜底。
+FAKE_PHONE_PREFIX = os.environ.get("SIM_PHONE_PREFIX", "1390009")
 
 # ===== 🏷️ 模拟数据标识：专用列 `data_source`（2026-09-11 定稿）=========================
 # 目的：让模拟数据**自证身份** —— 单表等值查询即可看出"这行是造的"，不必 JOIN。
@@ -558,7 +563,8 @@ def validate_local() -> List[str]:
 # 预检（fail-fast：任一不过直接退出 —— §〇.1 D7 / §六 清单）
 # =============================================================================
 
-def preflight(conn, days: int, per_day: int, need_seckill: bool) -> List[Dict[str, Any]]:
+def preflight(conn, days: int, per_day: int, need_seckill: bool,
+              n_users: int = 20) -> List[Dict[str, Any]]:
     # 0) 🔴 先用服务端真实正则把"要提交的字段值"全验一遍（不碰网络、不碰数据）
     problems: List[str] = validate_local()
 
@@ -608,6 +614,29 @@ def preflight(conn, days: int, per_day: int, need_seckill: bool) -> List[Dict[st
         problems.append(
             f"data_source 列缺失 {len(missing)}/{len(DATA_SOURCE_TABLES)} 张表："
             f"{', '.join(missing)} → 先重启对应服务让 Flyway 迁移生效（方案 §2.2.9）")
+
+    # 8) 🔴 计划使用的**手机号段 / 用户名段**未被占用
+    #    2026-09-11 实测踩坑：`1390000` 段已被既有 benchuser01..100 占满 100 个
+    #    （13900000001~13900000100）→ 注册直接 409「注册手机号已存在」。
+    #    原来只查了 `testsim%` 的用户名计数、**没查手机号**，所以撞上了才知道 → 现在预先拦。
+    with conn.cursor() as cur:
+        planned = (
+            ("手机号", "phone", [FAKE_PHONE_PREFIX + f"{i:04d}" for i in range(1, n_users + 1)],
+             f"换 `SIM_PHONE_PREFIX`（当前 {FAKE_PHONE_PREFIX}；"
+             f"实测空闲段 1390009 / 1390090 / 1390100 / 1391111 / 1380000 / 1890000 / 1990000）"),
+            ("用户名", "username", [f"{USER_PREFIX}{i:04d}" for i in range(1, n_users + 1)],
+             f"换 `SIM_USER_PREFIX`（当前 {USER_PREFIX}）"),
+        )
+        for label, col, values, hint in planned:
+            clash: List[str] = []
+            for part in _chunks(values):
+                ph = ",".join(["%s"] * len(part))
+                cur.execute(f"SELECT {col} AS v FROM cs_mall_ums.ums_user WHERE {col} IN ({ph})",
+                            tuple(part))
+                clash.extend(str(r["v"]) for r in cur.fetchall())
+            if clash:
+                problems.append(
+                    f"{label}段被占用：{len(clash)}/{len(values)} 个已存在（如 {clash[0]}）→ {hint}")
 
     if problems:
         log("❌ 预检未通过：")
@@ -828,7 +857,7 @@ def main() -> None:
             clean(conn, args.batch, args.apply)
             return
 
-        catalog = preflight(conn, args.days, args.per_day, args.with_seckill)
+        catalog = preflight(conn, args.days, args.per_day, args.with_seckill, args.users)
         if args.preflight:
             log("--preflight 结束：未写入任何数据 ✅")
             return
