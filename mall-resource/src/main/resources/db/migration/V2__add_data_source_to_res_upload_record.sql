@@ -1,0 +1,21 @@
+-- ============================================================
+-- V2: res_upload_record 增加 data_source 列（数据来源标识）
+-- 背景: TODO #48「Python 模拟数据」需要让造出来的数据**自证身份**。
+--       原方案打算复用现有自由字段，但 res_upload_record 根本没有合适的自由字段
+--       （这正是"专用列"方案的优势之一：9 张表一视同仁）；
+--       2026-09-11 用户拍板改为**专用列**，9 张表统一加 data_source。
+-- 设计: NULL = 常规/真实数据；'SIM' = 模拟造数。
+--       值由造数脚本**按影子登记表 cs_mall_sim.sim_entity 回填**，
+--       服务端代码零改动（不读、也不写该列）。
+--       ⚠️ 本表是**上传时服务端写的**，造数脚本没有插入点 →
+--          回填口径为 `user_id IN (登记 user_ref)`（实测该表有 user_id）。
+--       ℹ️ 现状说明（2026-09-11）：造数脚本不含上传动作，本轮不会产生 SIM 行；
+--          本迁移是为后续（如模拟上传头像）预留，列先加上无副作用。
+-- 纪律: 🔴 只走迁移文件，**禁止手工 ALTER** —— 手工加列后再执行本迁移会报
+--       `Duplicate column name 'data_source'` → Flyway 失败 → **应用启动失败**。
+--       幂等性由 flyway_schema_history 保证（MySQL 8 不支持 ADD COLUMN IF NOT EXISTS）。
+-- 回滚: ALTER TABLE ... DROP COLUMN data_source; 并删除本迁移的 flyway_schema_history 行。
+-- 位置: 列追加在表末尾（不用 AFTER，避免因依赖具体列名而在新老环境产生漂移）。
+-- ============================================================
+ALTER TABLE `res_upload_record`
+    ADD COLUMN `data_source` varchar(16) DEFAULT NULL COMMENT '数据来源：NULL=常规；SIM=模拟造数(#48)';
