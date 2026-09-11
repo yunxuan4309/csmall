@@ -119,18 +119,19 @@
 | 6 | **即时快照**：老机执行 `/data/csmall/backup/backup-db.sh`（复用 #29 脚本；🔴 `ai-deepseek` 对 `/data/csmall/backup` **无写权限**（实测 `Permission denied`）→ **必须你用 `ecs-user` 执行**）<br>ℹ️ cron 每天 02:30 已有备份（`cs_mall_20260911_0230.sql.gz` 52K），但造数前需**当下**再打一份；实测六库 gz 后仅 ~52KB，成本可忽略 | ★用户 | ⏳ 待做 |
 | 7 | **校准写链路**：`--days 1 --per-day 50`（约 2~3 单）→ 校准注册正则 / 加购下单字段 / 订单登记 / 拿 token | ★用户跑 · AI 复核 | ⏳ 待做 |
 | 8 | **dry-run 清理演练**（清理 → 比对照基线） | ★用户 · AI 复核 | ⏳ 待做 |
-| 9 | 写 `load_test.py` + 按 §6.4 三段式**录像**（浏览档可先做） | AI 写 · ★用户录 | ⏳ 待做 |
+| 9 | 写 `load_test.py` + 按 §6.4 三段式**录像**（浏览档可先做） | AI 写 · ★用户录 | ✅ **脚本已完成并自检通过**（`--check` 全绿 + 并发 5 冒烟 RPS 33.9/成功率 100%）；⏳ **待你录像** |
 | 10 | 秒杀动作实现（`--with-seckill` 目前只做预检） | AI | ⏸️ 未实现（可选，看是否要造秒杀数据） |
 
-> 🆕 **2026-09-11 晚 · 进度更新**：**C-0 / C-1 / C-2 / C-3 / C-4 / C-5 / C-6 全部完成** ✅
-> · C-1/C-3/C-4（AI）：4 迁移文件 + 脚本回填改造 + 只读预检；自检 `py_compile` 通过 · md5 字节一致 · 结构断言 `STRUCT_CHECK_OK`
-> · **C-2（用户）**：镜像重建 `19:05` → 4 库迁移 **V3/V7/V6/V2** 全部 `success=1`，**9 张表 `data_source` 就位**（AI 已独立复核，见 §F）
-> · **C-0（用户）**：新机 `pymysql 1.0.2`（免 sudo 路径）
-> · **C-5（用户）**：`cs_mall_sim` + `sim_baseline`/`sim_batch`/`sim_entity` 三表
-> · **C-6（用户）**：快照 `/data/csmall/backup/cs_mall_20260911_1856.sql.gz`（52K，含 6 库；**不含 `data_source` 属正常** —— 它正是"迁移前"的基线）
-> 🔴 **下一步 = C-7 校准写链路**（`--preflight` 再 `--days 1 --per-day 50`），跑完进入 C-8 dry-run 清理演练。
-> ⚠️ **顺序不可颠倒**：脚本有"`data_source` 列缺失即 fail-fast"的门禁；现在迁移已生效，门禁会通过。
-> 📌 **回滚点**：`/data/csmall/jars/backup-20260911-datasource/`（4 个旧 jar）+ `cs_mall_20260911_1856.sql.gz`（迁移前快照）。
+> 🆕🆕 **2026-09-11 晚 · 进度更新（C-0 ~ C-9 脚本全部完成）** ✅
+> · **C-0~C-6 完成**：免 sudo 装 pymysql · 4 迁移文件 · 镜像重建（V3/V7/V6/V2 全部 success=1）· 脚本回填改造 · 只读预检 · 影子库 · 快照
+> · ✅ **C-7 校准通过（第 5 次真跑）**：`浏览 38 / 加购 8 / 下单 4（已支付 4，支付失败 0）/ 失败 0`，🏷️ 合计标记 **60 行** + `回填校验通过`；**9 张表 SIM ⇄ 登记逐一对齐**、**6 项漏标检查全 0**；🎯 **`oms_payment_record` 等"服务端写的表"被按 `user_id` 兜底回填成功**（方案最关键的机制验证通过）
+> · ✅ **C-8 清理演练完成**：批次 1925 精确删 **56 行**（含**未登记**的 3 条订单项，靠 `order_child` 模式照样删掉）
+> · ✅ **C-9 `load_test.py` 已写好并自检通过**：`--check` 全绿（含"HTTP 200 但 state=401 能被识别"）+ 并发 5 冒烟 `RPS 33.9 / 成功率 100% / p50 134ms`
+> · 🧪 **校准共抓出 8 处（G1~G8）**：见 §G。其中 **G8 是既有缺陷**（普通订单库存扣减 MQ 链路整体失效）→ 已登记 **TODO #65**
+> 🔴 **下一步 = 录像**（§6.4 三段式）：三个窗口并排 → 录 30~60s 静默基线 → `python3 load_test.py --steps 20,50,100 --duration 45` → 录曲线回落 + Trace
+> 📌 **回滚点**：`/data/csmall/jars/backup-20260911-datasource/`（4 个旧 jar）+ `cs_mall_20260911_1856.sql.gz`（迁移前快照）
+> 📦 **当前演示数据**：批次 `sim_20260911_1930`（status=finished）—— 20 用户 + 8 购物车 + 4 已支付订单 + 订单项 + 支付记录 + 20 登录日志，**全部 `data_source='SIM'`**；要清理：`--clean --batch sim_20260911_1930 --apply`
+
 
 
 ### D. 今晚目标
@@ -819,7 +820,11 @@ ThreadingHTTPServer(("0.0.0.0", 9999), Handler).serve_forever()
  ★ 产出：一条可复用的「登录 → 加购 → 下单 → 支付」链路 + 可用 token
 
 【② 可观测展示与录像（~半天 · ★ 本方案初衷的交付物）】
- 5. 写 load_test.py：先做"浏览档"（🔴 **修正：需带 token** —— 浏览接口在 `.anyRequest().authenticated()` 之下，见 §6.2）→ 20 → 50 → 100 阶梯
+ 5. ✅ **`load_test.py` 已写好**（`deploy/scripts/sim/load_test.py` · 只读浏览档）：
+      · **自检**：`python3 load_test.py --check`（1 次不带 token 验证"HTTP 200 但 state=401"能被识别 + 20 次登录 + 自动发现真实 SPU id + 2 次带 token 浏览）
+      · **录像主命令**：`python3 load_test.py --steps 20,50,100 --duration 45 --json load_result.json`
+      · 🔴 **需带 token**（浏览接口在 `.anyRequest().authenticated()` 之下 —— 见 §6.2）
+      · 📏 **实测标定（2026-09-11 冒烟，新机内网）**：**并发 5 → RPS 33.9 · p50 134ms · 成功率 100%** → 阶梯可据此调整（若 20 并发已足够出曲线，不必硬上 100）
  6. 开 SSH 隧道（§6.1）→ 按 §6.4 三段式录：静默 → 加压（SkyWalking 曲线 + 拓扑）→ 收尾
  7. 用 ① 的 token 加"**限流档**"：压 新增订单 / 秒杀订单提交 过 QPS(20 / 10)
     → 录 Sentinel 的 **block 曲线**
@@ -931,6 +936,19 @@ ssh -i "%USERPROFILE%\AppData\Local\csmall-ssh\ai-deepseek_key" `
 ```
 
 **录像机位建议**：三个窗口并排 —— **SkyWalking Load 曲线** + **Sentinel 实时监控** + **脚本滚动日志**（能看到 RPS / 成功率 / 耗时），观众才会信这是真打的。
+
+**🎬 录像执行命令（2026-09-11 已就绪）**
+```bash
+# 新机会话（脚本已预置在 /tmp/sim/）
+cd /tmp/sim
+python3 load_test.py --check                                   # ① 先自检（几秒，不压测）
+# ② 三个窗口并排就位 → 开始录屏 → 录 30~60s 静默基线
+python3 load_test.py --steps 20,50,100 --duration 45 --json load_result.json   # ③ 阶梯加压
+# ④ 停压后录曲线回落 + 打开 SkyWalking Trace
+```
+> 📏 **实测标定**：并发 **5** → **RPS 33.9 / p50 134ms / 成功率 100%**（新机内网，2026-09-11）。
+> 若 20 并发就已明显抬升曲线，**不必硬上 100** —— 录像要的是"有对比的曲线"，不是把服务压到降级点。
+> ⚠️ 脚本内置**安全阈值**：单档失败率 > 20%（且样本 ≥ 50）自动中止该档，避免把服务打挂。
 
 ### 6.5 ⚠️ 展示前必须知道的 4 个边界
 
