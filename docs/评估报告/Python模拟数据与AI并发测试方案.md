@@ -122,7 +122,7 @@
 | 9 | 写 `load_test.py` + 按 §6.4 三段式**录像**（浏览档可先做） | AI 写 · ★用户录 | ✅ **脚本已完成并自检通过**（`--check` 全绿 + 并发 5 冒烟 RPS 33.9/成功率 100%）；⏳ **待你录像** |
 | 10 | 秒杀动作实现（`--with-seckill` 目前只做预检） | AI | ⏸️ 未实现（可选，看是否要造秒杀数据） |
 | 11 | 🆕 **录像**（§6.4 三段式：静默基线 → 阶梯加压 → 收尾；机位 = SkyWalking + Sentinel + 脚本日志三窗口并排）<br>用户决定**稍后再录** → 已登记为待办 | ★用户 | ⏸️ **待做**（脚本已就绪，见 §5.1） |
-| 12 | 🆕 **补 8 个服务的 Sentinel dashboard 地址**（#66）—— ✅ **仓库 compose 已改好**（8 处新增，每处一行 `SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858`）；⏳ **待你在老机应用**（见下方 A 步清单） | ★用户 | ⏳ **待执行（A 步）** |
+| 12 | 🆕 **补 8 个服务的 Sentinel dashboard 地址**（#66）—— ✅ **仓库 compose 已改好**（8 处新增）；✅ **用户已应用并生效**（详见 §6.2 G9 的复核结论） | ★用户 | ✅ **已完成**（2026-09-11 20:17；复核：11/11 服务有该变量 · 面板轮询 10 个客户端端点 · 最近 10 分钟拉取失败 0 次） |
 
 > **🅰️ A 步执行清单（#66）—— 安全前提已核实，可照做**
 > ① **安全前提**：实测 **老机** `/data/csmall/docker-compose.yml` 的 md5 = 仓库副本（`55e192ee…`）→ **可安全覆盖**；
@@ -172,6 +172,8 @@
 | **F1** | **别按固定等待时间猜"生效了没有"** | 这 4 个服务**启动要 2~3 分钟**（实测 `Started …Application in`：ums **151.9s** / order **170.3s** / seckill **176.5s** / resource **106.5s**），且 **Flyway 依赖 DataSource，要等 `HikariPool-1 - Starting...` 之后才跑**。<br>👉 **判定标准 = 日志里出现 `Started …Application in`**；否则你会看到"容器 running 但日志为空"的假故障（我第一次复核就在启动 2.5 分钟时误判为"迁移没执行/疑似崩溃"）。 |
 | **F2** | **Nacos/Dubbo 报错不要当成自己改坏了** | `Server check fail, please check server nacos ,port 9848 is available` 与 `Failed register interface application mapping ... error code: 5-10` 是**既有环境噪声**。<br>👉 **做对照实验**：拿**本次没重建**的服务比。实测未动的 `csmall-product` 有 **7 条** Dubbo 报错 + 126 行栈、`csmall-front` 134 行栈，比重建的 4 个服务**更多** → 证明与本次变更无关。 |
 | **F3** | **别用 `grep 'Caused by'` 数异常** | 会命中 Dubbo 提示语里的 "This may be **caused by** configuration server disconnected" → 计数虚高（我靠它得出过错误的"异常链 7~9 条"）。<br>👉 用 **异常类型指纹** `grep -oE '[a-zA-Z][a-zA-Z0-9._]*\.(Exception\|Error)' \| sort -u`，并与未动服务逐类比对**有没有新面孔**。 |
+| **F4** | 🔴 **别一次 recreate 一大片服务 —— 会"启动踩踏"**（2026-09-11 实测） | 给 8 个服务**同时** `--force-recreate` 后：启动耗时 **221~319 秒**（`resource` 221s / `gateway` 223s / `search` 297s / `ams` 297s / `front` 307s / `ums` 309s / `ai` 311s / `product` 319s），而之前**只重建 4 个**时是 **107~176 秒** → **慢 2~3 倍**；`load average` 峰值 **7.45**（4 核）。<br>👉 **下次分批**(2~3 个一批)，并且**等 `Started` 出现再判定**（本次等待 5 分钟时只完成 1/8，容易误判为"卡死"）。 |
+| **F5** | 🔴 **别用"应用名模式"判断服务起没起 —— 网关的主类名不一样** | 本次我误报"`csmall-gateway` 13 分钟还没起来"，实际它 **223 秒就起来了**：日志行是 `c.c.mall.gateway.MallGatewayWebApi - Started MallGatewayWebApi in 223.421 seconds` —— **主类叫 `MallGatewayWebApi` 而不是 `MallGatewayApplication`**，我的 grep 模式 `Started Mall[A-Za-z]*Application` 匹配不到。<br>👉 判据要**按服务自适应的多模式**（`Started .*Application in` / `Started .*WebApi in` / `Netty started on port` / `Tomcat started on port`），或用**外部探活**（`curl /actuator/health`）交叉验证 —— 本次正是 `/actuator/health` 200 + 浏览接口返回 mall-front 的 401 才证明"链路是通的"。 |
 
 > ✅ **2026-09-11 晚复核实录（4 项全绿）**：镜像重建于 `19:05`、镜像内 `app.jar` 字节数与新 jar 逐一相符；`flyway_schema_history` 出现 **V3/V7/V6/V2（success=1）**；Flyway 日志 `Migrating schema … to version "3/7/6/2 …"` + `Successfully applied 1 migration`；**9 张表** `data_source` 全部 `varchar(16) nullable=YES`（总数=9）；4 条网关路由冒烟全 **200**。
 
@@ -973,6 +975,12 @@ ssh -i "%USERPROFILE%\AppData\Local\csmall-ssh\ai-deepseek_key" `
 > ③ 或改看 **SkyWalking**（`mall-front` 的 Load 曲线**确实在动** —— 用户截图实测 `Load 1520.846 calls/min`、`Latency 124ms`、`Apdex 0.983`）✅
 > 📌 **好消息**：**"限流档（block 曲线）"不受影响** —— 有流控规则且配了面板的正是 **`mall-order`（新增/支付订单 QPS 20）** 与 **`mall-seckill`（秒杀提交 QPS 10）**，它们**都会上报**。
 > ⇒ 已登记 **TODO #66**（补 8 个服务的 dashboard 地址）。
+> ✅ **2026-09-11 已修复并验证（用户执行 recreate + AI 独立复核）**：
+> · 仓库 compose 加 **8 处**（`git diff --stat` = 恰好 8 insertions）→ 传输到老机后 md5 `514d14110f05f6dda02edc0235402b7a` **与仓库一致** → `docker compose up -d --force-recreate` 8 个服务**成功**
+> · `docker inspect` → **11/11 服务都有** `SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD=sentinel:8858`
+> · 🎯 **决定性证据（面板自己的日志）**：面板正在**轮询客户端端点** `http://172.18.0.x:<transport端口>`（端口 **8870 / 8872 / 8876 / 8880 / 8719** 正对应各服务 yml 里配的 `sentinel.transport.port`），且**最近 10 分钟 `Failed to fetch metric` = 0 次** ⇒ **注册与指标拉取都已打通**。（面板日志里那批 ERROR 只出现在 `12:17~12:18` 的重建窗口内 —— 是"面板去拉一个还没起完的实例"，属正常过渡 ✅）
+> · ℹ️ **面板默认演示凭据 = `sentinel` / `sentinel`**（实测登录成功）。⚠️ 该 build 的 app 列表 API 路径我没找到（`/api/app/brief` 等均 404）→ **"UI 里出现了哪些 app"需你自己看一眼**（我无法程序化确认这一步）。
+> · 🔴 **框架层例外（本轮新发现）**：**`mall-gateway` 的 jar 里没有 `spring-cloud-alibaba-sentinel-gateway`**（也没有 `sentinel-datasource-nacos`）⇒ **网关的路由从来就不是 Sentinel 资源**，补上地址也**不会有它的 URL 曲线**；且网关是 WebFlux，`SentinelWebInterceptor`（MVC 适配器）对它不生效。⇒ **看 pass 曲线请压 `mall-front` / `mall-product` 这类 MVC 服务。**
 
 #### 6.2.1 🎯 限流档"靶子"怎么选 —— **实测结论（2026-09-11，别凭直觉）**
 
