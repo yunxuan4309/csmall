@@ -102,6 +102,7 @@
 | 新机运行环境 | `python3 -m venv ~/sim-venv`（系统 pip 被 PEP 668 拦）；`pymysql` 未装需装；HTTP 走内网（新机→老机 3306/6379/10087 全通） |
 | **Flyway 下一个可用版本号** | `cs_mall_ums=`**V3** · `cs_mall_oms=`**V7** · `cs_mall_seckill=`**V6** · `cs_mall_resource=`**V2**（pms 已到 V14、ams 已到 V6，本次不用） |
 | Flyway 配置 | `enabled: true` + `baseline-on-migrate: true` + `baseline-version: 0`；迁移目录 `<模块>/src/main/resources/db/migration/`（**mall-resource 无 `-webapi` 后缀**） |
+| 🔴 **五层命名（最易错）** | 同一个服务实测有 **5 个不同名字**，而 `docker restart` **只认容器名**：容器名 **`csmall-ums`** ｜ compose `service:` 名 `mall-ums` ｜ 镜像名 `csmall-mall-ums` ｜ SkyWalking 服务名 `mall-ums`（ENTRYPOINT `-DSW_AGENT_NAME=mall-ums`）｜ Maven 模块目录 `mall-ums/`。🔴 实测**老机 21 个容器里没有任何 `mall-*`** → 照文档旧写法执行会 `No such container` |
 | 数据基线 | `cs_mall_sim` **不存在**（待建）· `test_sim_%`=**0** · 全库 **0 外键** · 在售 SKU **36** 个 / 库存约 **1456** 件 |
 | 代码/分支 | `master` **ahead 3**（`6aafb1a` 交接章节 + `75f9dfb` 标识 + `0116001` §六；**未推送，等用户确认**）；⚠️ mall-ai 的"降级 + 启动自检"改动**仍未部署**（与本方案无关） |
 
@@ -110,7 +111,7 @@
 | # | 事项 | 谁 | 状态 |
 |---|---|---|---|
 | 1 | 4 个 **Flyway 迁移文件**：`ums V3` / `oms V7` / `seckill V6` / `resource V2`，各表加 `data_source` | AI 写 | ✅ **已落盘**（2026-09-11 晚；只加文件、未手工 ALTER） |
-| 2 | 逐个**重启** 4 个服务让 Flyway 迁移生效（每个 ~40-60s，低峰）<br>⚠️ **容器名是 `csmall-*`**（实测 `docker ps`）：`csmall-ums` / `csmall-order` / `csmall-seckill` / `csmall-resource` —— **不是** `mall-*`（那是 SkyWalking 服务名与 Maven 模块名）<br>一条命令：`docker restart csmall-ums csmall-order csmall-seckill csmall-resource` | ★用户 | ⏳ **待做（当前阻塞点）** |
+| 2 | 逐个**重启** 4 个服务让 Flyway 迁移生效（每个 ~40-60s，低峰）<br>⚠️ **必须用容器名 `csmall-*`**（`docker restart` 不认 service 名）—— 详见 §B「五层命名」<br>一条命令：`docker restart csmall-ums csmall-order csmall-seckill csmall-resource` | ★用户 | ⏳ **待做（当前阻塞点）** |
 | 3 | 脚本改「**按登记表回填 `data_source`**」+ **撤回**借用字段（`tag=SIM`、订单项 `data={"sim":…}`） | AI | ✅ **已完成**（新增 `backfill()` / `verify_backfill()`；借用字段已撤回；顺带修掉 `oms_payment_record` 漏删） |
 | 4 | 执行前**只读核对**：9 张表是否已存在 `data_source`（存在则先决策，别硬跑迁移） | AI | ✅ **已完成**（实测 6 个 schema **0 个** `data_source` 列 → 迁移可安全执行） |
 | 5 | 在**老机**建影子库（跑 `init_sim_db.sql`） | ★用户 | ⏳ 待做 |
@@ -412,7 +413,9 @@ ALTER TABLE `res_upload_record`   ADD COLUMN `data_source` varchar(16) DEFAULT N
 | `cs_mall_resource.res_upload_record` | **服务端**（上传） | `user_id IN (登记 user_ref)` | 登记表 |
 
 > ✅ **实测幸运点（2026-09-11 只读核对 `information_schema`）**：这 5 张"服务端写的"表**全部都有 `user_id`**（唯一没有 `user_id` 的是 `oms_order_item`，它已由脚本按主键登记）→ 所以回填**统一用 `user_id IN (登记 user_ref)`**，键可靠、**不需要 JOIN 订单**。
-> 🔴 **连带修复一处清理漏洞**：`oms_payment_record` 原先在清理清单里挂的是 `pk`（按登记主键）模式，但**脚本从不登记支付记录** → 清理时会走"无登记 → 跳过" → **支付记录静默残留**（全库 0 外键，删漏不会报错）。已改为 `user`（按 `user_id`）模式，与回填口径统一。
+> 🔴 **连带修复一处清理漏洞（2026-09-11 逐链取证证实）**：`oms_payment_record` 原先在清理清单里挂的是 `pk`（按登记主键）模式，但**脚本从不登记支付记录** → 清理时会走"无登记 → 跳过" → **支付记录静默残留**（全库 0 外键，删漏不会报错）。已改为 `user`（按 `user_id`）模式，与回填口径统一。
+> **证据链（4 环全部实测，可复核）**：① 改前 `CLEAN_ORDER` = `("cs_mall_oms","oms_payment_record","pk","id")`（`git show 6aafb1a:deploy/scripts/sim/simulate_data.py` 可验）② 脚本全部 `registry.register()` **只有 4 处**：`ums_user` / `oms_cart` / `oms_order` / `oms_order_item`（**没有** payment_record）③ `clean()` 的 `pk` 分支取 `_registered()`，为空即 `log("无登记 → 跳过") + continue` ④ **服务端确实写这张表**：`OmsOrderServiceImpl:318 payOrder()` → `:362 new PaymentRecord()` → `:377 paymentRecordMapper.insertRecord(record)`，SQL 在 `OmsPaymentRecordMapper.xml:27 INSERT INTO oms_payment_record(…)`。⇒ **每笔模拟支付都会留下一条"清理清单删不掉"的记录**。
+> ℹ️ **同类**（原来同样挂 `pk` + 脚本从不登记）：`success` / `seckill_message_retry` / `res_upload_record` —— 一并改为 `user` 模式（这三张当前尚无数据，但口径先对齐）。
 
 #### 🔍 反查 SQL（标识只有配上"反查"才有用）
 
