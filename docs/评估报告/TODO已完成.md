@@ -476,7 +476,7 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
 ## 十六、#32-P0 AI 导购 Agent（Function Calling）阶段完成并部署（2026-09-10）
 
-> **说明**：#32 整体（P0 → P1）**尚未结束**，本条只归档**已完成并上线的 P0 阶段**；P1（工具扩展 / Redis 动作审计 / 流式 Agent）仍在 [[TODO文件]] #32 里跟踪。
+> **说明**：本条归档 **P0 阶段**（同步 Agent）；**P1（流式 Agent + 两个新工具 + Redis 动作审计）与生产加固已于同日完成并部署、2026-09-11 复核通过 → 见 §十七**。至此 **#32 全部收口**，条目已从 [[TODO文件]] 正文整段移入其文末「📦 已完成条目归档区」。
 > **设计与原理**：[[TODO第三批实现与原理-1]] §一/§二/§三（含 **§3.6 实际实现**）；**清单与偏差**：[[AI导购Agent升级方案]] §八
 
 **交付（提交 `09d22b1` 代码 + `0fe1a1e` 部署准备）**
@@ -502,3 +502,38 @@ private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 **归档时的镜像/备份基线**：`csmall-mall-ai:before-step2` = `734aaf72a80b`（Step 1 版）→ `latest` = `343170e667a0`（P0 版）；jar/compose 备份在 `/data/csmall/jars/backup-20260910-step2/`。
 
 **同时记录（非本次引入，避免后续误判）**：mall-ai 启动日志有 1 条 Dubbo ERROR（`Failed register interface application mapping …`，error code 5-10）—— **未改动**的 `csmall-product` 里有 7 次、`csmall-order` 1 次（09-09 启动即有），且服务发现与 TCP 连通均正常 → **项目既有的启动噪声，无功能影响**。
+
+---
+
+## 十七、#32-P1 AI 导购 Agent 完整版（流式 Agent + 两工具 + Redis 审计）+ 生产加固（2026-09-10 执行，2026-09-11 复核归档）
+
+> **说明**：本条与 §十六 合起来 = **#32 全部完成**。P0 是"最小可行的 Function Calling"，P1 把 Agent 做完整（**流式**、多工具、可观测），并修掉生产验证挖出的 3 个真问题。
+> **设计与原理**：[[TODO第三批实现与原理-1]] §3.7（P1 实际实现）+ §五（13 格实测实验，含 K/L/M）；**逐类实现说明**：[[AI导购Agent实现详解]]；**清单与偏差**：[[AI导购Agent升级方案]] §八
+
+**交付（提交 `10a4ab0` P1 + `2fd305d` 加固）**
+
+1. **流式 Agent**：`AiClient.streamChatWithTools` —— 抽出 **SSE 公共管道** `openSseStream`（取流/断连/记账/容错只写一处），正文实时回调、**`tool_calls` 按 index 拼接连缀 `arguments`**（实测 K：arguments 被切成 19 段）；`sendStreamWithAgent` 让**事件顺序与旧流水线完全一致**（thinking → products → sessionId → chunk* → done）→ **前端零改动**；`products` 之前**先缓冲正文**（实测 K：工具轮会先吐 preamble）
+2. **两个新工具（都走真实 Dubbo，非 ES）**：`compare_products`（`IForFrontSpuService`，SPU 映射成 ES 文档形状 → 对比也能出前端商品卡片；**刻意不复用** `ProductCompareServiceImpl` —— 它内部还会再调一次 LLM）、`get_stock`（`IForFrontSkuService`，SKU 级 + 总库存）
+3. **Redis 动作审计**：`AgentActionAuditor` → `ai:agent:action:{sessionId}`，`LPUSH {ts,round,tool,args,hits,costMs,ok}` + `LTRIM 0 49` + `EXPIRE 7d`；**写失败只记 WARN**（mall-ai 无数据库栈）
+4. **每轮 `thinking` 进度事件**（前端已有卡片，无需改前端）；**分层降级**：未写出内容 → 降级旧流水线；已写出内容 → **如实报错、绝不降级**（防两段回答拼接）
+5. **生产加固（部署后验证挖出的 3 个真问题，全部修复并复验）**：
+   ① **商品类问题首轮 `tool_choice=required`**（实验 M 证明官方支持）—— 修"模型凭历史作答 → 没有工具结果 → 前端商品卡片为空"
+   ② system 提示词加两条规则（即使与历史相似也要重新核对 / 没有工具数据不要给具体商品与价格）
+   ③ **`get_stock` 回传 `spuName`**（先 `getSpuById` 确认）—— 修"模型先猜 spuId 再按提问里的商品名作答"的张冠李戴风险
+6. **测试**：**26 → 50 → 56 项全绿**（Agent 循环 19 / 请求体 9 / 对比工具 8 / 库存工具 8 / 检索工具 7 / 注册表 2 / 配置绑定 3）
+
+**生产验证（2026-09-10 当晚 + 2026-09-11 复核）**
+
+| 项 | 证据 |
+|---|---|
+| 流式 Agent | **241~249 个 chunk** 逐字流式；`event: products` **早于**第一个 `event: chunk`（2026-09-11 复核：211 事件、products 行 10 < chunk 行 22）✓ |
+| 新工具 | `compare_products：请求 2 个，取到 2 个（缺失 0）` ✓；`get_stock：spuId=3（小米 14 Pro）→ 2 个 SKU，总库存 100` ✓ |
+| 加固① | 日志 `Agent 首轮强制调用工具（命中商品意图关键词「买」）`；`products` **4 件非空**（此前为空数组）✓ |
+| 加固③ | 模型编造的 `spuId=1001` 被工具**优雅拒绝**（`查询SPU详情失败…数据不存在` → 审计 `ok=false`，循环继续）✓ |
+| 稳定性 | **客户端连续 18 次请求（含"流式传输中并发 6 次"）全部 200** ✓ |
+| 审计/预算 | `LRANGE ai:agent:action:{sid} 0 -1` 有完整记录、TTL 7 天量级；`ai:daily_cost` 正常累加 ✓ |
+| 2026-09-11 复核 | 21 容器全 Up；mall-ai `restarts=0`；jar md5 `e7bbe489…`；`AI_AGENT_ENABLED=true`；3 工具已注册；同步 200 + 流式正常 ✓ |
+
+**⚠️ 生产开关当前为 `true`**；**回滚三级**：① 关开关（改 `.env` + `docker compose up -d mall-ai`，~45s）② 换回 jar + 镜像（`before-step4`）③ 连 compose 一起回。
+**已知边界**：Agent 路径不发 `categories` 事件；`get_stock` 只含常规库存（不含秒杀）；成本约为旧路径 2~3 倍（工具轮 + 收敛轮）。
+**衍生/未了**：**#61 外部端到端探活**、**#62 mall-ai 偶发 500（`AccessDeniedException`，已定性为 ERROR 派发次生现象，非 Agent 问题）** 仍在 [[TODO文件]] 跟踪。
