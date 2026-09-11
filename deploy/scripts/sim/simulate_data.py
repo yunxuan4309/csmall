@@ -59,6 +59,19 @@ EMAIL_DOMAIN = os.environ.get("SIM_EMAIL_DOMAIN", "example.com")
 # 明显是假号段（139 + 8 位），既能过手机号正则，又不会撞到真实号码
 FAKE_PHONE_PREFIX = os.environ.get("SIM_PHONE_PREFIX", "1390000")
 
+# ===== 🏷️ 模拟数据标识（2026-09-11 新增）=========================================
+# 目的：让模拟数据**自证身份** —— 单表查询即可看出"这行是造的"，不必 JOIN。
+# 承载：**复用业务库现有的自由字段**（`oms_order.tag` / `oms_order_item.data` /
+#       `oms_payment_record.extra_data`），**不改任何表结构**（守住方案"对业务库零结构变更"的设计优势）。
+# 追批：标识里带日期；**精确批次由 `cs_mall_sim.sim_entity` 反查**（登记表始终是唯一权威）。
+# ⚠️ 边界：**新增的商品数据视为真实商品、不打模拟标记**（见《商品与秒杀扩容方案》）。
+SIM_TAG = os.environ.get("SIM_TAG", "SIM")
+
+
+def sim_item_mark() -> str:
+    """订单项 `data` 的标识（原来传 `'{}'`，现在自带身份）"""
+    return '{"sim":true,"date":"%s"}' % dt.date.today().isoformat()
+
 # 资源站前缀：pictures 存的是**相对文件名**，需拼成完整 URL（实测既有订单项就是这个形态）
 SIM_RESOURCE_HOST = os.environ.get("SIM_RESOURCE_HOST", "http://8.156.77.197/")
 
@@ -212,6 +225,7 @@ class Api:
         total = round(price * qty, 2)
         return self._call("POST", "/oms/order/add", token_header=token_header, json={
             "contactName": f"模拟用户{random.randint(1000, 9999)}",   # 随机 → 避免 @Idempotent key 冲突
+            "tag": SIM_TAG,                                            # 🏷️ 标识：模拟数据（前端/后台一眼可辨）
             "mobilePhone": FAKE_PHONE_PREFIX + f"{random.randint(0, 9999):04d}",
             "provinceCode": address["province_code"], "provinceName": address["province_name"],
             "cityCode": address["city_code"], "cityName": address["city_name"],
@@ -223,7 +237,7 @@ class Api:
             "amountOfDiscount": 0.0, "amountOfActualPay": total,
             "orderItems": [{
                 "skuId": sku["sku_id"], "title": sku["title"], "barCode": sku.get("bar_code") or "",
-                "data": "{}", "mainPicture": sku["picture"], "price": price, "quantity": qty,
+                "data": sim_item_mark(), "mainPicture": sku["picture"], "price": price, "quantity": qty,
             }],
         })
 

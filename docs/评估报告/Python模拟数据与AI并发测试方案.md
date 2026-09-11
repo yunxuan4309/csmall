@@ -263,6 +263,53 @@ CREATE TABLE IF NOT EXISTS cs_mall_sim.sim_entity (
  9. 记录结果到 sim_batch（finished / cleaned）
 ```
 
+### 2.2.9 🏷️ 模拟数据的标识设计（让数据"自证身份"，2026-09-11 新增）
+
+> **为什么需要**：数据造出来后如果没有标记，它就**和真实数据长得一模一样** —— 事后无法回答"这行到底是不是造的"。
+> **本项目 = 四级标识 + 一个权威**：
+
+| 级别 | 承载字段 | 值 | 说明 |
+|---|---|---|---|
+| 人眼可辨 · 用户 | `ums_user.username` | `test_sim_0001` | **前缀即身份** |
+| 人眼可辨 · 文案 | `ums_user.nickname` / `email` / `oms_order.contact_name` / `detailed_address` | `模拟用户0001` / `test_sim_0001@example.com`（**保留域名**，误发也发不出去） / `模拟用户1234` / `模拟地址 5 号` | 打开单据就知道是造的 |
+| 人眼可辨 · 号段 | `oms_order.mobile_phone` / `seckill.success.user_phone` | **`1390000xxxx`** | **假号段**：能过手机号正则、又不撞真实号码 |
+| 🆕 **字段标识** | **`oms_order.tag`** | **`SIM`** | 订单列表/详情**一眼可辨**（`tag` 本就是展示用标签位） |
+| 🆕 **字段标识** | **`oms_order_item.data`** | **`{"sim":true,"date":"…"}`** | 原来传 `"{}"`，现在自带身份 |
+| 🆕 **字段标识** | `oms_payment_record.extra_data` | `{"sim":true,…}` | ⚠️ 该行由**服务端**写 → 造数够不到字段，只能按 `order_id` 反查（见下 ⑤） |
+| **机器权威** | **`cs_mall_sim.sim_entity`** | 批次 + 库 + 表 + 主键 + `user_ref` | **清理与审计的唯一依据** —— 字段标识只是"便于人看/便于粗筛"，**权威始终是登记表** |
+
+#### 🔴 关键设计选择：**复用"现有自由字段"，不加列（零 DDL）**
+
+| 方案 | 做法 | 评价 |
+|---|---|---|
+| ✅ **采用：复用现有自由字段** | `oms_order.tag`（展示标签位，实测可空）· `oms_order_item.data`（实测 NULL）· `oms_payment_record.extra_data`（实测 NULL） | **零 DDL、零服务端代码改动**，与"直接调真实接口造数"的路线完全兼容；代价是**语义借用**（`data` 里多一个 `sim` 键） |
+| ⏸️ 备选：加专用标记列 | 9 张表各 `ALTER TABLE … ADD COLUMN data_source VARCHAR(8) NULL`；造数后按登记表 `UPDATE … SET data_source='SIM' WHERE pk IN (登记主键)` | 语义**最干净、可索引**，单谓词 `WHERE data_source='SIM'` 即可筛；但需**一次 DDL 变更**（9 张表）+ 多一步回填。**当前选前者**；将来若要做"开发/正式数据同库强隔离"再升级 |
+
+> **为什么 `oms_cart` / `ums_login_log` / `res_upload_record` 没有字段标识**：它们由服务端写、且没有合适的自由字段 → 只能按 `user_id` **反查登记表**（下表 ⑦）。这不是缺陷，是"标识分级"的正常取舍。
+
+#### 🔍 反查 SQL（标识只有配上"反查"才有用）
+
+```sql
+-- ① 订单 tag 标识
+SELECT COUNT(*) FROM cs_mall_oms.oms_order           WHERE tag LIKE 'SIM%';
+-- ② 用户名前缀
+SELECT COUNT(*) FROM cs_mall_ums.ums_user            WHERE username LIKE 'test_sim_%';
+-- ③ 假号段
+SELECT COUNT(*) FROM cs_mall_oms.oms_order           WHERE mobile_phone LIKE '1390000%';
+-- ④ 订单项 data 标识
+SELECT COUNT(*) FROM cs_mall_oms.oms_order_item      WHERE data LIKE '%"sim":true%';
+-- ⑤ 支付记录标识（服务端写，按 order_id 反查即可）
+SELECT COUNT(*) FROM cs_mall_oms.oms_payment_record  WHERE extra_data LIKE '%"sim":true%';
+-- ⑥ 权威口径：影子登记表（前 5 路都应能在它里面找到对应主键）
+SELECT batch_id, db_name, table_name, COUNT(*)
+  FROM cs_mall_sim.sim_entity GROUP BY batch_id, db_name, table_name;
+-- ⑦ 按 user_id JOIN，反查那些"没有字段标识"的表
+SELECT 'cart' t, COUNT(*) FROM cs_mall_oms.oms_cart c
+  JOIN cs_mall_ums.ums_user u ON u.id = c.user_id WHERE u.username LIKE 'test_sim_%';
+```
+
+> **边界（用户 2026-09-11 明确）**：**新增的商品数据视为真实商品** —— `pms_spu` / `pms_sku` **不打 `SIM` 标记**，编号也**跟随现有约定**（`type_number` = `品牌缩写-型号-序号`，如 `MI-14-001`；`bar_code` = `SKU-{spuId}-001`），避免被 `SIM-` 前缀暴露"这是造的"。详见 [[商品与秒杀扩容方案]]。
+
 ### 2.3 脚本骨架（含登记 + dry-run）
 
 ```python

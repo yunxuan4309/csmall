@@ -81,7 +81,7 @@ docker exec -i csmall-mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < init_sim_db.
 | 库存预算 | `need_units = days × per_day × 5% × 2 件`，与 `SUM(pms_sku.stock)` 比对 | §〇.1 D7 |
 | 不可逆字段不硬算 | 只告警，交给快照整库还原 | 方案 §2.2.7 |
 | 凭据不落盘 | `SIM_DB_PASSWORD` 环境变量 | §〇.1 D6 |
-| 假数据可辨识 | 用户名 `test_sim_*`、手机号 `1390000xxxx`（假号段且能过正则） | 方案 §2.4 |
+| 🏷️ **模拟数据标识** | **让数据自证身份**（零 DDL，复用现有自由字段）：用户名 `test_sim_*` · 手机号 `1390000xxxx`（假号段）· 昵称/地址/联系人含"模拟" · 邮箱 `@example.com` · **订单 `tag=SIM`** · **订单项 `data={"sim":true,…}`** · 支付 `extra_data`（服务端写，按 order_id 反查）· **权威登记表 `cs_mall_sim.sim_entity`** | 方案 **§2.2.9** |
 
 ## 六、端点事实来源（2026-09-11 读码，`文件:行`）
 
