@@ -121,6 +121,8 @@
 | 8 | **dry-run 清理演练**（清理 → 比对照基线） | ★用户 · AI 复核 | ⏳ 待做 |
 | 9 | 写 `load_test.py` + 按 §6.4 三段式**录像**（浏览档可先做） | AI 写 · ★用户录 | ✅ **脚本已完成并自检通过**（`--check` 全绿 + 并发 5 冒烟 RPS 33.9/成功率 100%）；⏳ **待你录像** |
 | 10 | 秒杀动作实现（`--with-seckill` 目前只做预检） | AI | ⏸️ 未实现（可选，看是否要造秒杀数据） |
+| 11 | 🆕 **录像**（§6.4 三段式：静默基线 → 阶梯加压 → 收尾；机位 = SkyWalking + Sentinel + 脚本日志三窗口并排）<br>用户决定**稍后再录** → 已登记为待办 | ★用户 | ⏸️ **待做**（脚本已就绪，见 §5.1） |
+| 12 | 🆕 **补 8 个服务的 Sentinel dashboard 地址**（否则面板看不到 `mall-front` 曲线 —— 见 §6.2 G9） | ★用户（改 compose + recreate） | ⏸️ **待决策**（已登记 TODO **#66**） |
 
 > 🆕🆕 **2026-09-11 晚 · 进度更新（C-0 ~ C-9 脚本全部完成）** ✅
 > · **C-0~C-6 完成**：免 sudo 装 pymysql · 4 迁移文件 · 镜像重建（V3/V7/V6/V2 全部 success=1）· 脚本回填改造 · 只读预检 · 影子库 · 快照
@@ -169,6 +171,8 @@
 | **G6** | **支付渠道选错**：`paymentType=0`（银联）→ `state=500 支付渠道 [银联] 暂未实现`（第四次真跑撞到；**用户当即指出**"只能选支付宝，底层仍是模拟支付"） | **代码**：`PaymentTypeEnum.java:8-10` → **0=银联 / 1=微信 / 2=支付宝**；`PaymentStrategyFactory.java:36` 对未注册渠道 `throw ... 暂未实现`，而只有 `AlipaySandboxStrategy` 注册了策略，其**模拟模式**（未配置 AppId/私钥）**跳过真实支付宝 API 直接返回成功**（`AlipaySandboxStrategy.java:110-112`）。<br>**读库旁证（决定性）**：`oms_order` 里**所有已支付订单（`state=3`，7 单）`payment_type` 全是 2**，0/1 无一成交 | `paymentType` **0 → 2**（`order_add` 与 `order_pay` 都改）；🔴 造数**不再产生已支付订单**的另一半原因也在这 |
 | **G8** | 🔴🔴 **普通订单的库存扣减 MQ 链路整体失效**（第 5 次真跑**支付成功后**才发现 —— `stock`/`sales` 一点没动） | **现象**：4 单支付成功（`state=3`、`gmt_pay` 有值），但 `pms_sku.stock` 仍是 **1456**、`pms_spu.sales` 仍是 **83**。<br>**代码**：`OmsOrderServiceImpl:87` 注释"**库存扣减改为 MQ 异步处理**" → `:137-138` 发 `orderItemMessages`（JSON **数组**）；`OrderQueueConfig:80` 给监听器配了 **JSON 反序列化** → 消息体成 **`ArrayList`**；而 `OrderQueueConsumer:32` 的 `@RabbitHandler` 只接受 **`String`** → `NoSuchMethodException: No listener method found … for class java.util.ArrayList` → 转换被判定致命 → 进死信；`OrderDlxConsumer:38` 只接受 **`Message`** → **同样失败** → 消息丢失。<br>**运行时铁证**：本次启动日志内 `订单库存扣减完成`（成功时打的 INFO）**0 次**；`No listener method found` **21 次**（7 笔订单 × 3 次重试）；队列 `order_queue`/`order_queue_dlx` 均为 **0**（消息已被丢弃）。<br>**这不是我们引入的**：`mall-order` 本次重建的源码里这两个文件我们**一行未改**（只加了 Flyway SQL），缺陷在既有提交里。 | **未修**（属独立变更，按"不夹带"纪律登记为 **TODO #65**，待用户决策）。<br>**对方案的影响**：§2.2.1 的"不可逆污染"前提被修正（见该节 🔴 说明）—— 普通订单造数**不会**消耗库存；`sales` 本就只由秒杀累加。**但快照仍必须做**，因为 `#65` 一旦修复风险立即回归。 |
 | **G7** | 🔴 **`oms_order_item` 有 3 行新数据却 SIM=0**（漏登记 → 漏回填），而 **`oms_order` 3 行已标 SIM** | `sim_entity`（批次 1925）只有 `oms_cart` 10 / `oms_order` 3 / `ums_user` 20 —— **无 `oms_order_item`**；但库里 3 条订单项**确实存在**（`gmt_create` 与订单**同秒**）且 `data_source=NULL`。<br>**根因（经典 REPEATABLE READ 陷阱）**：`api.order_add(user["token"], sku, 1, load_address_template(conn))` —— 参数 **`load_address_template(conn)` 是 SELECT，先于 App 建单求值** → **开启脚本自己的事务、把快照定格在"App 还没建订单"那一刻** → 随后同一事务里的 `SELECT id FROM oms_order_item WHERE order_id=?` 用旧快照 → **看不到 App 刚提交的订单项**（3/3 全漏）。加购之所以没事，是因为 `api.cart_add()` 之前**没有任何 DB 读**。<br>**校验盲点（更值得记）**：`verify_backfill()` 只校验"登记表里出现过的表" → `oms_order_item` 不在范围 → **漏标却打印"✅ 回填校验通过"** | ① **地址模板挪到循环外只读一次**（根治：不再让 SELECT 抢先定格快照）+ 下单后加一次防御性 `conn.commit()`；② 新增 **`BACKFILL_BY_ORDER`**：子表按父订单 `order_id` 兜底回填（即便漏登记也能标上）；③ **`verify_backfill` 增加"子表按父订单"校验**，堵住盲点；④ **订单与支付分开统计**（支付失败不再算"动作失败"——订单确实建成了） |
+| **G9** | 🔴 **`mall-front` 根本不上报 Sentinel 面板**（用户实测发现："面板里只有 sso 和 sentinel-dashboard 有曲线"） | 逐个 `docker inspect` 服务的环境变量：**只有 `mall-order` / `mall-seckill` / `mall-sso` 配了 `SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD=sentinel:8858`**，`mall-front`/`gateway`/`product`/`search`/`ums`/`ams`/`resource`/`ai` **全部未配置**。<br>⇒ `mall-front` **本地有埋点（拦截器已注册）**但**指标从不外发** → 面板看不到 → **§6.2 原结论"压浏览 URL 就能看 pass 曲线"在当前配置下不成立** | 已登记 **TODO #66**（补 8 个服务的 dashboard 地址 + recreate）。<br>✅ **不受影响的**：**限流档** —— 有流控规则且**会**上报的正是 `mall-order`(新增/支付订单 QPS 20) 与 `mall-seckill`(秒杀提交 QPS 10)；<br>✅ **替代方案**：改看 **SkyWalking** —— 用户截图实测 `mall-front` **Load 1520.846 calls/min、Latency 124ms、Apdex 0.983**（**确实在动**） |
+| **G10** | ⚠️ **我未能通过 OAP GraphQL 程序化取到指标**（UI 有数、API 取 0）—— **未解决，如实记录** | 已排查：OAP 版本 **9.7.0**、容器时钟 **UTC**（宿主 CST）；`Duration` 格式**随 step 变化**（MINUTE 要 `yyyy-MM-dd HHmm`、HOUR 要 `yyyy-MM-dd HH`、SECOND 要带秒 —— 这是我一开始查到全 0 的原因之一）；`readMetricsValues` 的 `scope` 必须是 **enum**（`scope: Service` 不带引号）。<br>但改用正确格式后，**所有实体（含必然有流量的 `172.29.193.239:3306`）仍全为 0**，而 UI 同时显示非 0 → **口径仍有未对齐处**（疑似 OAP 侧分钟级指标存储/时区配置，未继续深挖） | ⏸️ 记为"未解决"。**影响**：§五 第 16 步"结果回填"目前只能**手工从 UI 读数**（或直接用 `load_test.py --json` 的客户端数据）；若要程序化取数需另查 OAP 配置。<br>📌 **本次阶梯结果不受影响**（`load_test.py` 的 RPS/延迟是**客户端实测**，与 OAP 无关） |
 
 **因此新增三道防线（都在脚本里）**
 1. **`SERVER_REGEX` + `validate_local()`**：把服务端 **7 条真实正则**抄进脚本，`preflight()` 第一步就**一次性验完全部字段**（不碰网络、不碰数据）→ 把"跑一次撞一个"变成"预检一次全暴露"
@@ -852,6 +856,29 @@ ThreadingHTTPServer(("0.0.0.0", 9999), Handler).serve_forever()
 17. 决定：保留"演示数据" / 或整库还原到快照（复用 #47 独立容器先验证备份）
 ```
 
+### 5.1 ✅ 首次阶梯压测实测结果（2026-09-11 19:41~19:44 · 新机内网 · 浏览档）
+
+> 命令：`python3 load_test.py --steps 20,50,100 --duration 45`；**失败 0**；总耗时 140s。
+> ⚠️ 本次**未录像**（用户决定稍后再录）→ 录像已登记为 **C-10 待办**。
+
+| 并发 | RPS | 成功 RPS | 成功率 | p50 | p95 | p99 | 失败 |
+|---|---|---|---|---|---|---|---|
+| **20** | 69.0 | 69.0 | 100.00% | 278.0ms | 438.7ms | 538.9ms | 0 |
+| **50** | 97.2 | 97.2 | 100.00% | 487.9ms | 816.5ms | 976.4ms | 0 |
+| **100** | **99.6** | 99.6 | 100.00% | **796.3ms** | **1995.4ms** | **2465.8ms** | 0 |
+
+**🔍 拐点分析（这组数字本身就是面试素材）**
+- **20 → 50**：RPS **+41%**（69→97），吞吐**仍在增长**，p50 +75%
+- **50 → 100**：RPS **仅 +2.5%**（97.2→99.6，**基本饱和**），而 **p99 从 0.98s 飙到 2.47s（+153%）**、p95 从 0.82s 涨到 2.00s
+- ⇒ **吞吐上限 ≈ 100 req/s，拐点落在 50~100 并发之间**；再往上**只涨延迟不涨吞吐** —— 典型的**排队饱和**特征
+- ⇒ **判据**：`RPS 出现平台 + p99 陡增` 就是拐点信号（本次**全程 0 失败** —— 只看成功率会误判成"系统还很闲"）
+- ⚠️ **尚未定位瓶颈归属**：候选有 `gateway`/`mall-front` 的 CPU（老机 4C）、Tomcat 线程池、DB 连接池，**以及压测客户端自身（新机 2C、100 线程）**。下次应同时采 `docker stats` + 客户端 CPU，才能区分"服务端饱和"还是"客户端饱和"。
+- 📌 **对阶梯选择的影响**：**20/50/100 是合适的**（正好跨过拐点、曲线有对比）；要更精细可加 `--steps 75`。
+
+> ⚠️ **顺带记录我自己的一个疏漏**：`--json` 写文件失败（`PermissionError`）—— 因为 `/tmp/sim` 是我（ai-deepseek）账号建的，`ecs-user` 只读。
+> 已修（`chmod 1777 /tmp/sim`）；**更稳做法**：`--json ~/load_result.json`，或先把脚本拷到自己家目录（`mkdir -p ~/sim && cp /tmp/sim/*.py ~/sim/`）。
+
+
 > ~~初稿的"步骤 2：服务器内存优化 R7，找 ecs-user 执行"~~ —— **R7 已于 2026-09-07 执行完毕，该步删除**。
 > **改动史**：2026-09-11 首轮补入 venv / mock 地址必查 / Nacos 备份 / 中止阈值 / 结果回填（对应 §〇.1 D1~D9）。
 > 🆕 **2026-09-11 晚修订**：**venv 路径作废**（实测 `ensurepip` 缺失 + 无外网）→ 改为 **`apt-get install -y python3-pymysql`**；步骤 3 的"~207M mysqldump"改为复用 #29 的 `backup-db.sh`（实测六库 gz 后仅 ~52KB）。详见 §〇.1 D6。
@@ -911,6 +938,23 @@ ssh -i "%USERPROFILE%\AppData\Local\csmall-ssh\ai-deepseek_key" `
 > ⇒ **展示策略修正**：浏览档**不再是"无需 token"**，但**仍然是最好录的一档** —— 因为 §五 步骤 ① 的造数校准会**顺带产出 20 个可用 token**，录屏时直接复用即可（无需额外成本）。
 
 > ⇒ **展示可以分级做**：**先做"浏览档"**（🔴 修正：**同样需要 token**，但用造数产出的 20 个 token 即可，无需额外成本），**再加"限流档"**（依赖 §五 步骤 ① 校准出的链路与 token）。
+
+> 🔴🔴 **2026-09-11 实测又发现一个前置条件（G9）：`mall-front` 根本不上报 Sentinel 面板！**
+> **证据（`docker inspect` 逐个服务的环境变量）**：
+> | 服务 | 有 Sentinel 拦截器 | 配了 `SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD` |
+> |---|---|---|
+> | `mall-order` | ✅ | ✅ `sentinel:8858` |
+> | `mall-seckill` | ✅ | ✅ `sentinel:8858` |
+> | `mall-sso` | ✅ | ✅ `sentinel:8858` |
+> | **`mall-front`** | ✅（**本地有埋点**） | ❌ **未配置** |
+> | `mall-gateway` / `mall-product` / `mall-search` / `mall-ums` / `mall-ams` / `mall-resource` / `mall-ai` | 部分有 | ❌ **全部未配置** |
+> ⇒ **后果**：§6.2 原结论"压浏览 URL 就能在 Dashboard 看到 pass 曲线"**在本项目当前配置下不成立** ——
+> `mall-front` 会**在本地统计**，但**指标从不发给面板**，所以面板里看不到它（用户实测：面板里只有 `sso` 等少数几个）。
+> ⇒ **要拿到"浏览档 pass 曲线"必须先把 3 项之一做掉**：① 给 `mall-front`（及可选 gateway）补
+> `SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858` 并 recreate；② 或改压**已配面板的服务的 URL**；
+> ③ 或改看 **SkyWalking**（`mall-front` 的 Load 曲线**确实在动** —— 用户截图实测 `Load 1520.846 calls/min`、`Latency 124ms`、`Apdex 0.983`）✅
+> 📌 **好消息**：**"限流档（block 曲线）"不受影响** —— 有流控规则且配了面板的正是 **`mall-order`（新增/支付订单 QPS 20）** 与 **`mall-seckill`（秒杀提交 QPS 10）**，它们**都会上报**。
+> ⇒ 已登记 **TODO #66**（补 8 个服务的 dashboard 地址）。
 > ⚠️ **规则资源名不是 URL** —— 上面 6 条规则的 `resource` 是**注解埋点名**（`@SentinelResource`），与 URL 资源是**两套并存**；改规则要改 Nacos 里的 `mall-*-flow-rules`。
 
 ### 6.3 SkyWalking 侧已具备的条件（实测）
