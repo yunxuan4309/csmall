@@ -359,6 +359,11 @@ CREATE TABLE IF NOT EXISTS cs_mall_sim.sim_entity (
 
 > ⚠️ MySQL 8 **不支持** `ADD COLUMN IF NOT EXISTS` → "SQL 层幂等"这条路不通，**幂等只能靠 Flyway 的记录**；
 > 因此**执行前必须只读核对"这 9 张表还没有 `data_source` 列"**（有则先决策，别硬跑）。
+>
+> 🔴 **另一个同类陷阱：不要"顺手统一行尾"** —— Flyway 的 `validate` 会比对**迁移文件字节的 checksum**。
+> 实测本仓库 `core.autocrlf=true` 且**没有 `*.sql` 的 `.gitattributes` 规则** → 迁移文件在工作区的行尾**取决于谁写的 / 是否被 git checkout 过**：实测 18 个迁移里 **17 个 `w/lf`**、**1 个 `w/crlf`**（`V6__add_order_type_to_oms_order.sql`），而**索引里全部是 `i/lf`**。
+> ⇒ **三条纪律**：① 构建 jar **始终从当前这份工作副本**（不要重新 clone 后再构建）；② **绝不去"修正"已被应用过的迁移文件的行尾**（尤其那个 CRLF 的 V6）—— 字节一变 checksum 就对不上 → `Migration checksum mismatch` → **服务起不来**；③ 新增迁移文件保持 **LF**（与多数现有文件一致）。
+> 🆕 **本次 4 个新文件已按此约定落盘**（`git ls-files --eol` 实测 `i/lf w/lf`，与现有 17 个一致）。
 
 **4 个迁移文件（✅ 2026-09-11 已落盘；版本号已按实测 `flyway_schema_history` 核对为"下一个可用号"）**
 
@@ -868,6 +873,7 @@ ssh -i "%USERPROFILE%\AppData\Local\csmall-ssh\ai-deepseek_key" `
 - [ ] **基线确认**：跑前 `test_sim_%` = 0；跑后登记表行数 = 实际新增实体数
 - [ ] 🆕 **fail-fast 预检**：`cs_mall_sim` 存在 / 前缀=0 / 快照文件在 / `SUM(pms_sku.stock)` 够本批消耗 → **任一不过直接退出**
 - [ ] 🆕 **凭据不落盘**：DB 密码走环境变量或 `~/.my.cnf`(600)，脚本内不写明文
+- [ ] 🆕 **Flyway 行尾纪律**：**不改**已被应用过的迁移文件行尾（checksum 会变 → 服务起不来）；新文件保持 LF（§2.2.9）
 - [ ] 🆕 **回填矩阵**：9 张表按"脚本写的按主键 / 服务端写的按 `user_id`"回填 `data_source='SIM'`（§2.2.9）
 - [ ] 🆕 **回填校验**：`data_source='SIM'` 行数 **=** 登记表条数；漏标检查 SQL 返回 **0 行**（§2.2.9 ③）
 - [ ] **禁止 pattern 删 Redis**：只按登记用户 id 精确删；**动手前先 `--scan | sort` 对一遍全清单**（§2.2.6）

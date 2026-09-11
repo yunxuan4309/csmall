@@ -57,6 +57,10 @@ export SIM_RESOURCE_HOST='http://8.156.77.197/'      # 图片前缀
 #         -e "SELECT CONCAT(table_schema,\".\",table_name) FROM information_schema.columns \
 #             WHERE column_name=\"data_source\" ORDER BY 1"'
 #    🔴 禁止手工 ALTER 加列：会与迁移冲突 → Duplicate column name → Flyway 失败 → 服务起不来
+#    🔴 也**不要**去"统一行尾"：Flyway validate 比对迁移文件**字节的 checksum**。
+#       实测本仓库 core.autocrlf=true 且无 *.sql 的 .gitattributes → 工作区行尾取决于谁写的
+#       （18 个迁移：17 个 w/lf、1 个 w/crlf；索引里全是 i/lf）。**改动已应用过的迁移文件行尾
+#       → checksum mismatch → 服务起不来**。构建 jar 请**始终用当前这份工作副本**。
 
 # ① 建影子库（一次性；在老机执行）
 docker exec -i csmall-mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < init_sim_db.sql
