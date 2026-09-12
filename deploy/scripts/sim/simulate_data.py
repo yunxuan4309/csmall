@@ -875,7 +875,7 @@ def run_funnel(api: Api, conn, registry: Registry, catalog, users, days: int, pe
         else:
             time.sleep(random.uniform(sleep_min, sleep_max))
     if with_seckill:
-        log("⚠️ --with-seckill 未实现（随机码需先从 /seckill/spu/list 取回，见 README「待补」）→ 本次跳过")
+        log("ℹ️ 秒杀**不在漏斗里跑**（漏斗只做浏览/加购/下单）→ 由漏斗结束后的**独立秒杀阶段**执行，见下方 🐝")
     return stat
 
 
@@ -1018,6 +1018,12 @@ def seckill_snapshot(conn, r: Optional[Redis], sku_id: int) -> Dict[str, Any]:
                     "JOIN cs_mall_pms.pms_sku s ON s.spu_id=p.id WHERE s.id=%s", (sku_id,))
         row = cur.fetchone()
         snap["sales"] = row["sales"] if row else None
+    # 🆕 2026-09-12：**全量** sales 快照 —— 实测秒杀会给"把 `seckill_spu.id` 当 pms spu 用"的**另一行**加 sales
+    #   （`SeckillQueueConsumer:98` → `incrementSales(sku.getSpuId())`，而该列存的是**秒杀表内部 id**）⇒
+    #   只快照"目标 spu"根本恢复不掉，必须按**实际变化**回补。
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, sales FROM cs_mall_pms.pms_spu")
+        snap["all_sales"] = {int(x["id"]): x["sales"] for x in cur.fetchall()}
     snap["redis_stock"] = None
     if r is not None:
         try:
@@ -1066,6 +1072,14 @@ def seckill_restore(conn, r: Optional[Redis], snap: Dict[str, Any], user_id: int
             cur.execute("UPDATE cs_mall_pms.pms_spu p JOIN cs_mall_pms.pms_sku s ON s.spu_id=p.id "
                         "SET p.sales=%s WHERE s.id=%s", (snap["sales"], sku_id))
             acts.append(f"DB: pms_spu.sales ← {snap['sales']}")
+        # 🆕 2026-09-12：再按**全量 sales 快照**回补"实际被改动过的行"（跨命名空间写入的兜底）
+        for spu_id, before in (snap.get("all_sales") or {}).items():
+            cur.execute("SELECT sales FROM cs_mall_pms.pms_spu WHERE id=%s", (spu_id,))
+            row = cur.fetchone()
+            if row and str(row["sales"]) != str(before):
+                cur.execute("UPDATE cs_mall_pms.pms_spu SET sales=%s WHERE id=%s", (before, spu_id))
+                acts.append(f"DB: ⚠️ pms_spu.sales[{spu_id}] {row['sales']} → {before}"
+                            "（**非目标 spu**：秒杀内部 id 与 pms id 串了）")
     conn.commit()
     return acts
 
@@ -1083,6 +1097,13 @@ def seckill_verify(conn, r: Optional[Redis], snap: Dict[str, Any], user_id: int)
         row = cur.fetchone()
         if snap.get("stock") is not None and row and row["stock"] != snap["stock"]:
             bad.append(f"stock={row['stock']}≠{snap['stock']}")
+        # 🆕 2026-09-12：**全量 sales** 也要校验（原先只校验 seckill_stock / stock ⇒ 跨命名空间的
+        #   sales 改动**校验不到** → 会打印"✅ 全部回位"的假通过）
+        for spu_id, before in (snap.get("all_sales") or {}).items():
+            cur.execute("SELECT sales FROM cs_mall_pms.pms_spu WHERE id=%s", (spu_id,))
+            row = cur.fetchone()
+            if row and str(row["sales"]) != str(before):
+                bad.append(f"pms_spu.sales[{spu_id}]={row['sales']}≠{before}")
     if r is not None:
         for k in (SECKILL_ORDER_LOCK, SECKILL_ORDERED, SECKILL_RE_SECKILL):
             try:
@@ -1109,6 +1130,16 @@ def run_seckill_phase(api: "Api", conn, registry: Registry, users: List[Dict[str
         log("⚠️ 没有**在秒杀时间窗内且未购买**的目标（`url` 为空 = 不在窗口内）→ 本次跳过秒杀动作")
         return stat
     log(f"🐝 秒杀目标 {len(targets)} 个（第一个：{targets[0]['name']} · randCode={targets[0]['rand_code']}）")
+
+    # 🆕 2026-09-12：秒杀链路**会创建 oms_order / oms_order_item**（实测每次 +1/+1、`data_source=NULL`
+    #   ⇒ 既不登记也不回填 ⇒ 清理必漏）。用"订单 id > 动作前最大值"增量反查，避开 DB 时区与异步时序。
+    order_marks: List[Tuple[Any, int]] = []
+    registered_orders: set = set()
+
+    def _max_order_id(uid: Any) -> int:
+        with conn.cursor() as c2:
+            c2.execute("SELECT COALESCE(MAX(id),0) AS m FROM cs_mall_oms.oms_order WHERE user_id=%s", (uid,))
+            return int(c2.fetchone()["m"] or 0)
     for i in range(1, args.seckill_count + 1):
         user = random.choice(users)
         target = random.choice(targets)
@@ -1127,6 +1158,14 @@ def run_seckill_phase(api: "Api", conn, registry: Registry, users: List[Dict[str
         sku_id = int(sku["skuId"] if sku.get("skuId") is not None else sku.get("id"))
         price = float(sku.get("seckillPrice") or sku.get("price") or 0)
         snap = seckill_snapshot(conn, r, sku_id)
+        order_marks.append((user["id"], _max_order_id(user["id"])))
+        # 🆕 ⑤（2026-09-12）登记"秒杀标记键"的坐标 `sku:user` → clean() 才能**按 id 精确删** Redis 三类键
+        #    ⚠️ 放在**提交之前**：即便提交失败，也可能已写下 `order:lock`（宁可多删一个不存在的键，也不漏删）
+        try:
+            registry.register(conn, "seckill_marks", f"{sku_id}:{user['id']}", "redis", str(user["id"]))
+            conn.commit()
+        except Exception as e:      # noqa: BLE001
+            log(f"   ⚠️ 登记 seckill_marks 失败：{e}")
         dto = {
             "spuId": target["spu_id"],
             "contactName": f"模拟{random.randint(0, 99):02d}",
@@ -1164,8 +1203,10 @@ def run_seckill_phase(api: "Api", conn, registry: Registry, users: List[Dict[str
                 return True
             return False
         try:
-            if vo or _register_success():
-                _register_success()
+            # 🔴 2026-09-12 修正：原写法 `if vo or _register_success(): _register_success()` 在
+            #    "响应给了 vo、而行也已存在"时会**重复登记同一行**（clean 会重复删同一 pk，且计数虚高）
+            if not _register_success():
+                log("   ℹ️ success 行尚未落库（MQ 消费者**异步**写）→ 交给回填矩阵按 user_id 兜底（实测有效）")
         except Exception as e:      # noqa: BLE001
             log(f"   ⚠️ 登记 success 失败：{e}")
         if args.seckill_restore:
@@ -1181,6 +1222,29 @@ def run_seckill_phase(api: "Api", conn, registry: Registry, users: List[Dict[str
                 stat["seckill_verify_bad"] += 1
             log(f"   🧹 秒杀 {i} 恢复：{'；'.join(acts)} → "
                 + ("✅ 校验通过" if ok else f"🔴 校验未通过（{why}）"))
+    # 🧾 兜底：把本阶段**异步建出来的秒杀订单**登记上（否则 clean 会漏删、回填也标不到）
+    for uid, max_before in order_marks:
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM cs_mall_oms.oms_order WHERE user_id=%s AND id > %s", (uid, max_before))
+                new_orders = [x["id"] for x in cur.fetchall()]
+            for oid in new_orders:
+                if oid in registered_orders:
+                    continue
+                registry.register(conn, "oms_order", oid, "cs_mall_oms", user_ref=str(uid))
+                registered_orders.add(oid)
+                with conn.cursor() as cur:
+                    cur.execute("SELECT id FROM cs_mall_oms.oms_order_item WHERE order_id=%s", (oid,))
+                    for it in cur.fetchall():
+                        if it["id"] not in registered_orders:
+                            registry.register(conn, "oms_order_item", it["id"], "cs_mall_oms", user_ref=str(uid))
+                            registered_orders.add(it["id"])
+                conn.commit()
+        except Exception as e:      # noqa: BLE001
+            log(f"   ⚠️ 兜底登记秒杀订单失败：{e}")
+    if registered_orders:
+        log(f"   🧾 兜底登记秒杀订单：新增 {len(registered_orders)} 条主键"
+            "（秒杀会真建 oms_order/oms_order_item —— 不登记就会漏删、漏标）")
     return stat
 
 
@@ -1258,6 +1322,26 @@ def clean(conn, batch: str, apply_: bool) -> None:
             total += affected
             log(f"  {full:38s} {'已删' if apply_ else '将删'} {affected} 行")
 
+    # 🆕 ⑤ Redis 精确清理（2026-09-12）：按**登记坐标** `sku:user` 删三类标记键
+    #    🔴 禁止 `--scan --pattern` 全删 —— 会误伤真实数据的同名键
+    marks = _registered(conn, batch, "redis", "seckill_marks")
+    if not marks:
+        log("  redis.seckill_marks                  无登记 → 跳过（不碰任何 Redis 键）")
+    else:
+        r = open_redis_for_clean()
+        if r is None:
+            log(f"  redis.seckill_marks                  ⚠️ 未设 SIM_REDIS_PASSWORD / 连不上 → 跳过（{len(marks)} 个坐标未清）")
+        else:
+            keys = [pre + pair for pair in marks
+                    for pre in (SECKILL_ORDER_LOCK, SECKILL_ORDERED, SECKILL_RE_SECKILL)]
+            existing = [k for k in keys if r.exists(k)]
+            if apply_ and existing:
+                r.cmd("DEL", *existing)
+            r.close()
+            log(f"  redis.seckill_marks                  {'已删' if apply_ else '将删'} {len(existing)} 个键"
+                f"（登记 {len(marks)} 个坐标 × 3 类 = {len(keys)} 个候选）"
+                + (f"：{existing}" if existing else " → 当前无残留（幂等）"))
+
     with conn.cursor() as cur:
         if apply_:
             cur.execute("UPDATE cs_mall_sim.sim_batch SET status='cleaned', finished_at=NOW() WHERE batch_id=%s", (batch,))
@@ -1266,22 +1350,122 @@ def clean(conn, batch: str, apply_: bool) -> None:
 
     # 🔴 清理后自检（全库 0 个外键 → 漏删**不会报错**，只能主动查）
     if apply_:
+        # 🔴 2026-09-12：自检改**按批次口径**（原先查全局 SIM 计数 → 多批次共存必误报，见方案 §G G11）
         left: List[str] = []
+
+        def _scoped(db_name: str, table: str, key_col: str, values: Sequence[Any]) -> int:
+            """本批范围内**已标 SIM** 的行数"""
+            n = 0
+            for part in _chunks(values):
+                ph = ",".join(["%s"] * len(part))
+                n += _count_where(cur, f"{db_name}.{table}",
+                                  f"data_source=%s AND {key_col} IN ({ph})",
+                                  (DATA_SOURCE_SIM, *part))
+            return n
+
         with conn.cursor() as cur:
-            for db_name, table in DATA_SOURCE_TABLES:
-                if not has_column(conn, db_name, table, "data_source"):
+            for db_name, table, key_col in BACKFILL_BY_PK:
+                values = _registered(conn, batch, db_name, table)
+                if not values:
                     continue
-                n = _count_where(cur, f"{db_name}.{table}", "data_source=%s", (DATA_SOURCE_SIM,))
+                n = _scoped(db_name, table, key_col, values)
+                if n:
+                    left.append(f"{db_name}.{table}={n}")
+            for db_name, table in BACKFILL_BY_USER:
+                if not user_ids or not has_column(conn, db_name, table, "data_source"):
+                    continue
+                n = _scoped(db_name, table, "user_id", user_ids)
                 if n:
                     left.append(f"{db_name}.{table}={n}")
         if left:
-            log(f"⚠️ 清理后仍残留 SIM 标识行：{', '.join(left)}")
-            log("   → 可能是**本批次之外**的批次（别的批次也标了 SIM），也可能是清理清单漏表；请人工核对")
+            log(f"⚠️ **本批范围内**仍残留 SIM 标识行：{', '.join(left)} → 清理清单漏表或删除失败，请人工核对")
         else:
-            log("✅ 清理后自检通过：9 张表已无 data_source='SIM' 残留")
-    log("⚠️ 未处理**不可逆字段**（pms_spu.sales / pms_sku.stock / Redis 秒杀预热键）——"
-        "需要绝对干净请走整库还原快照（方案 §2.2.3）；Redis 只按登记 user id 精确删，禁止 pattern 全删")
+            log("✅ 清理后自检通过（**按批次口径**）：本批登记的 9 张表范围内已无 data_source='SIM' 残留")
+            log("   ℹ️ 若库里还有其他批次，它们标 SIM 的行**不属于本批**，本自检不计入（避免 G11 式误报）")
+    log("⚠️ 未处理**不可逆字段的值**（`pms_spu.sales` / `pms_sku.stock` / 秒杀预热键）——"
+        "删行删不回累加值：需要绝对干净请走**整库还原快照**（方案 §2.2.3），或用 `--compare-baseline` 核差异；"
+        "Redis 已按**登记坐标**精确删（禁止 pattern 全删）")
 
+
+# =============================================================================
+# ⑤ Redis 精确清理（clean 侧）：按登记坐标 `sku:user` 删，**禁止 pattern 全删**
+# =============================================================================
+
+def open_redis_for_clean() -> Optional[Redis]:
+    """clean() 用的 Redis 连接：host/port 走环境变量（与造数侧同一套），连不上返回 None。"""
+    pw = os.environ.get("SIM_REDIS_PASSWORD")
+    if not pw:
+        return None
+    try:
+        r = Redis(os.environ.get("SIM_REDIS_HOST", "172.29.193.239"),
+                  int(os.environ.get("SIM_REDIS_PORT", "6379")), pw)
+        r.cmd("PING")
+        return r
+    except Exception as e:      # noqa: BLE001
+        log(f"  ⚠️ Redis 连接失败（{e}）→ Redis 部分跳过")
+        return None
+
+
+# =============================================================================
+# ⑥ sim_baseline 基线比对（2026-09-12）：造数**前**记基线 → 清理**后**比对
+# =============================================================================
+
+# 🔴 2026-09-12 修正：`DATA_SOURCE_TABLES` 是 **(库, 表) 元组对**，不能直接当 SQL 表名用
+#   （首版写成 `DATA_SOURCE_TABLES + (...)` → `FROM ('cs_mall_ums', 'ums_user')` → SQL 1064 语法错）
+BASELINE_TABLES: Sequence[str] = tuple(f"{d}.{t}" for d, t in DATA_SOURCE_TABLES) + (
+    "cs_mall_pms.pms_sku", "cs_mall_pms.pms_spu")
+
+# metric → (表, 聚合列)；`row_count` 走 COUNT(*)，其余走 SUM(列)
+BASELINE_AGG: Dict[str, Tuple[str, str]] = {
+    "sum_stock": ("cs_mall_pms.pms_sku", "stock"),
+    "sum_sales": ("cs_mall_pms.pms_spu", "sales"),
+}
+
+
+def _baseline_now(conn, target: str, metric: str) -> str:
+    with conn.cursor() as cur:
+        if metric == "row_count":
+            cur.execute(f"SELECT COUNT(*) AS v FROM {target}")
+        else:
+            table, col = BASELINE_AGG[metric]
+            cur.execute(f"SELECT COALESCE(SUM({col}),0) AS v FROM {table}")
+        return str(cur.fetchone()["v"])
+
+
+def baseline_save(conn, batch: str) -> Dict[str, str]:
+    """造数**前**写基线：9 张标识表 + `pms_sku`/`pms_spu` 的行数，以及 **stock / sales 合计**。
+
+    为什么要记 `stock`/`sales` 合计：它们是**不可逆的累加字段**（方案 §2.2.1），
+    清理只能删行、删不回累加值 ⇒ 基线是判断"是否被改过、改了多少"的唯一对照。
+    """
+    out: Dict[str, str] = {}
+    for target in BASELINE_TABLES:
+        out[f"{target}|row_count"] = _baseline_now(conn, target, "row_count")
+    for metric in BASELINE_AGG:
+        table = BASELINE_AGG[metric][0]
+        out[f"{table}|{metric}"] = _baseline_now(conn, table, metric)
+    with conn.cursor() as cur:
+        for key, value in out.items():
+            target, metric = key.rsplit("|", 1)
+            cur.execute("INSERT INTO cs_mall_sim.sim_baseline(batch_id,target,metric,value,created_at) "
+                        "VALUES (%s,%s,%s,%s,NOW())", (batch, target, metric, value))
+    conn.commit()
+    return out
+
+
+def baseline_compare(conn, batch: str) -> List[str]:
+    """清理**后**与基线比对；返回差异清单（空 = 完全回到基线）。"""
+    with conn.cursor() as cur:
+        cur.execute("SELECT target, metric, value FROM cs_mall_sim.sim_baseline WHERE batch_id=%s", (batch,))
+        base = {(r["target"], r["metric"]): r["value"] for r in cur.fetchall()}
+    if not base:
+        return [f"批次 {batch} 没有基线记录（造数时未带 --baseline）"]
+    diffs: List[str] = []
+    for (target, metric), value in sorted(base.items()):
+        now = _baseline_now(conn, target, metric)
+        if now != str(value):
+            diffs.append(f"{target} {metric}：基线 {value} → 现在 {now}")
+    return diffs
 
 # =============================================================================
 # main
@@ -1316,6 +1500,10 @@ def main() -> None:
     ap.add_argument("--apply", action="store_true", help="清理时真正执行 DELETE（默认只统计）")
     ap.add_argument("--verify", action="store_true",
                     help="只校验指定批次的回填结果（需 --batch）：按批次口径，不造数、不写库；有问题退出码 1")
+    ap.add_argument("--baseline", action="store_true",
+                    help="⑥ 造数**前**记录基线（9 表行数 + stock/sales 合计）→ 清理后用 --compare-baseline 比对")
+    ap.add_argument("--compare-baseline", action="store_true",
+                    help="⑥ 与 --batch 的基线比对（清理后跑）：有差异退出码 1")
     ap.add_argument("--base", default=BASE, help=f"网关地址（默认 {BASE}）")
     args = ap.parse_args()
 
@@ -1343,6 +1531,18 @@ def main() -> None:
             log(f"✅ 批次 {args.batch} 回填校验通过：登记 ⇄ data_source 标识 一致（按批次口径）")
             return
 
+        if args.compare_baseline:
+            if not args.batch:
+                sys.exit("--compare-baseline 必须带 --batch sim_YYYYMMDD_HHMM")
+            diffs = baseline_compare(conn, args.batch)
+            if diffs:
+                log(f"⚠️ 批次 {args.batch} 与基线不一致（{len(diffs)} 项）：")
+                for d in diffs:
+                    log(f"   - {d}")
+                sys.exit(1)
+            log(f"✅ 批次 {args.batch} 已完全回到基线（行数 + stock/sales 合计一致）")
+            return
+
         catalog = preflight(conn, args.days, args.per_day, args.with_seckill, args.users)
         if args.preflight:
             log("--preflight 结束：未写入任何数据 ✅")
@@ -1356,6 +1556,11 @@ def main() -> None:
                         (batch, args.days, args.per_day, f"dump_file=待填；base={args.base}"))
         conn.commit()
         log(f"批次 {batch} 已开（记得在造数**前**做 mysqldump 并把文件名写进 sim_batch.dump_file）")
+        if args.baseline:
+            # ⑥ 基线必须在**任何写入之前**采（下面 ensure_users 就开始写了）
+            base = baseline_save(conn, batch)
+            log(f"📐 基线已记录（{len(base)} 项 = {len(BASELINE_TABLES)} 张表行数 + stock/sales 合计）"
+                f" → 清理后跑 `--compare-baseline --batch {batch}` 比对")
 
         api = Api(args.base)
         # 🆕 2026-09-12：用户池真实感告警（§九：20 人 × 每天 1000 行为 = 每人 50 次动作，真人远低于此）
