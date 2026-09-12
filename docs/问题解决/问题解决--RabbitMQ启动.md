@@ -120,7 +120,7 @@ net start RabbitMQ
 netstat -ano | findstr :5672
 ```
 
-输出 `LISTENING` 即表示成功。浏览器访问 http://localhost:15672 ，账号密码 `guest/guest`。
+输出 `LISTENING` 即表示成功。浏览器访问 http://localhost:15672 ，账号密码 `guest/guest`。（⚠️ **本条仅限本地 Windows 环境**：生产两台服务器已于 2026-09-12 从 `guest` 切到专用 administrator 账号并删除 `guest`，见 #54 / [[问题解决--生产安全加固与凭据治理]]）
 
 ---
 

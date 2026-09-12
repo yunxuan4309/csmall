@@ -32,7 +32,7 @@
 
 ### 1.3 MyBatis-Plus Boot 2 Starter 不兼容 Spring Boot 3
 
-**解决**：3 个模块的 `mybatis-plus-boot-starter` → `mybatis-plus-spring-boot3-starter`
+**解决**：3 个模块的 `mybatis-plus-boot-starter` → `mybatis-plus-spring-boot3-starter`（迁移当时为 3 个；**2026-09-12 复核现为 6 个** —— 另加 mall-ams / mall-product / mall-resource）
 - mall-order-webapi
 - mall-ums-webapi
 - mall-seckill-webapi

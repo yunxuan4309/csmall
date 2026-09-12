@@ -19,8 +19,8 @@
 
 - 统一 groupId 为 `com.cooxiao.mall`
 - 为所有子模块添加 `<relativePath>../pom.xml</relativePath>`
-- 在根 pom.xml 补充依赖版本：`seata-spring-boot-starter: 1.7.1`、`spring-cloud-starter-dubbo: 2021.1`
-- 统一所有 service 模块版本为 `1.0.0`
+- 在根 pom.xml 补充依赖版本：`seata-spring-boot-starter: 1.7.1`、`spring-cloud-starter-dubbo: 2021.1`（⚠️ 2026-09-12 更正：这两个是**初始导入期**的值；2026-05 Seata 2.1.0 迁移 + JDK21 升级后，现为 **`org.apache.seata` seata-spring-boot-starter 2.1.0 / `org.apache.dubbo` dubbo 3.3.2**，见 [[问题解决--JDK21与Seata迁移]]）
+- 统一所有 service 模块版本为 `1.0.0`（⚠️ **待人工确认**：实测各 service 模块现为 **`0.0.1-SNAPSHOT`**（继承父 POM 版本），与下一条「子模块不再指定 version」自洽 —— 若 `1.0.0` 确曾落地后被回退，请补上回退时间与原因）
 - 子模块引用依赖时不再指定 version 标签，继承父 POM 定义
 
 ---
