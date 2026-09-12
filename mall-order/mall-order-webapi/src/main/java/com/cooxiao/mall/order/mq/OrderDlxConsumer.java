@@ -1,11 +1,8 @@
 package com.cooxiao.mall.order.mq;
 
-import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.support.AmqpHeaders;
-import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -42,18 +39,15 @@ public class OrderDlxConsumer {
      * 方法级监听没有"按类型挑方法"这一步 ⇒ 无论载荷是什么，都能拿到原始字节做留痕。
      */
     @RabbitListener(queues = OrderQueueConfig.ORDER_DLX_QUEUE)
-    public void onDlxMessage(Message message, Channel channel,
-                             @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
+    public void onDlxMessage(Message message) {
         String body = new String(message.getBody(), StandardCharsets.UTF_8);
         String reason = extractDeathReason(message);
         log.error(ALARM_PREFIX + "订单库存扣减消息进入死信队列，原因: {}，消息体: {}",
                 reason, body);
-        try {
-            channel.basicAck(deliveryTag, false);
-        } catch (Exception e) {
-            log.error("死信消息确认失败", e);
-            Thread.currentThread().interrupt();
-        }
+        // 🔴 #70 补修 E（2026-09-12）：**不要手动 ack** —— 容器是 AUTO 模式（见 OrderQueueConfig 的 factory 说明），
+        //   方法正常返回即自动确认；这里再手动 ack 一次会**双确认** ⇒
+        //   `channel error 406 PRECONDITION_FAILED unknown delivery tag`（实测：2 条死信 ⇒ 2 次 406）。
+        //   消息本身已被 ack（死信队列归 0），所以那只是**日志噪音**；但既然顺手，就一并去掉。
     }
 
     /**

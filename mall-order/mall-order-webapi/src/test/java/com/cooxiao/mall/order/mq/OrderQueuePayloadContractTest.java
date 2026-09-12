@@ -93,7 +93,8 @@ class OrderQueuePayloadContractTest {
 
     @Test
     void dlxListener_mustBeMethodLevelAndTakeRawMessage() throws Exception {
-        Method onDlx = OrderDlxConsumer.class.getMethod("onDlxMessage", Message.class, Channel.class, long.class);
+        // #70 补修 E：DLX 消费者同样不再收 Channel/deliveryTag（ack 交容器）
+        Method onDlx = OrderDlxConsumer.class.getMethod("onDlxMessage", Message.class);
         assertNotNull(onDlx.getAnnotation(RabbitListener.class),
                 "死信监听注解必须写在方法上（方法级没有\"按载荷类型挑方法\"这一步）");
         assertNull(OrderDlxConsumer.class.getAnnotation(RabbitListener.class),
