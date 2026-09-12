@@ -122,6 +122,19 @@ foreach ($n in $Nodes) {
     Write-Host "   $($n.Name) ✅ jars 已更新"
 }
 
+# 🔴 前置自检（2026-09-12 实测踩到）：远程 build/up 是 **ai-deepseek 身份**跑的 ⇒ 若该机 `.env` 不可读，
+#   `docker compose` 会直接打 `open /data/csmall/.env: permission denied` 而**构建与重建全不执行**
+#   （`up -d` 失败又不会动已有容器 ⇒ `docker ps` 一切正常，极易误判成「部署成功」）。
+#   两台口径必须一致（AI 账号在 docker 组）：sudo chgrp docker /data/csmall/.env && sudo chmod 640 /data/csmall/.env
+Write-Host "`n④.5 前置自检：两台 .env 是否对 AI 账号可读" -ForegroundColor Cyan
+foreach ($n in $Nodes) {
+    $r = (Invoke-Remote -HostIp $n.HostIp -Script "test -r /data/csmall/.env && echo READABLE || echo NOT_READABLE").Trim()
+    if ($r -notlike '*READABLE*' -or $r -like '*NOT_READABLE*') {
+        throw "$($n.Name) 的 /data/csmall/.env 对 ai-deepseek 不可读 ⇒ compose 会 permission denied 且不会构建。请先用 ecs-user 在该机执行：sudo chgrp docker /data/csmall/.env && sudo chmod 640 /data/csmall/.env"
+    }
+    Write-Host "   $($n.Name) ✅ .env 可读" -ForegroundColor Green
+}
+
 Write-Host "`n⑤ 两台各自构建镜像 + 重建容器（共用 tag：$Tag）" -ForegroundColor Cyan
 # 🔴 2026-09-12 修复（实测踩到）：**镜像只有一个构建者 = `mall-seckill` 这个服务定义**。
 #   G14 之后 `mall-seckill-2` **故意不带 build 段**（复用同一镜像），所以

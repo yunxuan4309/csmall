@@ -15,7 +15,7 @@
 |---|---|---|---|---|---|
 | ~~1~~ | ~~**#55**~~ | ✅ **已收口（2026-09-12 · 无需动作）**：**root 账号本就是锁定的**（无密码可爆破）· `ecs-user` 保留密码登录属**接受项**（实测 247 次/6 天 爆破噪音，密码强 + 学习用途）· 副产品：**密钥登录已打通** | — | **无** | — |
 | **2** | **#65** | 普通订单**库存扣减 MQ 链路整条失效**（`stock` 永不减少 + 下单无库存校验） | ✅ 修复 + 回归测试 **3/3 绿**；**已部署并验收（2026-09-12）**：容器内 jar md5 一致 · `No listener method found` **0 次** · 消费者收到**正确类型**的消息（见 §65） | ~~重建 mall-order~~ ✅ 已完成 | ✅ |
-| **2b** | **#70** 🆕 | **#65 修复后暴露的库存扣减链路缺陷（共 5 处）**：**A** SQL **off-by-one**（买最后一件必失败）· **B** 失败路径**无限重投**（classic 队列 requeue 不写 `x-death` ⇒ 计数恒 0；实测 10 分钟 114 次）· **C** **yml 影子配置**（自定义 factory 不读它）· **D** **MANUAL 下抛异常不 reject**（消息永远 unacked）· **E** DLX 消费者双确认（406 噪音） | ✅ **A~D 已部署并实测收口**（毒消息 → 3 次重试 → **DLX 告警第一次真的响** → 自清理 0/0）；🟡 **E 已改完（BUILD SUCCESS + 回归 3/3），仅剩它未部署** | ~~mall-product + mall-order 部署~~ ✅ 已完成；**剩**：E 版 mall-order（**纯日志噪音，不急**；要部署时说一声，我传 jar） | — |
+| **2b** | **#70** 🆕 | **#65 修复后暴露的库存扣减链路缺陷（共 5 处）**：**A** SQL **off-by-one**（买最后一件必失败）· **B** 失败路径**无限重投**（classic 队列 requeue 不写 `x-death` ⇒ 计数恒 0；实测 10 分钟 114 次）· **C** **yml 影子配置**（自定义 factory 不读它）· **D** **MANUAL 下抛异常不 reject**（消息永远 unacked）· **E** DLX 消费者双确认（406 噪音） | ✅ **A~D 已部署并实测收口**（毒消息 → 3 次重试 → **DLX 告警第一次真的响** → 自清理 0/0）；✅ **E 已部署（2026-09-12 晚）**：容器内 jar `d39a2488169270f11eb3452b11674d4a`，重启后**无任何真 406**（源码里 mq 包已无 basicAck/basicNack 调用，只剩注释） | ~~mall-product + mall-order 部署~~ ✅ 已完成；~~E 版 mall-order~~ ✅ 已完成 | — |
 | ~~**3**~~ | **#54** ✅ | ✅ **已完成（2026-09-12）**：生产 RabbitMQ 已从 `guest/guest` 切到 `cs_mq_admin`（administrator） | ✅ compose 两套变量 + **两台机器逐项核实**：3 条连接全 `cs_mq_admin`（含新机 `172.29.193.240`）· `seckill_queue` **2 消费者** · 队列 0/0/0 · 用户表只剩 `cs_mq_admin` | ✅ 已收口 | ⚠️ 过程中暴露 2 个新问题 → 见 §54 末尾 + **#71** |
 | **4** | **#31** | 生产开启**向量检索**（RAG 真实运行，简历亮点） | ✅ 可行性评估完成：**三项前置实测通过**，且改为 env 覆盖**免重建**（见 §31） | **拍板开/不开**；开 = 改 `.env` + `recreate mall-ai` + 回归几条搜索 | 30 分钟 |
 | **5** | **#61** | 外部端到端探活（防"全 Up、health 200，业务却挂 24h"） | ✅ 脚本 `deploy/scripts/ops/e2e_probe.py` **真机验证 9/9 PASS**（见 §61） | 脚本放新机 + 挂 cron（§61 有现成 cron 行） | 10 分钟 |
@@ -43,6 +43,7 @@
 | **#53-①②④** | 网关重试 / 缩短 LB 缓存 TTL / 断路器 | 要**重启网关**（全站入口 1~2 分钟）；**③ 优雅下线已做完并验证 30/30 请求 0 失败** | §53 |
 | **#45** | 统一 Dubbo 应用名（front/search/ams 撞名但无 provider） | 纯规范、当前**无实际风险**；**顺手重建某个服务时再改** | §45 |
 | **#71** 🆕 | **镜像 tag 变量未落地**（`${MALL_SECKILL_TAG:-latest}` 在两台 `.env` 都查不到 ⇒ 手动无 tag `up -d` 回落 `latest` → 本地没有 → 去公网拉 → 超时；且两台现存 tag 不一致：老机 `latest` / 新机 `:20260912`） | 现役容器都正常（**逐实例 jar md5 已核对一致**）；正规路径 `deploy-seckill-both.ps1` **自带 tag** ⇒ 只有「手动重建」会踩 | 想彻底收口：两台 `.env` 显式给 tag 或统一改走脚本；认知见 [[问题解决--代码与线上不一致的静默失效]] §4.5 个案 E |
+| **#72** 🆕 | **秒杀队列缺终止态可观测性**：`seckill_queue` 无 DLX ⇒ 毒消息重试耗尽后**被静默丢弃**（只有日志；`MessageRetryTask` 是发布侧重试，捞不回来） | 需要**改队列参数**（RabbitMQ 不允许改已存在队列的 `x-dead-letter-*` ⇒ 要么删队列重建、要么用 broker policy 打 `dead-letter-exchange`），属要动中间件拓扑的一次独立变更 | 二选一：① `rabbitmqctl set_policy seckill-dlx` 打上 `dead-letter-exchange` 策略 + 在 `RabbitMqComponentConfiguration` 补 DLX 交换机/DLQ/绑定 + 加告警；② 更轻：终止时往 `seckill_message_retry` **写一条 failed 留痕**（注意要 `REQUIRES_NEW` 才不被 `@Transactional` 回滚） |
 | **#30 #39 #41 #15 #16 #26 #35** | 监控 / 日志 / CI-CD / K8s / TraceId / 网络 / Jackson 统一 | 都是"企业级完整度"项，**面试用嘴讲方案即可**（#35 可挑 JSON 安全讲 fastjson 漏洞史） | [[TODO中低优先级]] 对应 § |
 | **#56** | 公开仓库暴露 IP / 拓扑 / 弱凭据事实 | ✅ **已正式决定"接受"**（公开仓库是简历作品集；公网端口已被安全组挡住、真实凭据未入库） | §56（结论已记录，**不再挂账**） |
 
@@ -386,6 +387,12 @@ sudo systemctl reload sshd
 - ⭐ **可复用判据**：**改 ack 模式时要"扫全模块的监听器"**（同一 `rabbitListenerContainerFactory` 下的**每一个** `@RabbitListener` 都要一起改）—— 否则修好一个、漏掉一个，就会以"偶发 406"的形式留下来。
 
 **✅ #70 全链收口（2026-09-12）**：A（off-by-one）· B（无限重投）· C（yml 影子配置）· D（MANUAL 下不 reject）· E（DLX 双确认）**五处全部修复并实测**；最终形态 = **AUTO ack（ack 全交容器）+ 两个监听器都不碰 channel + `defaultRequeueRejected(false)` + retry 3 次后 reject ⇒ DLX 告警** ⇒ **实测毒消息 → 3 次重试 → DLX → `【MQ死信告警】`（该告警第一次真的响）→ DLX 消费者 ack ⇒ 队列 0/0** ✅
+
+**✅ 部署收口（2026-09-12 晚）**：E 版 `mall-order` 已上线 —— 容器内 jar `d39a2488169270f11eb3452b11674d4a`，容器 `Up`、启动日志 `delegate=amqp://cs_mq_admin@…`，**重启后无任何真的 406**（`grep 406` 会命中 Nacos 连接 id 之类的假匹配，验收要用 `channel error 406 PRECONDITION_FAILED` 整串判 ✅）。
+
+**🆕 秒杀侧同款修复（2026-09-12 晚）**：`SeckillQueueConsumer` + `mall-seckill/application-prod.yml` 按**同一套口径**改造（AUTO ack + `default-requeue-rejected: false` + 不再手动 ack/nack；`rows==0` 抛 `AmqpRejectAndDontRequeueException`），新增契约回归测试 `SeckillQueueContractTest`（**3/3** ✅，模块 **12/12** ✅）。**两台实例同 tag `20260912-1731` 部署**：容器内 jar 双向核对 `889e76dfe267…` == 宿主 jars ✅、HTTP 200 ✅、`seckill_queue` 消费者恢复 **2** ✅、队列 **0** ✅、`ACCESS_REFUSED` 0 次 ✅。
+> ⚠️ **副作用边界（诚实记录）**：`seckill_queue` **没有 DLX**（声明时无 `x-dead-letter-exchange`，broker 里也没有秒杀 DLQ）⇒ 重试耗尽后消息是**被丢弃**，终止态只有 ERROR/WARN 日志；`MessageRetryTask` 是**发布侧**重试（重发成功即 `status=1`），**不会**把已发出的毒消息捞回来 ⇒ 已登记 **#72**。
+> ⚠️ **顺带纠正一个认知**：仅靠「方法参数提示」**不足以**确定载荷类型 —— 实测把 `__TypeId__` 头去掉后 `fromMessage` 仍给 `LinkedHashMap` ⇒ **`__TypeId__` 是载荷类型的承重结构**（生产端转换器必须写它），这也是 #65 那类静默失效的机理边界。
 - **判据教训（又一次）**：`ack_required=true` **不能**用来判断"是否 manual ack"（AUTO 模式下 Spring 同样是 autoAck=false）；**真判据是容器日志里的 `acknowledgeMode=`**。
 - ℹ️ **对照**：`mall-seckill` **没有**自定义 factory（配置类里 4 个 bean 无 Factory）⇒ 它的 yml 那套**是生效的** ✅ ⇒ **"抄别人的配置"这次不成立 —— 必须先确认自己这条链路读的是哪个配置源**。
 
