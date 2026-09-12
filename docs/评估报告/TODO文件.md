@@ -63,7 +63,7 @@
 | **#65** | **普通订单库存扣减 MQ 链路整体失效** → `pms_sku.stock` 永不减少、下单无库存校验 | 🔴 **P1** | §65 |
 | **#66** | Sentinel 面板上报缺口（8 服务未配 dashboard 地址） | ✅ 已修复验收 | §66 |
 | **#61** | **外部端到端探活**（"21 容器全 Up、health 200，业务却挂了 24h"的根治） | 🟡 P2 | §61 |
-| **#62** | mall-ai 偶发 500 `AccessDeniedException`（已定性，修法待变更窗口） | 🟡 P2 | §62 |
+| **#62** | mall-ai `/ai/chat/stream` 并发下 ~50% HTTP 500（`AccessDeniedException`：ASYNC/ERROR 二次派发被授权规则拒绝） | ✅ **已修复验收**（2026-09-12） | §62 |
 | **#64** | **秒杀预热两套 `spu_id` 语义冲突** → 4/12 个秒杀 SKU 从不预热（靠凌晨永久 key 兜住） | 🔴 P2 | §64 |
 
 | **#31** | **生产开启向量检索**（前置**全解除**，仅剩"改配置 + 部署 + 验证"） | 🟢 可实施 | §31 |
@@ -382,7 +382,7 @@
 ---
 
 
-### 62. 【观察】mall-ai 偶发 500：`AccessDeniedException`（响应已提交）🟡 P2（2026-09-10 观测并已定性）
+### 62. 【观察 → ✅ 已修】`/ai/chat/stream` 并发下 ~50% HTTP 500：`AccessDeniedException`（ASYNC/ERROR 派发）🟡 P2（2026-09-10 观测 · **2026-09-12 定量定位并修复**）
 
 > **现象**：2026-09-10 P1 验证与加固验证期间，`POST /ai/chat/send`（经网关）返回 **500**（网关日志 `500 Server Error for HTTP POST "/ai/chat/send"`），mall-ai 侧日志：
 
@@ -394,6 +394,36 @@ ERROR ... threw exception [Unable to handle the Spring Security Exception becaus
 ERROR o.s.b.a.w.s.e.ErrorMvcAutoConfiguration$StaticView - Cannot render error page for request [null] as the response has already been committed.
 ```
 
+**✅ 已修复并验收（2026-09-12 · 提交 `9aec75a`）**
+
+> **修法**：`mall-ai/…/security/config/ResourceWebSecurityConfiguration` 在授权规则**最前面**放行**内部派发**：
+> `.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()`
+> 🔴 **对 2026-09-10 结论的关键更正**：原分析只指向 **ERROR** 派发、建议只放行 ERROR —— **不够**。
+> 本轮实测确认另一半是 **ASYNC** 派发：`/ai/chat/stream` 返回 `StreamingResponseBody`，业务在异步线程写完流后
+> 触发一次 ASYNC 派发，那一刻**容器线程上已无认证对象** → `anyRequest().authenticated()` 拒绝。
+> **两种派发都必须放行**（只放 ERROR 仍会 ~50% 失败）。默认 REQUEST 派发**仍然要求登录**，
+> `/ai/**` 防匿名刷 Token 的收紧（2026-08-14）不受影响；同时消掉日志噪声与"状态码不可靠"隐患。
+> ⚠️ 文件里原有的 `MODE_INHERITABLETHREADLOCAL` static 块**解决不了**：ASYNC 派发用的是容器线程池里的
+> **另一个线程**，不是"当前线程的子线程"（该块保留未动、未夹带）。
+
+| 场景 | 修复前 | 修复后 |
+|---|---|---|
+| **串行** 20 次 | 20/20 全 200，但**每次都在日志里打一条 ERROR** | 20/20 ✅ **ERROR 归零** |
+| **20 并发 × 20s** | **硬失败 32/64 = 50.0%**，成功率 60.49% | **硬失败 0**，成功率 **100%**（163 次成功） |
+| **100 并发 × 45s** | （未测；按趋势必然更差） | **0 失败**，605 次成功 |
+
+⇒ 原记录"约 3/40 次、**重试即成功**"**低估了严重度**：串行时被"响应已提交"掩盖（客户端仍看到 200），
+并发时提交时序变化就暴露成 500 ⇒ **在 AI 并发压测里它直接撞中止阈值（5%）把阶梯杀掉**（2026-09-12 实测确实被中止过）。
+⇒ **部署验证**：容器内 `app.jar` md5 `73fd2e68bdd544a1648d0dc5d7a2f19e`；
+`ResourceWebSecurityConfiguration.class` **8859 → 9086 字节**且含 `DispatcherType`/`ASYNC` 常量。
+⇒ 实测明细与两链路结果见 [[AI并发测试方案]] **§十**。
+
+**影响面（后续待办 · 未做）**：8 个模块的 `ResourceWebSecurityConfiguration` 是**同一套授权写法**，但
+**只有 mall-ai 有流式（`StreamingResponseBody`）接口** ⇒ 其余 7 个（front/gateway/product/search/ums/ams/order/seckill）
+属**潜伏**。本次按"最小修复、可独立回滚"**只改 mall-ai**；其余建议单独窗口统一加同一行
+（改动小，但需多个服务重建 —— 注意"一次重建一大片会启动踩踏"，见 [[Python模拟数据与数据隔离方案]] §F4）。
+
+**（以下为 2026-09-10 的历史分析，机制判断正确、但对"修哪一半"的结论已被上面更正）**
 **已定性（共 3 次观测 + 3 组定量实验）**
 
 | 证据 | 结论 |
@@ -405,7 +435,7 @@ ERROR o.s.b.a.w.s.e.ErrorMvcAutoConfiguration$StaticView - Cannot render error p
 
 **影响**：以日志噪声为主；确有少量客户端可见 500（约 3/40 次观测），**重试即成功**。
 
-**两条候选修法（未实施，需单独变更窗口）**：
+**两条候选修法（✅ ① 已于 2026-09-12 实施，且**加强了**：同时放行 ASYNC + ERROR；② 未做）**：
 1. **放行 ERROR 派发**（`ResourceWebSecurityConfiguration`）：`requestMatchers("/error").permitAll()` + 允许 `DispatcherType.ERROR`（或用 `dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()`）→ 让 `/error` 能正常渲染，客户端拿到**规范的 401/5xx JSON** 而非"响应已提交"噪声。⚠️ 属 **mall-common / Security 公共配置，影响所有服务**，必须单独窗口 + 回归。
 2. **SSE 收尾容错**：配合 ① 才完整（`writeSSE`/`closeQuietly` 已 catch 应用层异常，但容器 flush 阶段的失败在应用之外）。
 

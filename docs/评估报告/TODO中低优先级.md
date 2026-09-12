@@ -474,7 +474,7 @@
 
 ② **正式造数**：每天 1000 行为 × 1~2 天（**目前只跑过 50 次动作的校准**）
 
-③ 🔴 **第二层 AI 并发压测（投入最大、完全未开始）**：`mock_llm.py` **未写**（需 `ThreadingHTTPServer` + **tool_calls 工具轮**）· compose 需加 `AI_API_BASE_URL` 透传 + override 指向 mock · Nacos 规则**备份 → 热改 `ai-chat` 阈值 → 恢复** · 构造 **N ≥ 120** 个模拟用户 token · 阶梯 20→50→100 **各压 `AI_AGENT_ENABLED=false/true` 两条链路**（产出"**Agent 双轮 vs 流水线单轮**"的承载代价）
+③ 🟢 **第二层 AI 并发压测（首轮已完成 · 2026-09-12）**：✅ mock 已写（自测 14/14）· ✅ compose 透传 D1 + override · ✅ Nacos 热改 5→200 · ✅ 800 用户池 · ✅ 阶梯 20/50/100 **两条链路已压**（**结果见 [[AI并发测试方案]] §十**；过程中修掉 **#62**——并发下 ~50% 500）。原计划细节：`mock_llm.py` **未写**（需 `ThreadingHTTPServer` + **tool_calls 工具轮**）· compose 需加 `AI_API_BASE_URL` 透传 + override 指向 mock · Nacos 规则**备份 → 热改 `ai-chat` 阈值 → 恢复** · 构造 **N ≥ 120** 个模拟用户 token · 阶梯 20→50→100 **各压 `AI_AGENT_ENABLED=false/true` 两条链路**（产出"**Agent 双轮 vs 流水线单轮**"的承载代价）
 
 ④ `--with-seckill`（秒杀动作，**目前只做预检**）
 
