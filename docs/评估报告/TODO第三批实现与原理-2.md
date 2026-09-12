@@ -109,6 +109,8 @@
 
 **结论**：**#67 的 ④⑤⑥ 当晚全部收口**，且"**基线 → 造数 → 秒杀 → 恢复 → 清理 → 比对**"闭环 **0 差异**（`--compare-baseline` exit=0）。
 
+> 📦 **本次的兜底产物（#68 的部分替代）**：新机 `/tmp/sim/seckill-snapshot-20260912_132945.json`（600 权限）—— **定点快照**：12 个秒杀 SKU 的 `seckill_stock`/`pms_sku.stock`/`pms_spu.sales` + Redis 预热值与 TTL + 三类标记键**全量**。配套两个独立脚本：`snapshot_seckill.py`（取快照）· `verify_against_snapshot.py`（**现状 vs 快照逐字段比对**）。⚠️ 它**不是全量 mysqldump** ⇒ **#68 未关闭**（全量 dump 仍待 `ecs-user` 执行 `backup-db.sh`）。
+
 | # | 做了什么 | 关键实测 |
 |---|---|---|
 | **④** | 秒杀真跑 **3 次**（批次 `1329`/`1333`/`1335`） | 每次 `seckill_ok=1`、`seckill_restore=1`、`seckill_verify_bad=0`；**独立复核**（现状 vs 定点快照**逐字段**比对：12 个秒杀 SKU 的 `seckill_stock`/`stock`/`sales` + Redis 预热值/TTL + 三类标记键）**全部回位**，唯一变化 = `success` **+1**（成交记录） |
