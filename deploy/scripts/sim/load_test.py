@@ -498,6 +498,12 @@ def _run_load(label: str, concurrency: int, duration: float, stop_flag: threadin
         f"被限流={blocked}（{result['blocked_pct']}%）  p50={lm['p50']}ms  p99={lm['p99']}ms")
     if stats.ai_why:
         log(f"   AI 失败原因直方图：{dict(stats.ai_why)}")
+        if any("AI 服务暂时不可用" in k for k in stats.ai_why):
+            log("   ⚠️ **该文案无法区分「AI 并发闸门满」与「其它异常」** —— 闸门满时 "
+                "`sendStreamWithAgent` 的 catch 也写这一句（服务端日志里才有 "
+                "`【AI并发闸门】…繁忙：当前并发 20/20`）。")
+            log("      ⇒ 判闸门请回看服务端：`docker logs csmall-ai --since 5m | grep '【AI并发闸门】'`")
+            log("      （2026-09-12 实测：agent 链路 50/100 并发下该文案 ≈ 全都是闸门满）")
     if result["by_state"]:
         log(f"   非成功/非限流的 state 分布：{result['by_state']}")
     if result["exceptions"]:
