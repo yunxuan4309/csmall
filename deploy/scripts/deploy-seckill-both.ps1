@@ -123,12 +123,21 @@ foreach ($n in $Nodes) {
 }
 
 Write-Host "`n⑤ 两台各自构建镜像 + 重建容器（共用 tag：$Tag）" -ForegroundColor Cyan
+# 🔴 2026-09-12 修复（实测踩到）：**镜像只有一个构建者 = `mall-seckill` 这个服务定义**。
+#   G14 之后 `mall-seckill-2` **故意不带 build 段**（复用同一镜像），所以
+#   `docker compose build mall-seckill-2` 在新机必然**失败**（无 build context），而它写在管道里
+#   （`| tail -3` 会吞掉退出码）⇒ 构建被静默跳过；随后 `up -d mall-seckill-2`：
+#     · 该 tag 本地不存在 ⇒ 去 Docker Hub 拉 `csmall-mall-seckill:<tag>` ⇒ 超时（新机拉不到）；
+#     · 该 tag 恰好存在   ⇒ **静默用旧镜像**（违反 G14，且容器 Up、HTTP 200，看不出问题）。
+#   ⇒ 正确做法：**两台都用 `mall-seckill` 这个服务定义来构建镜像**（context=./jars、
+#     dockerfile=../dockerfiles/mall-seckill.Dockerfile，两台都有），再各自 `up -d` 自己的服务。
+#   ⇒ 另外：**tag 要用新值，不要复用旧 tag** —— 万一没构建成功，`up -d` 会响亮失败而不是静默用旧镜像。
 foreach ($n in $Nodes) {
-    Write-Host "   --- $($n.Name)：docker compose build $($n.Service) && up -d ---"
+    Write-Host "   --- $($n.Name)：docker compose build mall-seckill（共享镜像）&& up -d $($n.Service) ---"
     Invoke-Remote -HostIp $n.HostIp -Script @"
 set -e
 cd /data/csmall
-MALL_SECKILL_TAG=$Tag docker compose build $($n.Service) 2>&1 | tail -3
+MALL_SECKILL_TAG=$Tag docker compose build mall-seckill 2>&1 | tail -3
 MALL_SECKILL_TAG=$Tag docker compose up -d $($n.Service) 2>&1 | tail -3
 "@ | Write-Host
 }

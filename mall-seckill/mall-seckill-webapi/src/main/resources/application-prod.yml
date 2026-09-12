@@ -1,4 +1,4 @@
-﻿# ##################################################################### #
+# ##################################################################### #
 #                            【生产】环境配置                              #
 # ##################################################################### #
 #  当前文件是Profile配置，需要主配置文件中通过spring.profiles.active激活后生效   #
@@ -75,7 +75,15 @@ spring:
     virtual-host: /
     listener:
       simple:
-        acknowledge-mode: manual
+        # 🔴 #70 同款修复（2026-09-12，与 mall-order 最终形态口径一致）
+        #   AUTO：ack/nack 全交容器，监听器**不再碰 channel**。
+        #   旧配置 MANUAL + 手动 basicNack(requeue=count<3)：classic 队列 requeue 不写 x-death
+        #   ⇒ 计数恒 0 ⇒ 无限重投；且 MANUAL 下抛异常不会 reject（消息永久 unacked）。
+        #   ⚠️ 本服务没有自定义 RabbitListenerContainerFactory ⇒ 这里的 yml **生效**
+        #   （mall-order 是反例：它自带 factory，改了 yml 也是影子配置，见 #70 C）
+        acknowledge-mode: auto
+        #   重试耗尽后 reject 且**不 requeue**（默认 true 会 requeue ⇒ 又变无限重投）
+        default-requeue-rejected: false
         retry:
           enabled: true
           max-attempts: 3
