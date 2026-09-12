@@ -16,12 +16,12 @@
 | ~~1~~ | ~~**#55**~~ | ✅ **已收口（2026-09-12 · 无需动作）**：**root 账号本就是锁定的**（无密码可爆破）· `ecs-user` 保留密码登录属**接受项**（实测 247 次/6 天 爆破噪音，密码强 + 学习用途）· 副产品：**密钥登录已打通** | — | **无** | — |
 | **2** | **#65** | 普通订单**库存扣减 MQ 链路整条失效**（`stock` 永不减少 + 下单无库存校验） | ✅ 修复 + 回归测试 **3/3 绿**；**已部署并验收（2026-09-12）**：容器内 jar md5 一致 · `No listener method found` **0 次** · 消费者收到**正确类型**的消息（见 §65） | ~~重建 mall-order~~ ✅ 已完成 | ✅ |
 | **2b** | **#70** 🆕 | **#65 修复后暴露的库存扣减链路缺陷（共 5 处）**：**A** SQL **off-by-one**（买最后一件必失败）· **B** 失败路径**无限重投**（classic 队列 requeue 不写 `x-death` ⇒ 计数恒 0；实测 10 分钟 114 次）· **C** **yml 影子配置**（自定义 factory 不读它）· **D** **MANUAL 下抛异常不 reject**（消息永远 unacked）· **E** DLX 消费者双确认（406 噪音） | ✅ **A~D 已部署并实测收口**（毒消息 → 3 次重试 → **DLX 告警第一次真的响** → 自清理 0/0）；🟡 **E 已改完（BUILD SUCCESS + 回归 3/3），仅剩它未部署** | ~~mall-product + mall-order 部署~~ ✅ 已完成；**剩**：E 版 mall-order（**纯日志噪音，不急**；要部署时说一声，我传 jar） | — |
-| **3** | **#54** | RabbitMQ 仍是 `guest/guest`（同 VPC 任何实例可拿 administrator） | ✅ compose 已补 `SPRING_RABBITMQ_*` + 两步操作单（见 §54） | 同步 compose → 建新用户 → 切服务 → **最后**删 `guest` | 15 分钟（两步） |
+| ~~**3**~~ | **#54** ✅ | ✅ **已完成（2026-09-12）**：生产 RabbitMQ 已从 `guest/guest` 切到 `cs_mq_admin`（administrator） | ✅ compose 两套变量 + **两台机器逐项核实**：3 条连接全 `cs_mq_admin`（含新机 `172.29.193.240`）· `seckill_queue` **2 消费者** · 队列 0/0/0 · 用户表只剩 `cs_mq_admin` | ✅ 已收口 | ⚠️ 过程中暴露 2 个新问题 → 见 §54 末尾 + **#71** |
 | **4** | **#31** | 生产开启**向量检索**（RAG 真实运行，简历亮点） | ✅ 可行性评估完成：**三项前置实测通过**，且改为 env 覆盖**免重建**（见 §31） | **拍板开/不开**；开 = 改 `.env` + `recreate mall-ai` + 回归几条搜索 | 30 分钟 |
 | **5** | **#61** | 外部端到端探活（防"全 Up、health 200，业务却挂 24h"） | ✅ 脚本 `deploy/scripts/ops/e2e_probe.py` **真机验证 9/9 PASS**（见 §61） | 脚本放新机 + 挂 cron（§61 有现成 cron 行） | 10 分钟 |
 | **6** | **#67①** | 演示**录像** | ✅ [[演示录像操作手册]] 就绪（②~⑥ 已全部完成） | 按手册录 —— ⚠️ **建议先做完 #65 再录**（否则演示里库存/销量不动） | 1~2 小时 |
 
-> ⚠️ **推荐顺序：#65 → #54 → #31 → #61 → 录像**（**#55 已于 2026-09-12 收口为"已评估·接受"，无需动作**）。
+> ⚠️ **推荐顺序：#65 ✅ → #54 ✅ → #31（待决策） → #61 ✅ → 录像**（**#55 已于 2026-09-12 收口为"已评估·接受"，无需动作**）。
 > 理由：**#65** 让"下单后库存/销量变化"这个演示卖点**真正成立** · **#31** 会**改变搜索排序**，必须在**录像定稿前**决定 · #54/#61 是成本小、收益稳的收尾。
 
 ### ✅ 本次已关闭（2026-09-12，正文仍留在第六节）
@@ -42,6 +42,7 @@
 | **#51** | 容器 restart 策略改 `unless-stopped` | 要 **recreate 25 个容器**（注意 ES 分片）；实测证据（`on-failure` 不扛 daemon 重启）已留档 | §51 |
 | **#53-①②④** | 网关重试 / 缩短 LB 缓存 TTL / 断路器 | 要**重启网关**（全站入口 1~2 分钟）；**③ 优雅下线已做完并验证 30/30 请求 0 失败** | §53 |
 | **#45** | 统一 Dubbo 应用名（front/search/ams 撞名但无 provider） | 纯规范、当前**无实际风险**；**顺手重建某个服务时再改** | §45 |
+| **#71** 🆕 | **镜像 tag 变量未落地**（`${MALL_SECKILL_TAG:-latest}` 在两台 `.env` 都查不到 ⇒ 手动无 tag `up -d` 回落 `latest` → 本地没有 → 去公网拉 → 超时；且两台现存 tag 不一致：老机 `latest` / 新机 `:20260912`） | 现役容器都正常（**逐实例 jar md5 已核对一致**）；正规路径 `deploy-seckill-both.ps1` **自带 tag** ⇒ 只有「手动重建」会踩 | 想彻底收口：两台 `.env` 显式给 tag 或统一改走脚本；认知见 [[问题解决--代码与线上不一致的静默失效]] §4.5 个案 E |
 | **#30 #39 #41 #15 #16 #26 #35** | 监控 / 日志 / CI-CD / K8s / TraceId / 网络 / Jackson 统一 | 都是"企业级完整度"项，**面试用嘴讲方案即可**（#35 可挑 JSON 安全讲 fastjson 漏洞史） | [[TODO中低优先级]] 对应 § |
 | **#56** | 公开仓库暴露 IP / 拓扑 / 弱凭据事实 | ✅ **已正式决定"接受"**（公开仓库是简历作品集；公网端口已被安全组挡住、真实凭据未入库） | §56（结论已记录，**不再挂账**） |
 
@@ -61,7 +62,7 @@
 | **#45** | **统一 Dubbo 应用名**（front/search/ams 撞名但无 provider，加 `-dubbo` 后缀防未来踩坑） | 🔴 规范项 | §45 |
 | **#51** | **容器 restart 策略改 `unless-stopped`**（实测 `on-failure` **不扛 daemon 重启** → 老机 20/21、新机 5/5 不恢复） | 🔴 P2 | §51 |
 | **#53** | **网关重试 / 优雅下线兜底**（③ 优雅下线已实现；①②④ 需重启网关窗口） | 🔴 P2（部分） | §53 |
-| **#54** | **RabbitMQ 凭据仍是 `guest/guest`**（服务侧变量名写错：应 `SPRING_RABBITMQ_*`） | 🔴 P2 | §54 |
+| **#54** ✅ | **RabbitMQ 凭据仍是 `guest/guest`**（服务侧变量名写错：应 `SPRING_RABBITMQ_*`） | ✅ **已完成（2026-09-12）**：已切 `cs_mq_admin`，两台逐项核实通过，`guest` 已删 | §54 |
 | **#55** | SSH 暴露面 → ✅ **已评估·接受（2026-09-12 实测）**：**root 本就是锁定账号**（`passwd -S root` = `L`、shadow = `*` ⇒ 无密码可爆破）；`ecs-user` 保留密码登录（实测 `Failed password` **247 次 / 6 天**，密码强 + 学习用途 ⇒ 接受）；副产品：**密钥登录已打通** | ✅ 已评估·接受 | §55 |
 | **#56** | 公开仓库暴露 IP/拓扑/弱凭据事实 | 🟡 P3（**已决定接受**） | §56 |
 | **#57** | ✅ **只读核实完成（2026-09-12）**：**14 处差异全部是"服务器比快照新"**（9 张表的 `data_source` / `oms_order.order_type` / 4 处 `gmt_modified` / `ams_permission.value` / `seckill_message_retry` 整表）⇒ **0 处需要 ALTER** | ✅ 已完成 | §57 |
@@ -100,7 +101,7 @@
 > **⚠️ 纪律**：**新增任何方案 / 评估文档时，必须在 [[文档索引]] 登记** —— 未登记 = 漏跟踪；并在对应 TODO 条目里 `[[链接]]` 该文档（**双向索引**）。
 > **本文件（TODO）只保留**：① **编号总登记表**（编号 → 一句话 → 状态 → 位置）② **未完成条目正文** ③ 执行路线图。**已完成明细** → [[TODO已完成]]；**文档记账** → [[文档索引]]。
 
-## 📋 四、要做条目正文（#31 · #54 · #55 · #57 · #61 · #65）
+## 📋 四、条目正文（**#31 待决策** · #54/#55/#57/#61/#65/#70 均已收口，留档）
 
 ### 31. 【AI】评估生产开启向量检索 embedding-enabled: true（2026-09-02 记录，待决策）
 
@@ -146,7 +147,7 @@
 ---
 
 
-### 54. RabbitMQ 生产凭据仍是默认 `guest`（安全）
+### 54. RabbitMQ 生产凭据仍是默认 `guest`（安全）→ ✅ **已完成（2026-09-12）**
 
  🔴 **P2（2026-09-09 推送前敏感数据审查发现）**：生产 RabbitMQ 只有 `guest` 一个用户（`tags=[administrator]`），且**允许非本机登录**——实测 `rabbitmqctl list_connections` 显示来自 `172.18.0.18`、`172.18.0.19`、**`172.29.193.240`（新机）** 的连接用户均为 `guest`；5672/15672 监听 `0.0.0.0`。**公网已被安全组挡住**（实测 blocked），但**同 VPC / 同安全组内任何实例**都能用公开的默认值 `guest/guest` 拿到 administrator 权限（读写所有队列、经 management 插件改配置）。根因：compose 里服务侧注入的是 `RABBITMQ_USERNAME/PASSWORD`（**Spring Boot 不读这两个名字**）→ 服务实际用 Spring Boot 默认值 `guest/guest`。
 
@@ -183,6 +184,24 @@ docker exec csmall-rabbitmq rabbitmqctl delete_user guest
 🔙 **回滚**：`.env` 改回 `guest` → `docker compose up -d` 三个服务 → `rabbitmqctl add_user guest guest && rabbitmqctl set_user_tags guest administrator && rabbitmqctl set_permissions -p / guest ".*" ".*" ".*"`。
 📌 **另外两个可选收尾**：① `loopback_users.guest = true`（**2026-09-12 实测当前 `loopback_users=[]`** ⇒ guest **可远程登录**，这正是风险来源）；② 5672/15672 只绑私网（当前监听 `0.0.0.0`，公网靠安全组挡）。 
 
+
+**✅ 收口记录（2026-09-12 全链路已核实）**
+
+- **执行序列**：`rabbitmqctl add_user cs_mq_admin <强密码>` → `set_user_tags … administrator` → `set_permissions -p / ".*" ".*" ".*"` → **两台** `.env` 写入（改前 `cp -a .env .env.bak-<时间戳>` 备份）→ 逐服务重建（老机 `mall-order` + `mall-seckill`，新机 `mall-seckill-2`）→ 复验 → `delete_user guest`。
+- **独立复核证据（AI 用 `ai-deepseek` 账号实查，不采信操作者输出）**：
+
+  | 复核项 | 实测 |
+  |---|---|
+  | `list_connections user peer_host` | `cs_mq_admin` × 3 = `172.18.0.18` / `172.18.0.19`（老机两容器）+ **`172.29.193.240`（新机副本）** |
+  | `list_queues name messages consumers` | `order_queue` **0/1** · `seckill_queue` **0/2** · `order_queue_dlx` **0/1** |
+  | `list_users` | **只剩 `cs_mq_admin [administrator]`**（`guest` 已删） |
+  | 老机容器 env | `SPRING_RABBITMQ_USERNAME=cs_mq_admin`（`SPRING_*` 与 `RABBITMQ_*` 两套都在） |
+  | 新机副本日志 | `delegate=amqp://cs_mq_admin@172.29.193.239:5672/` · `Started in 80.652s` · `ACCESS_REFUSED` **0 次** · HTTP 200 |
+
+- ⚠️ **过程中暴露的两个新问题**：
+  1. **镜像 tag 变量从未落到 `.env`** ⇒ 新机「无 tag 重建」回落 `latest` → 本地无 `latest` → **去 Docker Hub 拉镜像 → 超时 → 容器根本没重建**（`up -d` 报错，但容器继续 `Up`）；**新机副本因此用旧 `guest` 凭据带病运行 3 小时**（MQ `ACCESS_REFUSED`、队列不积压 ⇒ **外部零症状**）⇒ 已登记 **#71**，认知详见 [[问题解决--代码与线上不一致的静默失效]] §4.5 个案 E。
+  2. **`ecs-user` 在新机不在 docker 组**（老机在）⇒ 新机一切 docker 命令要 `sudo`；已 `usermod -aG docker ecs-user`（**重新登录后生效**）。另：新机 `.env` 为 `600 ecs-user`，**AI 账号读不到**（老机可读）⇒ 独立复核改走 `docker inspect` 容器 env。
+- 🔐 **凭据卫生（本轮教训，已固化进 [[项目上下文文档]]）**：换密码/密钥的标准姿势 = `read -rp`（可见）/ `read -rsp`（静默）读入 → 改前备份 → **只回显前 4 位** → **切换前先 `authenticate_user` 验证新凭据可用**；**明文一旦进入聊天/文档/提交即视为泄露，必须轮换**。取证类命令本身也要防泄漏：`--format '{{.Config.Image}} | {{range .Config.Env}}{{println .}}{{end}}'` 会把镜像名与**第一个**环境变量粘在同一行，`grep` 一打就把同行密钥带出来 —— 正确写法是 `{{.Name}}{{println}}{{range .Config.Env}}{{println .}}{{end}}` + `grep -E '^…='` 行首锚定。
 
 ### 55. SSH 暴露面 → ✅ **已评估·接受并收口（2026-09-12）**
 
