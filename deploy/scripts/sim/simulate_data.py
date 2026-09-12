@@ -1601,13 +1601,17 @@ def main() -> None:
             log(f"✅ 批次 {args.batch} 已完全回到基线（行数 + stock/sales 合计一致）")
             return
 
+        # 🔴 #68 快照闸门：**在任何写入之前、且在预检之前** —— "忘了做快照"要第一时间报，
+        #    别被预检的输出盖住（2026-09-12 自查发现：原先排在预检之后，实测时确实被盖过一次）。
+        #    `--preflight` 是只读入口 ⇒ 跳过闸门；`--verify`/`--compare-baseline`/`--clean` 在更早的分支返回，也不受影响。
+        dump_name = None
+        if not args.preflight:
+            dump_name = check_dump_gate(args)
+
         catalog = preflight(conn, args.days, args.per_day, args.with_seckill, args.users)
         if args.preflight:
             log("--preflight 结束：未写入任何数据 ✅")
             return
-
-        # 🔴 #68 快照闸门：**在任何写入之前**（未提供/太旧 ⇒ 直接拒绝开跑）
-        dump_name = check_dump_gate(args)
 
         batch = "sim_" + dt.datetime.now().strftime("%Y%m%d_%H%M")
         registry = Registry(batch)
