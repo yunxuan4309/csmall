@@ -155,7 +155,7 @@ ThreadingHTTPServer(("0.0.0.0", 9999), Handler).serve_forever()
 | # | 动作 | 验证方式 |
 |---|---|---|
 | 1 | compose 给 `mall-ai` 加 `AI_API_BASE_URL` 透传 + override 指向 mock（`172.29.193.240:9999`） | `docker inspect csmall-ai` 看到 `AI_API_BASE_URL=http://172.29.193.240:9999`；**且 mock 侧计数真的涨了** |
-| 2 | **备份 Nacos 规则原文**（`mall-ai-flow-rules`）到文件 + 记 md5 | `curl ".../configs?dataId=mall-ai-flow-rules&group=SENTINEL_GROUP"` 输出存盘 + `md5sum` |
+| 2 | **备份 Nacos 规则原文**（`mall-ai-flow-rules`）到文件 + 记 md5 | `curl ".../configs?dataId=mall-ai-flow-rules&group=SENTINEL_GROUP"` 输出存盘 + `md5sum` | ⚠️ **写后立刻 GET 可能读到旧快照**（2026-09-12 实测：紧接热改的 GET 仍显示旧值，一度被误判为"写入未生效"）⇒ **等 1~2 秒再复核**，并与落盘的 md5 比对确认 |
 | 3 | 构造 **N 个模拟用户 token**（N ≥ 阶梯峰值，建议 120） | 脚本预登录 → token 列表落文件 + 抽查 3 个能 200 |
 | 4 | mock 已按 §二 v2（`ThreadingHTTPServer` + 工具轮） | **单独压 mock** 拿 P50/P99 与吞吐，证明 mock 不是瓶颈 |
 | 5 | 记录基线 `free -h` / `docker stats --no-stream` | 落文件（对比用） |
