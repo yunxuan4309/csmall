@@ -32,7 +32,7 @@
 | ③ | P0「ChatServiceImpl 改造：请求带 tools → … → 流式回复」 | **LLM 调用有两条独立路径**：同步走 `AiClient.doChat`（RestTemplate）；**SSE 流式走 `ChatServiceImpl.doStreamDeepSeek`（裸 `HttpURLConnection`、模型硬编码 `deepseek-v4-flash`、`stream=true`）**——两份请求体各写各的 | **Agent 循环只放"非流式"路径**：新增 `DeepSeekAiClient.chatWithTools(...)`（`stream=false`）跑 1~3 轮工具；**最后一轮再复用现有 `streamDeepSeek`** 吐答案给用户。**不要**去 SSE delta 里解析 `tool_calls`（分片增量，拼接解析复杂、收益为零） |
 | ④ | P0「工具 `search_products` 复用 `RagServiceImpl.intentSearch` / `SearchServiceImpl`」 | `RagServiceImpl.intentSearch(...)`、`buildContext(...)`、`buildRelatedProducts(...)` 是**包私有方法**（无修饰符，仅 `com.cooxiao.mall.ai.service.impl` 包内可见）；`public` 的只有 `ask(...)` / `structuredSearch(...)` / `fullTextSearchNoPrice(...)` | 工具实现类**放进 `...ai.service.impl` 同包**（最省事），或改用 public 方法。**不要新建包放工具类**（会调不通） |
 | ⑤ | 未提 | 预算/闸门/限流设施已齐备：`TokenBudgetService`（2 元/天）、`AiConcurrencyGuard`（并发 20，满即失败不排队）、Sentinel 三组规则（`ai-chat=5` / `ai-reason=10` / `ai-light=30`）、`AiUserRateLimiter`（60s/10 次）；且 `doChat` 内**已自带** `checkBudget()` + `usage` 记账 | **全部复用，不新建**。但要注意：Agent 循环把 LLM 调用数**放大最多 3 倍** → 对 `concurrent-max` 与日预算的压力要能讲清（演示环境 0 调用，可接受） |
-| ⑥ | 未提 | 生产 `chat-model: deepseek-chat`，而该模型名**已被官方公告停用**（见 **[[TODO文件]]#58**）；DeepSeek 的正解是"同一模型 + `thinking` 开关"（`{"thinking":{"type":"disabled"}}`） | **与 #58 强耦合**：Agent 的**工具选择必须是稳定 JSON（`tool_calls`）** → 建议 **#58 与 #32 同期落地**（先做 thinking 开关改造，再在其上做 Function Calling），否则"模型名随时失效"的风险会直接压在新功能上 |
+| ⑥ | 未提 | ~~生产 `chat-model: deepseek-chat`，而该模型名已被官方公告停用~~（✅ **已由 #58 落地**：现为 `models.flash/pro` 档位 + 环境变量，全仓已无 `chat-model`/`deepseek-chat`）；DeepSeek 的正解是"同一模型 + `thinking` 开关"（`{"thinking":{"type":"disabled"}}`） | **与 #58 强耦合**：Agent 的**工具选择必须是稳定 JSON（`tool_calls`）** → 建议 **#58 与 #32 同期落地**（先做 thinking 开关改造，再在其上做 Function Calling），否则"模型名随时失效"的风险会直接压在新功能上 |
 
 | ⑦ | P0 S3 未提 | 🔴 实测（2026-09-10 实验 F）：**`tools` 与 `response_format: json_object` 不能共存** —— 带上 `response_format` 时模型**直接输出 JSON，不再触发 `tool_calls`**（`finish_reason=stop`） | 工具选择轮**只带 `tools`，不设 `response_format`**；工具参数的稳定性靠 **JSON Schema 约束 + 服务端二次校验**（不是靠 json mode）。⚠️ 现有 `chatWithModel(jsonMode=true)` 与 Function Calling **不兼容**，两者必须分开走 |
 
@@ -155,6 +155,7 @@ answer = streamChat(messages)                          // ⑥ 最后一轮流式
 | 会话管理 | SessionManager(ai:chat:session:* TTL 24h) |
 
 **本质**: "LLM 解析意图 → 代码写死执行路径 → 生成"——LLM 只当**解析器**,没有动作决策权,无工具调用,无循环。
+> ⚠️ **2026-09-12 复核**：本段是**实施前基线（2026-09-02）**；P0+P1 完成后已具备 Function Calling 与执行循环，**现况见 §八**。
 
 ---
 
@@ -236,6 +237,7 @@ answer = streamChat(messages)                          // ⑥ 最后一轮流式
 ⑥ 结果真实性:生成只能基于工具返回,禁止编造(幻觉防护)
 ⑦ 角色映射:user/admin 工具集不同
 ⑧ 审计:每个动作落库(谁/何时/调了什么/结果)——IoT 已有 DecisionLog/AuditLog 先例可复制
+  > ⚠️ **已更正（2026-09-12）**：校正① 判定 mall-ai **无数据库栈** ⇒ 改为 **Redis List 审计**，DB 化降为可选 P2（见 §八 S9）。
 ⑨ 降级兜底:工具失败 → 回退纯 RAG 回答(与 TODO #31 向量降级同一思想)
 ```
 

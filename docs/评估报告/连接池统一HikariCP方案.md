@@ -2,7 +2,7 @@
 
 > **创建日期**：2026-08-17
 > **状态**：📝 方案已定稿，**暂缓执行**（演示项目不冒重启风险）
-> **背景**：`docs/评估报告/TODO文件.md` R5 已核实——文档曾误记"已全面替换 HikariCP"，实际仅 mall-resource 使用 HikariCP，其余 6 个服务（product/order/seckill/ums/ams/sso）生产仍为 Druid 1.2.24。本文档为"真正切换"的详细执行方案。
+> **背景**：`docs/评估报告/TODO中低优先级.md` R5 已核实（⚠️ 2026-09-12 更正：R5 属中/低优先级，2026-09-11 已拆分到该文件）——文档曾误记"已全面替换 HikariCP"，实际仅 mall-resource 使用 HikariCP，其余 6 个服务（product/order/seckill/ums/ams/sso）生产仍为 Druid 1.2.24。本文档为"真正切换"的详细执行方案。
 
 ---
 
@@ -134,7 +134,7 @@ curl -s http://127.0.0.1:<端口>/actuator/health                               
 ### Step 7 — 更新文档
 
 - `docs/项目上下文文档.md` §6.1(8)/§8.12：改为"已统一 HikariCP"
-- `docs/评估报告/TODO文件.md` R5：标记已解决
+- `docs/评估报告/TODO中低优先级.md` R5：标记已解决
 - `docs/面试准备/03-数据库设计.md` Q7：更新为统一后现状
 
 ---
