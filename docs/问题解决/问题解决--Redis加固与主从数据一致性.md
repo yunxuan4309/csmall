@@ -66,7 +66,7 @@ R1~R4 加固（认证/持久化/内存上限/自定义 conf）
 bind 0.0.0.0            # 容器内监听（Docker 网络隔离，非裸奔）
 port 6379
 requirepass <密码>       # R1: 认证
-masterauth <密码>        # 主从/哨兵互连用（✅ **现状：#9 已跨机落地** —— 主从 + 3 哨兵、故障转移演练选主 6.1s / 客户端 9.1s 自愈，见 [[TODO已完成]] §十三）
+masterauth <密码>        # 主从/哨兵互连用（✅ **现状：#9 已跨机落地** —— 主从 + 3 哨兵、故障转移演练选主 6.1s / 客户端 9.1s 自愈，见 [[TODO已完成-明细-2026-09-12]] §十三）
 maxmemory 256mb         # R3: 内存硬顶（实测仅 21 键，256m 充裕）
 maxmemory-policy volatile-lru  # 只淘汰带 TTL 的键 → 保护永久购买标记 reseckill
 appendonly yes          # R2: AOF
