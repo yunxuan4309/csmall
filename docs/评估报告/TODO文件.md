@@ -359,6 +359,14 @@ sudo systemctl reload sshd
 - **根因**：**MANUAL ack 模式下容器不碰 channel** ⇒ 监听器"抛 `AmqpRejectAndDontRequeueException`"**不会**触发 reject ⇒ 消息**永远 unacked**（只在重启/断连时才重投）；而 `RejectAndDontRequeueRecoverer` **只有 AUTO 模式才真的 reject(requeue=false)**。
 - **最终修复（本次定稿）**：**`AcknowledgeMode.AUTO`**（ack 交给容器）+ **监听器完全不碰 channel**（删掉 `basicAck`/`Channel`/`deliveryTag` 参数）+ `setDefaultRequeueRejected(false)` + retry advice。三条路径因此都收敛：成功 → 容器 ack ✅ · 毒消息 → 3 次重试后 reject ⇒ **DLX + 告警** ✅ · 瞬时异常 → 同上 ✅。
 - **判据/设计教训**："**抛异常让容器处理**"这条思路**只在 AUTO 模式下成立**；选 MANUAL 就等于把 ack 的责任（含"失败也要 reject"）**全部**揽给业务代码 —— 两者不能各做一半，否则就是这次的"消息永远 unacked"。
+
+**⚠️ 补修发现 E（同日 · 纯日志噪音）：`OrderDlxConsumer` 也在手动 ack**
+- **现象**：AUTO 版上线后，2 条死信 ⇒ **2 次 `406 unknown delivery tag`**（消息其实已 ack、死信队列归 0，**功能正常**，只是日志难看）。
+- **根因**：**同一个 factory 下的两个监听器**，我只改了 `OrderQueueConsumer`，`OrderDlxConsumer` 还在手动 `channel.basicAck` ⇒ AUTO 自动确认 + 手动确认 = **双确认**。
+- **修复**：`OrderDlxConsumer` 也去掉 `Channel`/`deliveryTag` 与手动 ack，**正常返回即由容器确认**。
+- ⭐ **可复用判据**：**改 ack 模式时要"扫全模块的监听器"**（同一 `rabbitListenerContainerFactory` 下的**每一个** `@RabbitListener` 都要一起改）—— 否则修好一个、漏掉一个，就会以"偶发 406"的形式留下来。
+
+**✅ #70 全链收口（2026-09-12）**：A（off-by-one）· B（无限重投）· C（yml 影子配置）· D（MANUAL 下不 reject）· E（DLX 双确认）**五处全部修复并实测**；最终形态 = **AUTO ack（ack 全交容器）+ 两个监听器都不碰 channel + `defaultRequeueRejected(false)` + retry 3 次后 reject ⇒ DLX 告警** ⇒ **实测毒消息 → 3 次重试 → DLX → `【MQ死信告警】`（该告警第一次真的响）→ DLX 消费者 ack ⇒ 队列 0/0** ✅
 - **判据教训（又一次）**：`ack_required=true` **不能**用来判断"是否 manual ack"（AUTO 模式下 Spring 同样是 autoAck=false）；**真判据是容器日志里的 `acknowledgeMode=`**。
 - ℹ️ **对照**：`mall-seckill` **没有**自定义 factory（配置类里 4 个 bean 无 Factory）⇒ 它的 yml 那套**是生效的** ✅ ⇒ **"抄别人的配置"这次不成立 —— 必须先确认自己这条链路读的是哪个配置源**。
 
