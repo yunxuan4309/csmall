@@ -317,302 +317,100 @@ sudo systemctl reload sshd
 
 
 
-## 📦 五、暂不做条目正文（想做时从这里捡起来 · 方案要点都在）
+## 📦 五、暂不做条目正文（想做时从这里捡起来 · 要点与取舍都留着）
 
-### 5-P1. Sentinel 热点参数限流（秒杀按 `spuId`）
+> **为什么暂不做**：这些**都要重建服务 / recreate 容器**，成本大于收益；但**方案已经写清楚** —— 面试时讲"我知道该做什么、为什么现在不做"即可。
+> **以后想做了怎么办**：每节都留了「**要点 / 涉及面 / 验证 / 面试讲法**」，照着做就行；更细的背景在 [[TODO中低优先级]] 与各方案文档。
 
-> **状态**：🔴 **待做（当前第一优先 · 约 0.5 天）** —— 登记表里 `§5-P1` 原指向空处，本条为 2026-09-11 补齐。
-> **为什么高价值**：与 **#4** 跨机集群天然衔接（集群化后讲限流精准度）；代码改动小（`ParamFlowRule`）；**"热点参数限流"是电商面试必问**。
-> **要点**：当前秒杀 `QPS=10` 是**整接口共享** → 爆款与普通商品互相误伤；应按 `spuId` 差异化（爆款 QPS=100 · 普通 1000）。
-> 📄 **完整方案（现状盘点 / 优先级 / 实施步骤 / 回滚 / 执行清单）见 [[Sentinel能力补充计划]]**（其中 P0 已完成）。
+### 5-P1. Sentinel 热点参数限流（秒杀按 `spuId` 差异化）
+- **要点**：当前秒杀 `QPS=10` 是**整接口共享** → 爆款与普通商品**互相误伤**；应按 `spuId` 区分（爆款 QPS=100 · 普通 1000），用 `ParamFlowRule`。
+- **成本 ~0.5 天**（代码改动小，但要部署窗口）。⭐ **面试价值最高**（"热点参数限流"是电商必问），且与 **#4 跨机集群**天然衔接（集群化之后才谈得上限流精准）。
+- 📄 完整方案（现状盘点 / 优先级 / 实施步骤 / 回滚 / 执行清单）→ [[Sentinel能力补充计划]]（其中 **P0 已完成**）。
 
-### 22. 【CORS】服务端 CORS 收敛到网关（2026-08-28 评估，待实施）
+### 22. CORS 收敛到网关（2026-08-28 评估）
+- **现状**：网关 `CorsConfig` 已是显式白名单 ✅；但 **5 个服务**（ums/search/product/resource/seckill）的 `WebMvcConfiguration` 有 `allowedOriginPatterns("*")`，**没限定 profile ⇒ 生产也生效**（dev 直连才需要）；mall-ai 自带 CORS（SSE dev 直连 10010）；order 已是范例（写明"由网关统一处理"）。
+- **做法**：给那 5 处 + mall-ai 的 CORS 加 `@Profile("dev")`（**不是删**）→ 重建 5 个服务；网关白名单不动；ai 路由的 `DedupeResponseHeader` 可删。
+- **验证**：生产 `curl -i` 响应头只有一个 `Access-Control-Allow-Origin`；dev 跨域 + ai SSE 回归。
+- **面试讲法**：CORS 是**浏览器机制** —— 生产收敛到网关，只有 dev 直连才需要服务端 CORS。
 
-> **2026-08-28 新增（源自 06-安全设计 Q5 审计）**：CORS 全景——网关 CorsConfig 显式白名单 ✅；但 5 个服务（ums/search/product/resource/seckill）WebMvcConfiguration 有 `allowedOriginPatterns("*")` 宽松通配（dev 直连需要，但**没限定 profile → 生产也生效 = 多余且宽松**）；mall-ai 自带 CORS（SSE dev 直连 10010 绕过网关，vite.config 注释实证）；order 已是范例（已注释并写明"由网关统一处理"）；ai 路由 DedupeResponseHeader 是重复头补丁。
+### 40. 微服务自身 healthcheck（**Step 1 ✅ / Step 2 未做**）
+- **为什么需要**：compose 里**中间件全带 healthcheck**，但 **11 个微服务都没有** → `restart: on-failure` 只能拉起"进程崩溃"，**"服务起着、内部连不上 Nacos/DB/Redis"这种假活不会被重启**（Docker 认为它活着）。
+- ✅ **Step 1 已完成**：12 个 webapi/gateway 的 pom 都有 `spring-boot-starter-actuator`，11 个 `application.yml` 都暴露了 `health,info`（代码侧就绪）。
+- 🔴 **Step 2 的隐藏前置（2026-09-10 实测）**：微服务 `/actuator/health` 被**自己的 SSO 安全链**拦截 → 返回 **HTTP 200 + `{"state":401,"message":"您没有登录！"}`**（"**假健康**"）⇒ **`curl -f` 会永远通过，healthcheck 形同虚设**。必须先**把 `/actuator/health`（建议连 `/actuator/info`）加进各服务 `buildPermitAllMatchers()` 白名单**（→ 重建 11 个服务）；或退回 `nc -z localhost <port>`（只证明端口在听，价值低）。**推荐前者**。ℹ️ `gateway` 是唯一例外（无 SSOFilter，返回真的 `{"status":"UP"}`）。
+- **面试讲法**："**进程活着 ≠ 服务健康**"，顺带讲"**探针自己也会说谎**"（200 但 body 是 401）。
 
-**方案（P2）**：
-1. 5 服务 WebMvcConfiguration 的 CORS 加 `@Profile("dev")` 限定（不是删——dev 直连还要用）
-2. mall-ai CORS 同样收窄 dev-only
-3. 网关显式白名单不动
-4. ai 路由 DedupeResponseHeader 可删（重复源消失，可选保留兜底）
-5. 验证：生产 curl -i 响应头只有一个 Access-Control-Allow-Origin；dev 跨域 + ai SSE 回归
-
-**面试价值**：能讲清"CORS 是浏览器机制，生产收敛到网关、dev 直连才需要服务端 CORS"
-
-
-### 40. 【部署】微服务自身 healthcheck（🟡 **Step 1 已完成 / Step 2 待做**，2026-09-10 复核修正）
-
-> **2026-09-03 新增（源自容器化部署企业级差距评估）**：compose 中**中间件全带 healthcheck**（mysqladmin ping/redis-cli/curl），但 **11 个微服务均无 healthcheck**、无 `/actuator/health` 暴露 → `restart: on-failure` 只能拉起"进程崩溃"，**服务起但内部不健康（连不上 Nacos/DB/Redis）时不会被重启**，Docker 认为"活着"。
->
-> ⚠️ **2026-09-10 复核修正（原标题"待实施"已过期一半）**：本条**前半已不成立** ——
-> | 步骤 | 状态 | 实测证据 |
-> |---|---|---|
-> | **Step 1**：引入 actuator + 暴露 `/actuator/health` | ✅ **已完成** | 11 个 webapi 模块 pom **全部有 ★实际依赖** `spring-boot-starter-actuator`（+ gateway 共 12 个）；11 个 `application.yml` 全部配 `management.endpoints.web.exposure.include: health,info`（代码侧就绪）
-
-🔴 **但 2026-09-10 实测发现"暴露 ≠ 可访问"**：微服务的 `/actuator/health` 被**自己的 SSO 安全链拦截**（`ResourceWebSecurityConfiguration` 里 `.anyRequest().authenticated()`，而 `buildPermitAllMatchers()` **不含 `/actuator/**`**）→ 返回的是 **HTTP 200 + 响应体 `{"state":401,"message":"您没有登录！"}`**（**"假健康"**）。实测：10004/10006/10007/10010 全是这个响应；只有 **gateway(10087)** 因无 SSOFilter 返回真正的 `{"status":"UP"}`|
-> | **Step 2**：compose 每个微服务加 `healthcheck:` + 用 `depends_on: condition: service_healthy` | ❌ **仍未做** | compose 里 `healthcheck` 实测只在 6 个**中间件**（mysql/redis/nacos/rabbitmq/es/seata）；`docker ps` 里只有这 6 个显示 **`(healthy)`**，**11 个微服务全无该标记** |
->
-> **因此本条的剩余工作 = Step 2**（P2），价值不变：让"服务起来了但连不上 Nacos/DB/Redis"这种**假活**能被 Docker 识别并按策略重启。
->
-> **方案（P2，剩余部分）**：compose 每个微服务加 `healthcheck`（依赖方可用 `depends_on: condition: service_healthy` 做服务级就绪等待，替代现在的"只等中间件"）。
-
-> 🔴 **⚠️ 直接写 `curl -f /actuator/health` 是无效的（2026-09-10 实测发现，必须先解决）**：
-> 微服务的 `/actuator/health` 被自己的 SSO 安全链拦截，返回 **HTTP 200**（响应体却是 `{"state":401,"message":"您没有登录！"}`）→ **`curl -f` 只看状态码，会永远通过** = healthcheck 形同虚设。
-> **因此 Step 2 有一个隐藏前置**：先把 `/actuator/health`（建议再加 `/actuator/info`）加进各服务的 `buildPermitAllMatchers()` 白名单 → 重新构建部署 11 个服务；**或者** healthcheck 不用 HTTP 探针而用 `nc -z localhost <port>`（只证明端口在听，**证明不了依赖健康**，价值低）。**推荐前者**。
-> ℹ️ 另：gateway 是唯一例外（无 SSOFilter，`/actuator/health` 返回真正的 `{"status":"UP"}`）。
-3. 注意：actuator 端点收窄（只开 health，避免暴露 env/beans 等敏感端点，呼应安全审计）
-
-**面试价值**：能讲"进程活着 ≠ 服务健康——我补了 actuator healthcheck，让依赖方等服务真正就绪"——容器化可观测基础课
-
----
-
-> 🟢 **第三批**
-
-### 45. 【规范】统一 Dubbo 应用名（front/search/ams 撞名但无 provider，2026-09-08 记录，第三批）
-
-> **2026-09-08 记录（源自 #6 全项目排查）**：修复 seckill/ums/product 撞名时，发现 **mall-front / mall-search / mall-ams** 的 `dubbo.application.name` 与 `spring.application.name` 相同（撞名），但三者**均无 @DubboService 暴露**（不注册 20880 provider 实例）→ Nacos 实测仅 HTTP 实例、gateway `lb://` 安全，**无实际风险，本次不改**（避免无谓回归面）。
-
-**统一规范（第三批，未来顺手做）**：三个模块 dubbo 名加 `-dubbo` 后缀（prod/test 对齐），与 order/ai/seckill/ums/product 一致——**防未来给这些模块加 Dubbo provider 时重新踩 #6 坑**（加 provider 瞬间 20880 混入现有服务名，lb:// 立刻 500）。
-
-**涉及文件**：mall-front-webapi / mall-search-webapi / mall-ams-webapi 的 application-{prod,test}.yml（各 2 处 dubbo.application.name）。
-
-**面试价值**：能讲"我排查 #6 时发现 3 个模块撞名但无 provider——当时没风险所以没动，但记了规范项防未来加 provider 时踩坑"，展示"按风险分级处理 + 前瞻性记录"。
-
----
-
+### 45. 统一 Dubbo 应用名（front / search / ams）
+- **现状**：这三者 `dubbo.application.name` 与 `spring.application.name` 相同（撞名），但**均无 `@DubboService` 暴露**（不注册 20880 provider）→ Nacos 里只有 HTTP 实例、`lb://` 安全 ⇒ **当前无实际风险，所以当时没动**（避免无谓回归面）。
+- **做法**：三模块 dubbo 名加 `-dubbo` 后缀（prod/test 各 2 处对齐），与 order/ai/seckill/ums/product 一致 —— **防未来给它们加 provider 时重踩 #6**（加 provider 瞬间 20880 混入同名服务，`lb://` 立刻 500）。
+- **面试讲法**：**按风险分级 + 前瞻记录** —— 发现撞名、当时无风险，于是记规范项而不是乱改。
 
 ### 51. 容器 restart 策略（可用性风险）
-
- 🔴 **P2（2026-09-09 巡检发现；与集群无关，但比集群问题更严重）**：老机 21 个容器实测 restart 策略 = **14 个 `no` + 6 个 `on-failure` + 1 个 `unless-stopped`** → **老机一旦重启（系统重启 / `systemctl restart docker`），20/21 个容器不会自动恢复**。**2026-09-10 经 [Docker 官方文档](https://docs.docker.com/engine/containers/start-containers-automatically/) 核实**：*"`on-failure` only prompts a restart if the container exits with a failure. It doesn't restart the container if the daemon restarts."* → **只有 `unless-stopped`（`csmall-resource`）能扛住宿主/daemon 重启，`on-failure` 同样不恢复**（这一点与直觉相反，是本条的关键认知）。老机已连续运行 42 天（截至 2026-09-10），所以从未暴露。
-
-🔴 **2026-09-10 补充：新机同样中招（当时漏记）**——新机 5 个容器**全部 `on-failure`**（redis-replica / 3 哨兵 / mall-seckill-2）→ **新机重启后 5/5 全不恢复**。**连锁后果比老机更危险**：从库+3 哨兵同时消失 → 老机 Redis 主库因 `min-replicas-to-write 1` **拒绝所有写**（`NOREPLICAS`，读仍可用）→ 秒杀/登录 token 黑名单等写入路径全挂；且哨兵全灭无法故障转移。ℹ️ 两台均 `LiveRestoreEnabled=false`、docker 均 `enabled`（开机自启 daemon），且**无任何 systemd 单元 / cron 兜底**（2026-09-10 实测）→ 重启后必须人工干预。**方案**：① 首选 compose 全量改 `restart: unless-stopped`（**两台都要改**：老机 20 个 + 新机 5 个）→ 逐个 `up -d --force-recreate`（低峰，注意 ES 分片，见 §纪律 6）；② 或加 systemd 单元，在 docker 启动后执行 `docker compose up -d`。⚠️ 改策略必须 recreate 容器 → 属变更窗口事项。 
-
+- **现状**：老机 21 容器实测 = **14 个 `no` + 6 个 `on-failure` + 1 个 `unless-stopped`**；新机 5 个**全是 `on-failure`** → 宿主/daemon 重启后基本不会自动恢复（老机已连续运行 42 天，所以从未暴露）。
+- **关键认知（反直觉，已核实 Docker 官方文档）**：*"`on-failure` only prompts a restart if the container exits with a failure. It doesn't restart the container if the daemon restarts."* ⇒ **只有 `unless-stopped` 能扛住宿主/daemon 重启**。
+- **连锁后果（新机更危险）**：从库 + 3 哨兵同时消失 → 老机 Redis 因 `min-replicas-to-write 1` **拒绝所有写**（`NOREPLICAS`），且哨兵全灭无法故障转移。
+- **做法**：compose 全量改 `unless-stopped`（两台：老机 20 + 新机 5）→ **逐个** `up -d --force-recreate`（低峰、注意 ES 分片）；或加 systemd 单元在 docker 起来后执行 `docker compose up -d`。⚠️ recreate 25 个容器 = 变更窗口事项。
 
 ### 53. 网关重试 / 优雅下线（消灭停实例的 16s 失败窗口）
+- **现象（2026-09-09 实测）**：`docker stop csmall-seckill-2` 后 **Nacos <1s 摘除**（优雅停机主动注销），但**网关本地 LB 实例列表 ~16s 才刷新** → 期间 round-robin 把一半请求打到死实例，**9 次探测 5 次 500**。
+- ✅ **③ 优雅下线已实现并验证（2026-09-09）**：`PUT ...&enabled=false`（退出负载均衡但**继续服务**）→ 等 40s（> LB 缓存 TTL）→ `docker stop` ⇒ **30/30 请求 0 失败**；脚本 `deploy/scripts/graceful-stop.sh` 已入库。⚠️ 注意"注销 API 无效"（客户端心跳会立刻重新注册），必须用 `enabled=false`。
+- ⏳ **仍待维护窗口**：① LoadBalancer retry / ② 缩短 `spring.cloud.loadbalancer.cache.ttl`（默认 35s）/ ④ 断路器 —— 三者都需**重启网关**（全站入口 1~2 分钟），作为"别人直接 `docker kill`"时的兜底 → 见 [[跨机集群实施执行清单-2026-09-09]] §7.7 / §7.7.1。
 
- 🟢 **P2（2026-09-09 实测发现 → ③ 已实现并验证通过）**：`docker stop csmall-seckill-2` 后 **Nacos <1s 摘除**（优雅停机主动注销），但**网关本地 LB 实例列表 ~16s 才刷新** → 期间 round-robin 把一半请求打到死实例，**9 次探测中 5 次 500**（网关日志 `Connection refused: 172.29.193.240:10017`）。
-
-✅ **已实现（2026-09-09 21:47）**：**③ 优雅下线**——`PUT ...&enabled=false`（实例退出负载均衡但**继续服务**）→ 等 40s（> LB 缓存 TTL）→ `docker stop`，实测 **30/30 请求 0 失败**（对比粗暴停 5/9 失败）；脚本 `deploy/scripts/graceful-stop.sh` 已入库；恢复只需 `docker start`（自动恢复 enabled=true）。⚠️ 注意"注销 API 无效"（客户端心跳会立刻重新注册），必须用 `enabled=false`。
-
-⏳ **仍待维护窗口**：① 网关重试（LoadBalancer retry）/ ② 缩短 `spring.cloud.loadbalancer.cache.ttl`（默认 35s）/ ④ 断路器——三者都需**重启网关**（全站入口 1–2 分钟），作为"别人直接 `docker kill`"时的兜底。→ 见 [[跨机集群实施执行清单-2026-09-09]] §7.7/§7.7.1 
-
-
-### 56. 公开仓库的信息暴露（服务器 IP / 拓扑 / 弱凭据事实）
-
- 🟡 **P3（2026-09-09 审查发现）**：`github.com/yunxuan4309/csmall` 是**公开仓库**（`private: false`），而文档系统性地记录了：两台服务器的**公网 + 私网 IP、主机名、端口拓扑、安全组放行清单**，以及"生产 RabbitMQ 用 `guest`"等事实。**风险**：攻击者无需扫描即可拿到完整攻击面（缓解：公网端口已被 SG 挡住、**真实密码未入库**、已实测生产 JWT/MySQL/Redis 值均未出现在仓库）。**方案（择一）**：① 仓库转私有；② 文档脱敏（IP → 占位符，但削弱可读性）；③ **接受**（学习项目、无真实凭据泄露、SG 是边界）—— **当前选择 ③，已记录在案**，待以后需要投简历/公开时再评估。 
-
-
-
-## 🗂️ 六、已完成条目正文（留档：现象 / 根因 / 验收，可随时溯源）
-
-### 62. 【观察 → ✅ 已修】`/ai/chat/stream` 并发下 ~50% HTTP 500：`AccessDeniedException`（ASYNC/ERROR 派发）🟡 P2（2026-09-10 观测 · **2026-09-12 定量定位并修复**）
-
-> **现象**：2026-09-10 P1 验证与加固验证期间，`POST /ai/chat/send`（经网关）返回 **500**（网关日志 `500 Server Error for HTTP POST "/ai/chat/send"`），mall-ai 侧日志：
-
-```
-ERROR o.a.c.c.C.[.[.[.[dispatcherServlet] - Servlet.service() for servlet [dispatcherServlet] threw exception
-org.springframework.security.access.AccessDeniedException: Access Denied
-	at org.springframework.security.web.access.ExceptionTranslationFilter.doFilter(ExceptionTranslationFilter.java:126)
-ERROR ... threw exception [Unable to handle the Spring Security Exception because the response is already committed]
-ERROR o.s.b.a.w.s.e.ErrorMvcAutoConfiguration$StaticView - Cannot render error page for request [null] as the response has already been committed.
-```
-
-**✅ 已修复并验收（2026-09-12 · 提交 `9aec75a`）**
-
-> **修法**：`mall-ai/…/security/config/ResourceWebSecurityConfiguration` 在授权规则**最前面**放行**内部派发**：
-> `.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()`
-> 🔴 **对 2026-09-10 结论的关键更正**：原分析只指向 **ERROR** 派发、建议只放行 ERROR —— **不够**。
-> 本轮实测确认另一半是 **ASYNC** 派发：`/ai/chat/stream` 返回 `StreamingResponseBody`，业务在异步线程写完流后
-> 触发一次 ASYNC 派发，那一刻**容器线程上已无认证对象** → `anyRequest().authenticated()` 拒绝。
-> **两种派发都必须放行**（只放 ERROR 仍会 ~50% 失败）。默认 REQUEST 派发**仍然要求登录**，
-> `/ai/**` 防匿名刷 Token 的收紧（2026-08-14）不受影响；同时消掉日志噪声与"状态码不可靠"隐患。
->
-> 🆕 **影响面复核（2026-09-12 **全仓审计**，结论：其余 7 个模块**不可能触发**）**
->
-> | 检查项（排除 `target/`） | 结果 |
-> |---|---|
-> | 会触发 **ASYNC 二次派发**的写法（`StreamingResponseBody` / `SseEmitter` / `WebAsyncTask` / `DeferredResult` / `ResponseBodyEmitter`） | **只有 `mall-ai`**（`AiController:137/156/227/246` · `ChatServiceImpl:560`）✅ |
-> | `dispatcherTypeMatchers(ASYNC, ERROR).permitAll()` | **只有 `mall-ai`** 有（`ResourceWebSecurityConfiguration:71`）✅ |
-> | 其余 7 个模块（ams / front / order / product / search / seckill / ums）与 sso | 都有 `anyRequest().authenticated()`，但**没有任何异步 / 流式端点** ⇒ **本缺陷在这 7 个模块无法触发**（属**潜伏**，不是现存故障） |
-> | ERROR 派发那一半 | 走 `/error`，而各模块的 permitAll 白名单**都含 `/error`** ⇒ 已覆盖 ✅ |
->
-> **⇒ 决策：不为它做"8 服务重建"** —— 为潜伏项重建 7 个服务，代价（30+ 分钟 + 重启在生产路径上的 front/gateway）远大于收益。
-> **⇒ 纪律（写在这里，避免以后重犯）**：**任何模块将来新增流式 / 异步端点时，必须在它的 `ResourceWebSecurityConfiguration` 授权链最前面补一行** `dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()`；该服务因别的原因重建时也顺手补上。
-> ⚠️ 文件里原有的 `MODE_INHERITABLETHREADLOCAL` static 块**解决不了**：ASYNC 派发用的是容器线程池里的
-> **另一个线程**，不是"当前线程的子线程"（该块保留未动、未夹带）。
-
-| 场景 | 修复前 | 修复后 |
-|---|---|---|
-| **串行** 20 次 | 20/20 全 200，但**每次都在日志里打一条 ERROR** | 20/20 ✅ **ERROR 归零** |
-| **20 并发 × 20s** | **硬失败 32/64 = 50.0%**，成功率 60.49% | **硬失败 0**，成功率 **100%**（163 次成功） |
-| **100 并发 × 45s** | （未测；按趋势必然更差） | **0 失败**，605 次成功 |
-
-⇒ 原记录"约 3/40 次、**重试即成功**"**低估了严重度**：串行时被"响应已提交"掩盖（客户端仍看到 200），
-并发时提交时序变化就暴露成 500 ⇒ **在 AI 并发压测里它直接撞中止阈值（5%）把阶梯杀掉**（2026-09-12 实测确实被中止过）。
-⇒ **部署验证**：容器内 `app.jar` md5 `73fd2e68bdd544a1648d0dc5d7a2f19e`；
-`ResourceWebSecurityConfiguration.class` **8859 → 9086 字节**且含 `DispatcherType`/`ASYNC` 常量。
-⇒ 实测明细与两链路结果见 [[AI并发测试方案]] **§十**。
-
-**影响面（后续待办 · 未做）**：8 个模块的 `ResourceWebSecurityConfiguration` 是**同一套授权写法**，但
-**只有 mall-ai 有流式（`StreamingResponseBody`）接口** ⇒ 其余 7 个（front/gateway/product/search/ums/ams/order/seckill）
-属**潜伏**。本次按"最小修复、可独立回滚"**只改 mall-ai**；其余建议单独窗口统一加同一行
-（改动小，但需多个服务重建 —— 注意"一次重建一大片会启动踩踏"，见 [[Python模拟数据与数据隔离方案]] §F4）。
-
-**（以下为 2026-09-10 的历史分析，机制判断正确、但对"修哪一半"的结论已被上面更正）**
-**已定性（共 3 次观测 + 3 组定量实验）**
-
-| 证据 | 结论 |
-|---|---|
-| 失败请求到 mall-ai 时**没有任何 `JwtTokenUtils 解析` 日志**（同窗口其他请求都有） | 该次请求在 Security 层是**匿名**的 |
-| **经网关连打 8 次 + 直连 4 次 = 12/12 全 200**；再做"SSE 流传输中并发 6 次同步请求" = **6/6 全 200** | 客户端成功率高，**与 Agent 逻辑无关** |
-| ⭐ **并发实验期间客户端 6/6 全成功，日志里却仍出现 2 次 `AccessDeniedException`** | AccessDenied **不是**客户端失败引起的 → 是**内部 ERROR 派发的次生现象** |
-| 栈里同时有 `ErrorReportValve.invoke` + "response has already been committed" | 某请求先失败（响应已提交，**典型是 SSE 流**）→ Tomcat 转 `/error` → Spring Security 在 **ERROR 派发**上再跑一遍过滤器链，而 **JWT 过滤器是 `OncePerRequestFilter`（默认跳过 ERROR 派发）** → 匿名 → `AuthorizationFilter` 拒绝 `/error` → 刷出这条 ERROR |
-
-**影响**：以日志噪声为主；确有少量客户端可见 500（约 3/40 次观测），**重试即成功**。
-
-**两条候选修法（✅ ① 已于 2026-09-12 实施，且**加强了**：同时放行 ASYNC + ERROR；② 未做）**：
-1. **放行 ERROR 派发**（`ResourceWebSecurityConfiguration`）：`requestMatchers("/error").permitAll()` + 允许 `DispatcherType.ERROR`（或用 `dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()`）→ 让 `/error` 能正常渲染，客户端拿到**规范的 401/5xx JSON** 而非"响应已提交"噪声。⚠️ 属 **mall-common / Security 公共配置，影响所有服务**，必须单独窗口 + 回归。
-2. **SSE 收尾容错**：配合 ① 才完整（`writeSSE`/`closeQuietly` 已 catch 应用层异常，但容器 flush 阶段的失败在应用之外）。
-
-**优先级**：P2（修 ① 之前，表现为"偶发 500 + 日志噪声"）。**可能与 #53（网关重试/优雅下线）同源，建议同窗口一起看。**
+### 56. 公开仓库的信息暴露（🟡 **已决定接受**）
+- **事实**：`github.com/yunxuan4309/csmall` 是**公开仓库**，而文档系统记录了公网/私网 IP、主机名、端口拓扑、安全组放行清单，以及"生产 MQ 用 guest"等事实。
+- ✅ **决策：接受**（学习项目 + **真实凭据未入库** + 公网端口已被安全组挡住 + **公开仓库正好当简历作品集**）；缓解项已实测：生产 JWT / MySQL / Redis 的值均未出现在仓库。
+- 📌 **不再挂账**。若将来改主意，两条路：① 仓库转私有；② 文档脱敏（IP → 占位符，牺牲可读性）。
 
 ---
 
+## 🗂️ 六、已完成条目正文（留档：现象 / 根因 / 验收）
 
-### 64. 【正确性缺陷】秒杀预热的两套 `spu_id` 语义冲突 → 4/12 个秒杀 SKU 从不被预热（被一个"永久 key"偶然兜住）🔴 P2（2026-09-11 发现，含生产日志与 Redis TTL 双重证据）
+> **为什么还留在这里**：这五项是 2026-09-12 当天关闭的，其中"**现象 → 根因 → 验收**"是最常被面试追问的部分，所以正文不删；**过程复述已压缩**，完整证据链见 [[TODO已完成]] 与对应的 [[问题解决]] 文档。
 
-> **本次只登记，不在本批夹带**（§6.1-5）。**这条是"看着能跑、其实靠巧合"的典型**。
+### 62. `/ai/chat/stream` 并发下 ~50% HTTP 500（`AccessDeniedException`）✅ **2026-09-12 修复**（提交 `9aec75a`）
+- **现象**：经网关 `POST /ai/chat/send` 偶发 **500**；mall-ai 日志 `AccessDeniedException: Access Denied` + `Unable to handle the Spring Security Exception because the response is already committed`。
+- **根因（两半，缺一不可）**：`/ai/chat/stream` 用 `StreamingResponseBody`，业务在**异步线程**写完后触发一次 **ASYNC 二次派发**，那一刻容器线程上**已无认证对象** → `anyRequest().authenticated()` 拒绝；另一半是 **ERROR** 派发去 `/error`，而 JWT 过滤器是 `OncePerRequestFilter`（默认跳过 ERROR 派发）→ 匿名 → 同样被拒。
+- **修法**：`ResourceWebSecurityConfiguration` 在授权链**最前面**加 `.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()`。⚠️ **只放行 ERROR 不够**（2026-09-10 的原分析只猜到了那一半）；默认 REQUEST 派发**仍然要求登录**，`/ai/**` 防匿名刷 Token 的收紧不受影响。
+- **验收**：串行 20/20 ✅ 且 **ERROR 归零**；**20 并发硬失败 50.0% → 0**、成功率 60.49% → **100%**；100 并发 0 失败。部署核验：容器内 `app.jar` md5 `73fd2e68…`、`ResourceWebSecurityConfiguration.class` **8859 → 9086 字节**且含 `DispatcherType`/`ASYNC`。
+- ⭐ **影响面审计（全仓）**：会触发 **ASYNC 二次派发**的写法（`StreamingResponseBody` / `SseEmitter` / `WebAsyncTask` / `DeferredResult` / `ResponseBodyEmitter`）**只有 `mall-ai`**；其余 7 模块 + sso 都有 `anyRequest().authenticated()` 但**没有任何异步/流式端点** ⇒ **本缺陷无法触发**（属潜伏，非现存故障）⇒ **决策：不为潜伏项重建 7 个服务**（代价远大于收益）。
+- 📌 **纪律**：**任何模块将来新增流式 / 异步端点时，必须在它的 `ResourceWebSecurityConfiguration` 授权链最前面补这一行**；该服务因别的原因重建时也顺手补上。
+- 📄 明细：[[AI并发测试方案]] §十 · [[问题解决--LLM链路的契约漂移与分层降级]]
 
-**冲突本身**
+### 64. 秒杀预热的 `spu_id` 语义冲突 → 4/12 个 SKU 从不被预热 ✅ **2026-09-12 修复**（与 #69 同一次变更）
+- **冲突**：`seckill_sku.spu_id` 存的是 **`seckill_spu.id`（秒杀表内部 id）**（前端详情 / 限购按它查），而**预热 Job 用的是 pms `spu_id`** ⇒ 二者**只在碰巧相等时一致**。
+- **生产证据（三重）**：① 数据 `seckill_spu.id`=1~6、其 `spu_id`=1,2,5,6,15,20 ⇒ **4 行错位**；② 日志只预热到 8 个 sku（`{1,2,5,6,26,27,35,36}`，26/27、35/36 是数值"撞车"被顺带覆盖）⇒ **11/12/13/14 从不预热**；③ Redis 里那 4 个 key **`TTL = -1`（永不过期）**，而其余 ≈83~112 秒 ⇒ 前者**只能**来自**不带 TTL 的写** = 每天 03:30 的 `SeckillReconcileTask` 对账 ⇒ **"能下单"是靠凌晨对账兜住的巧合**（不预热时下单 500：`没有该商品缓存信息(可能在真空期,等下一分钟再试)`）。
+- **修法（一行）**：`SeckillInitialJob` 的 `findSeckillSkusBySpuId(spu.getSpuId())` → **`spu.getId()`**；⚠️ **随机码键 `getRandCodeKey(spu.getSpuId())` 故意不动** —— 读码确认详情接口收的就是 **pms 主键**，那处**本来就是对的**，改它反而引 bug。
+- **验收**：预热覆盖 **8/12 → 12/12**；删掉 4 个永久 key 后 Job 在 **`05:59:00`** 打印 `11/12/13/14号sku库存数成功预热到缓存!`（该分支就是**带 TTL 的写**）⇒ 值取自 DB、键不再是永久 key；删前 Redis 值(100/80/40/25) 与 `seckill_sku.seckill_stock` 逐一相等 ⇒ 删旧键不丢数据。
+- **扩容硬约束**：新增秒杀必须 **`seckill_spu.id == seckill_sku.spu_id == pms_spu.id`**；⚠️ **不要用后台接口新增**（MyBatis-Plus 给**雪花 id** → 预热永不生效）→ [[商品与秒杀扩容方案]] §三。
+- 📄 明细：[[问题解决--代码与线上不一致的静默失效]] §三 · 面试版 [[10-6-问题解决（提炼版·契约与一致性）]] Q16
 
-| 位置 | 用的是哪个 `spu_id` |
-|---|---|
-| 前端详情 / 限购判断 | `seckill_spu.id`（`seckill_sku.spu_id` 存的就是它） |
-| **预热 Job `SeckillInitialJob`** | **pms `spu_id`**（`spu.getSpuId()`） |
+### 66. Sentinel 面板只收到 3 个服务的指标 ✅ **2026-09-11 已实施并验收**
+- **现象**：面板里只有 `sso` 与 dashboard 自己有曲线（压浏览 URL 实测 **99.6 RPS** 也看不到任何曲线）。
+- **根因**：只有 `mall-order` / `mall-seckill` / `mall-sso` 配了 `SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD`；而 4 个模块 yml 里写的是 `dashboard: ${my.server.addr}:8858`，compose 注入 `ALIYUN_SERVER_IP=nacos` ⇒ **解析成 `nacos:8858`（那里没有面板）→ 静默不注册**；其余 7 个模块 yml 连 `dashboard:` 都没有 ⇒ **`compose` 的环境变量才是"能注册"的真正开关**。另：`mall-gateway` 是框架层例外（jar 里**没有** `sentinel-gateway` 依赖 ⇒ 它的路由从来不是 Sentinel 资源，补地址也没曲线）。
+- **修复**：compose 补 **8 处** dashboard 地址 → `up -d --force-recreate` 8 个服务 → `docker inspect` **11/11 服务均有该变量**、面板轮询 10 个客户端端点、最近 10 分钟 `Failed to fetch metric` = **0**、**用户目视确认曲线出现**（面板默认凭据 `sentinel`/`sentinel`）。
+- ⚠️ **过程教训（已写入方案 §F4）**：**8 个服务同时 recreate 会造成"启动踩踏"** —— 启动耗时从 107~176s 涨到 **221~319s**、load 峰值 7.45 ⇒ **下次分批 2~3 个一批**。
+- **旁路（不修也能演示）**：改看 **SkyWalking** —— `mall-front` 的 Load/Latency/Apdex 确实在动（实测 `Load 1520.846 calls/min` · `Latency 124.462ms` · `Apdex 0.983`）。
 
-→ 二者**只在 `seckill_spu.id == pms_spu.id` 时碰巧一致**。
+### 68. 造数前快照从未落地（可逆性缺口）✅ **2026-09-12 关闭**
+- **问题**：脚本每次开局都打印"记得先 mysqldump 并把文件名写进 `sim_batch.dump_file`"，但**历次 7 个批次该列全为 NULL**；影子登记表能**精确删掉造出来的行**，却**删不回被累加的字段**（`pms_spu.sales` / `pms_sku.stock`）。
+- **复核修正（表述要更准）**：**不是"没有备份"** —— 每日 **02:30 的 cron dump 一直在跑**（各约 49~57 KB，秒级完成）。真正的缺口是 ① 造数/秒杀**之前那一次**没做（拿不到"操作前"的确切快照点）② **文件名从未登记** ⇒ 事后对不上号。
+- **风险点**：`--with-seckill` 会**真动** `stock`/`sales` 与 Redis 预热键；脚本的"秒杀后恢复"只按**脚本内快照**回写 —— 一旦中途失败（容器重启/网络断/脚本被杀），**只剩 dump 能救回来**。
+- **修复（机制固化）**：脚本新增 **`--require-dump <文件名>` 快照闸门** —— 不提供就**拒绝开跑**；提供则校验**新鲜度**（`--dump-max-age-min`，默认 120 分钟）+ **自动写进** `sim_batch.dump_file`；只读入口（`--preflight`/`--verify`/`--compare-baseline`）与 `--clean` 不受约束；`--allow-no-dump` 可显式豁免（大声警告）。
+- **端到端实测**：不带 → `🔴 拒绝开跑`（附"先跑 backup-db.sh 再带文件名"两步指引）；旧包 → `快照太旧（3628 分钟前，上限 120）`；名字不合规 → `文件名不合规`；合法 → `✅ 闸门通过` + 批次 `dump_file` 自动写入成功。已执行一次真实 dump：`cs_mall_20260912_1452.sql.gz`（**319 KB / 6 库** / `gzip -t` OK）。
+- 📄 明细：[[Python模拟数据与数据隔离方案]] §五 第 3 步 · [[问题解决--生产造数的数据隔离与复核方法]]
 
-**生产实测证据（三重）**
-1. 数据：`seckill_spu.id` = 1~6，`spu_id` = 1,2,5,6,15,20；`seckill_sku.spu_id` = 1,1,2,2,3,3,4,4,5,5,6,6 → **4 行（id 3/4/5/6）两套语义不一致**。
-2. 日志（每分钟一轮）：预热到的 sku 集合 = `{1,2,5,6,26,27,35,36}`（8 个）→ **sku 11/12/13/14 从不被预热**（26/27、35/36 是数值"撞车"被顺带覆盖）。
-3. Redis TTL：`mall:seckill:sku:stock:11/12/13/14` 的 **`TTL = -1`（永不失效）**，而 1/2/5/6/26/27/35/36 的 TTL ≈ 83~112 秒 → 说明前 4 个**只能**来自**不带 TTL 的 `set`** = 每天 03:30 的 `SeckillReconcileTask` 对账补建。
+### 69. 秒杀把 `seckill_spu.id` 当 pms spu 用 → 给"错误商品"加销量 ✅ **2026-09-12 修复 + 两实例部署 + A/B 证伪**
+- **现象**：同晚 3 次秒杀真跑、两次命中 —— 秒杀**成功**、DB 三值看着都"回位"了，但**全库 `SUM(sales)` 每次都多 1**，差异落在**别的商品**上：`pms_spu.sales[4] 1→2→3`、`sales[6] 1→2` ⇒ 被写错的行 = "**另一个命名空间里的同号 id**"。
+- **根因（一行）**：`SeckillQueueConsumer:98` → `dubboSeckillSpuService.incrementSales(sku.getSpuId())`；`seckill_sku.spu_id` 存的是**秒杀表内部 id**，而 `SeckillSkuServiceImpl:51` 的注释恰好写着"spuId 参数为 PMS 商品主键，需先映射到 seckill_spu 内部 id" ⇒ **列表路径做了映射，消费者路径没做**。
+- **为什么一直没被发现（三条叠加）**：① `sales` 只是展示字段 → **不报错、不影响下单**；② 秒杀侧"恢复"只写**目标商品**那一行 → **永远碰不到**被写错的行；③ 脚本原 `seckill_verify` 只校验 `seckill_stock`/`stock`、**不校验 sales** ⇒ 打印"✅ 全部回位"的**假通过**。
+- **修复**：`SeckillQueueConsumer` 先反查 pms 主键再 `incrementSales`（新增 `SeckillSpuMapper.findPmsSpuIdBySeckillId`）+ **顺带修掉同源的 #64**；构建 ✅、`MessageRetryTaskTest,RedisLockUtilsTest` **9/9 通过**。
+- **部署教训（→ 已成纪律 G14）**：🔴 **第一次只升了老机 ⇒ A/B 不通过** —— 新机副本仍是旧镜像（compose 里 tag 写死日期），实测**副本消费了那条 MQ**（其日志 `05:48:38` 有"秒杀成功记录处理完成"），销量仍写到内部 id ⇒ **两台一起升**，并各自核 `docker exec … md5sum /app/app.jar`。
+- **A/B 证伪**：采样恢复窗口内全量 `sales`：**4 次动作**（含 **sku 27：内部 5 → pms 15**，**非重合 id**）→ 销量只落在**目标商品**、脚本"非目标 spu"告警 **0 次**（修复前 3 次实测次次告警）；终态 `SUM(sales)` 回 **84**、`success` **59**、残留订单 **0**、三类锁 **0**。
+- ⚠️ **残留**：历史错记的 `sales`（累计值）**无法自动纠正** —— 只能按 `success` 表重算或人工订正（本次只手工还原了我方测试造成的 +1）。
+- 📄 明细：[[问题解决--代码与线上不一致的静默失效]] §三 · [[Python模拟数据与数据隔离方案]] §G（**G14**）
 
-**⇒ 结论**：这个 bug 今天没爆，是因为**凌晨对账写的永久 key 恰好掩盖了它**。不预热时的直接后果是下单 500：`没有该商品缓存信息(可能在真空期,等下一分钟再试)`。
-
-**修法**：`SeckillInitialJob` 改用 `seckill_spu.getId()`（与前端/限购口径统一），并订正历史数据；或明确"三值必须相等"的约定并在新增路径上强制。⚠️ 涉及秒杀可用性，需单独窗口。
-
-**顺带（扩容时的硬约束）**：**新增秒杀必须让 `seckill_spu.id == seckill_sku.spu_id == pms_spu.id` 三者相等**；若走后台管理接口 `/seckill/manage/spu` 新增，MyBatis-Plus 会给**雪花 id** → `id ≠ spu_id` → **预热永不生效**。→ **扩容实施方案（含"哪些 Redis key 能手工写、哪些绝不能"与验证清单）见 [[商品与秒杀扩容方案]] §三**。
-
-**✅ 修复与部署验收（2026-09-12 晚 · 与 #69 同一次变更）**
-
-> **修法一行**：`SeckillInitialJob` 的 `findSeckillSkusBySpuId(spu.getSpuId())` → **`spu.getId()`**。
-> ⚠️ **随机码键 `getRandCodeKey(spu.getSpuId())` 不动** —— 读码确认详情接口 `/seckill/spu/{spuId}` 收的就是 **pms 主键**（`SeckillSpuVO.id` 来自 pms 商品 `copyProperties`），那处**本来就是对的**，改它反而会引入新 bug。
-> **验收**：升级后 Job 日志覆盖 **12/12** 个 sku（`开始将13号sku…` / `14号sku…`）；把 4 个永久 key 删掉后，Job 在 **05:59:00** 打印 `11/12/13/14号sku库存数成功预热到缓存!`（该分支就是**带 TTL 的写**）⇒ 值取自 DB、键再也不是"永久 key"。
-> **证据链**：删前 Redis 值(100/80/40/25) 与 `seckill_sku.seckill_stock` 逐一相等 ⇒ 删旧键不会丢/改数据。
+> 📌 **维护提示**：本文件 = **高优先级状态源**（要做 / 暂不做 / 编号登记 / 条目正文）。新增条目：高优先级写入第一节 + 登记表 A；中/低优先级写入 [[TODO中低优先级]]；完成后迁 [[TODO已完成]]。
 
 ---
-
-### 66. 🟠 Sentinel 面板只收到 3 个服务的指标（其余 8 个未配 dashboard 地址）
-
- 🟠 **P2（2026-09-11 由 #48 可观测展示实测发现）**：
-
-**现象**：用户实测"**Sentinel 面板里只有 `sso` 与 dashboard 自己有曲线**"，压浏览 URL（实测 **99.6 RPS**）在面板上**看不到任何曲线**。
-
-**根因（逐个 `docker inspect` 服务环境变量）**：只有 **`mall-order` / `mall-seckill` / `mall-sso`** 配了 `SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD=sentinel:8858`；**`mall-front` / `mall-gateway` / `mall-product` / `mall-search` / `mall-ums` / `mall-ams` / `mall-resource` / `mall-ai` 全部未配置** → 这些服务**本地有埋点（`SentinelWebInterceptor` 已注册）但指标从不外发**。
-
-🆕 **2026-09-11 深挖补充（根因更精确）**：① **只有 4 个模块的 yml 里写了 `dashboard:`**（order/sso/seckill/ai），且写的是 `dashboard: ${my.server.addr}:8858` —— 而 compose 注入 `ALIYUN_SERVER_IP=nacos` → **`${my.server.addr}` 解析成 `nacos`** → 指向 `nacos:8858`（**那里没有面板**）→ **静默不注册**；其余 7 个模块 yml **连 `dashboard:` 都没有** → SCA 默认不注册。⇒ **compose 的环境变量才是"能注册"的真正开关**。
-
-② 🆕 **`mall-gateway` 是框架层例外**：其 jar 里**没有 `spring-cloud-alibaba-sentinel-gateway`**（也没有 `sentinel-datasource-nacos`）→ **它的路由从来就不是 Sentinel 资源**，即使补了 dashboard 地址，**网关的 URL 曲线也不会有**（WebFlux 的 `SentinelWebInterceptor` 是 MVC 适配器，不生效）。
-
-**影响**：① 演示"浏览流量 **pass 曲线**"在面板上拿不到（方案 §6.2 的结论依赖这个前置）② **`mall-ai` 的 AI 限流规则（`ai-chat=5` 等）也不会在面板显示** → **AI 限流演示同样受影响**（当前只有 order/seckill 的写接口能演示 block）③ 与 #5-P1（热点限流）、#48 §6 录像目标都相关。
-
-**修复方向（未实施，待决策）**：在 `deploy/docker/docker-compose.yml` 给这 8 个服务补 `SPRING_CLOUD_SENTINEL_TRANSPORT_DASHBOARD: sentinel:8858`（或用公共 env 锚点统一注入）→ `docker compose up -d --force-recreate` 对应服务。⚠️ 属变更窗口事项。
-
-✅ **2026-09-11 已实施并验证（用户执行 + AI 独立复核 + 用户目视确认）**：仓库 compose **新增 8 处**（`git diff --stat` = 恰好 8 insertions）、传输 md5 与仓库一致（`514d1411…`）、`docker compose up -d --force-recreate` 8 个服务成功、`docker inspect` **11/11 服务均有该变量**；**决定性证据**：面板日志显示它正在轮询客户端端点（10 个 `IP:port`，端口 8870/8872/8876/8880/8719 正对应各服务 yml 里配的 transport 端口），且**最近 10 分钟 `Failed to fetch metric` = 0** ⇒ 注册与指标拉取都通了；✅ **用户目视确认：Sentinel 面板里已出现新增的 8 个服务 → 全链路验收闭环**。ℹ️ **面板默认演示凭据 = `sentinel`/`sentinel`**（实测登录成功）。
-
-⚠️ **过程教训（已写入方案 §F4）**：**8 个服务同时 recreate 会造成"启动踩踏"** —— 4 核机器上启动耗时从 107~176s 涨到 **221~319s（2~3 倍）**，load average 峰值 7.45；**下次应分批（2~3 个一批）**。
-
-**旁路（不修也能演示）**：改看 **SkyWalking** —— `mall-front` 的 Load/Latency/Apdex **确实在动**（用户截图实测 `Load 1520.846 calls/min` · `Latency 124.462ms` · `Apdex 0.983`）。 
-
-
-### 68. 【可逆性缺口】`sim_batch.dump_file` 从未落盘 → "造数前快照兜底"从未落实 🔴 P2（2026-09-12 正式造数时发现）
-
-> **这不是"脚本 bug"，是"纪律没落地"**：脚本每次开局都打印"**记得在造数前做 mysqldump 并把文件名写进 `sim_batch.dump_file`**"，但**历次 7 个批次的 `dump_file` 全为 NULL**，而 `note` 里都留着脚本写的 `dump_file=待填`。
-
-**实测事实（只读）**：`cs_mall_sim.sim_batch` 现有 **7** 行 —— `sim_20260911_1914` / `1919` / `1923` / `1925` / `1930` / `sim_20260912_1103`（AI 用户池）/ `sim_20260912_1233`（正式造数）—— **`dump_file` 一律 NULL**。
-
-**为什么值得单独登记**：方案 **§五 第 3 步**要求"**快照先行**"（`bash /data/csmall/backup/backup-db.sh`，须 **`ecs-user`**），它的定位是**不可逆字段的兜底**。影子登记表能"**精确删掉造出来的行**"，但**删不回被累加的字段**（`pms_spu.sales`、`pms_sku.stock`）。当前这两类字段"能回滚"其实**靠巧合**：普通订单的库存扣减链路恰好是坏的（**#65**），而**秒杀链路会真扣**。
-
-**风险点（为什么必须排在 ④ 之前）**：`--with-seckill` 会真动 `pms_sku.stock` / `pms_spu.sales` 与 Redis 预热键；脚本的"**秒杀后恢复**"只按**脚本内快照**回写 —— 一旦中途失败（容器重启 / 网络断 / 脚本被杀），**只剩 dump 能救回来**。
-
-**做法**：① 造数 / 秒杀前先 `bash /data/csmall/backup/backup-db.sh`（`ecs-user`）；② 把**文件名**写进对应批次的 `sim_batch.dump_file`；③ 事后核对文件**存在且非空**（别只记名字）。**脚本侧可选加固**：加 `--require-dump <文件名>` 开关，未提供则**拒绝开跑**（把"提醒"变成"强制"）。
-
-**🆕 2026-09-12 复核修正（本条的表述要更准）**：实测老机 `/data/csmall/backup/` 里**每日 02:30 的 cron dump 一直在跑**（`cs_mall_20260909~20260912_0230.sql.gz`，各约 **49~57 KB** ⇒ 库很小、dump 只需**秒级**），另有 09-11 18:56 / 19:14 / 19:19 三次**手工** dump（正是校准造数那几次）。
-
-⇒ 缺口**不是"没有备份"**，而是：
-① **造数/秒杀之前的那一次**没做（拿不到"操作前"的确切快照点）；
-② **文件名从未登记**到 `sim_batch.dump_file`（7 个批次全 NULL）⇒ 事后无法把"某次造数"与"某个 dump"对上。
-
-**执行（老机 · 以 `ecs-user`，约 1 分钟）**
-```bash
-bash /data/csmall/backup/backup-db.sh          # 输出 /data/csmall/backup/cs_mall_<STAMP>.sql.gz（--single-transaction，读操作）
-# 再把文件名登记到批次（把 <STAMP>/<批次> 换成实际值）：
-#   UPDATE cs_mall_sim.sim_batch SET dump_file='cs_mall_<STAMP>.sql.gz' WHERE batch_id='<批次>';
-```
-**验收**：`ls -lh /data/csmall/backup/cs_mall_<STAMP>.sql.gz` 非空即可（脚本自带"<1000B 即失败"的保护）；保留策略 7 天，磁盘现余 **40G** ✅
-
-**✅ 2026-09-12 14:52 已执行一次（用户以 `ecs-user` 执行）**：`/data/csmall/backup/cs_mall_20260912_1452.sql.gz` —— **319 KB** · `gzip -t` 完整 ✅ · 含**全部 6 个库**（`ams/oms/pms/resource/seckill/ums`）✅（比每日 cron 那份 57 KB **大 5.6×**，因为库里已含本轮 SIM 数据）
-
-> 📌 **为什么仍不关闭**：这次是"**临时补做**"，**规则还没固化** —— 目标形态是"**每次写操作前**先 dump，并把文件名写进**该批次**的 `sim_batch.dump_file`"。**建议的固化手段**：给脚本加 `--require-dump <文件名>` 开关（未提供则**拒绝开跑**）。
-> 📌 **本次 dump 不属于任何批次**（当时没有待跑的批次）⇒ 定位是"**整库兜底快照**"；**此后由脚本自动登记**。
-
-**✅ 2026-09-12 收口（#68 关闭）**：脚本新增 **`--require-dump <文件名>`** 快照闸门 —— **不提供就直接拒绝开跑**，提供则①解析文件名时间戳校验**新鲜度**（`--dump-max-age-min`，默认 120 分钟）②**自动写进** `sim_batch.dump_file`；只读入口（`--preflight`/`--verify`/`--compare-baseline`）与 `--clean` 不受约束；`--allow-no-dump` 可显式豁免（大声警告）。
-**端到端实测（2026-09-12）**：不带 → `🔴 拒绝开跑`（附"先跑 backup-db.sh 再带文件名"两步指引）；旧包 → `快照太旧（3628 分钟前，上限 120）`；不合规名 → `文件名不合规`；合法 → `✅ 闸门通过` + 批次 `dump_file = cs_mall_20260912_1452.sql.gz`（实测写入成功 ✅，随后清理干净）
-
-**关联**：[[Python模拟数据与数据隔离方案]] §五 第 3 步 / §2.2 数据隔离 · [[TODO中低优先级]] §67（④ 的前置）· #65（库存扣减链路失效：本次"没扣库存"的巧合来源）
-
-### 69. 【数据正确性】秒杀把 `seckill_spu.id` 当 pms spu 用 → **给"错误商品"加销量** 🔴 P1（2026-09-12 实测 + 读码双证）
-
-**现象（同晚 3 次秒杀真跑，两次命中）**：秒杀**成功**、DB 三值看着都"回位"了，但**全库 `SUM(sales)` 每次都多 1** —— 差异落在**别的商品**上：
-
-| 时间 | 目标 | 被 +1 的行（错） |
-|---|---|---|
-| 13:30（批次 1329） | sku 14 → pms **spu 6** | `pms_spu.sales[4]` 1 → 2 |
-| 13:33（批次 1333） | sku 13 → pms spu 6 | `pms_spu.sales[4]` 2 → 3 |
-| 13:36（批次 1335） | sku 35/36 → pms **spu 20** | `pms_spu.sales[6]` 1 → 2 |
-
-⇒ 被写错的行 = **"另一个命名空间里的同号 id"**，不是目标商品。
-
-**代码根因（一行）**：`mall-seckill/mall-seckill-webapi/.../consumer/SeckillQueueConsumer.java:98`
-```java
-dubboSeckillSpuService.incrementSales(sku.getSpuId());   // ← sku 是 SeckillSku
-```
-`seckill_sku.spu_id` 存的是 **`seckill_spu.id`（秒杀表内部 id）**，不是 `pms_spu.id`（**#64** 已实测：`seckill_spu.id` = 1~6，其 `spu_id` = 1,2,5,6,15,20；`seckill_sku.spu_id` = 1,1,2,2,3,3,4,4,5,5,6,6）。而 `SeckillSkuServiceImpl:51` 的注释恰好写着"spuId 参数为 PMS 商品主键，需先映射到 seckill_spu 内部 id" —— **列表路径做了映射，消费者路径没做**。
-
-**为什么一直没被发现（三条叠加）**：① `sales` 只是展示字段，写错行**不报错、不影响下单**；② 秒杀侧"恢复"只写**目标商品**那一行，**恰好永远碰不到被写错的那一行**；③ 脚本原 `seckill_verify` 只校验 `seckill_stock`/`stock`、**不校验 sales** ⇒ 打印"✅ 全部回位"的**假通过**。
-
-**已做的止损（脚本侧 · 已验证）**：`seckill_snapshot` 增采**全量** `pms_spu.sales`；`seckill_restore` **按实际变化的行**回补（日志点名"**非目标 spu**"）；`seckill_verify` 把全量 sales 纳入校验 → 三次实测**都当场回补**、`--compare-baseline` **0 差异**。另：秒杀**还会真建 `oms_order`/`oms_order_item`**（每次 +1/+1、`data_source=NULL`，既不登记也不回填 ⇒ 清理必漏），脚本已补"**按订单 id 增量兜底登记**"。
-
-**生产侧修法（待单独窗口）**：`incrementSales` 改传 **pms spu id**（`seckill_spu.spu_id`，或用 `skuId → seckill_spu.spu_id` 查一次）；⚠️ `sales` 是累计值，**历史错记的行无法自动纠正**，只能按 `success` 表重算或人工订正。
-
-**关联**：**#64**（同一对命名空间的另一个受害者：预热 Job 从不预热 4/12 个 SKU）· [[问题解决--代码与线上不一致的静默失效]]（"两个事实来源不对齐 → 不报错"）· [[问题解决--生产造数的数据隔离与复核方法]]（**是靠基线比对抓出来的**）
-
-**✅ 修复与部署验收（2026-09-12 晚）**
-
-| 阶段 | 结果 |
-|---|---|
-| 代码 | `SeckillQueueConsumer` 反查 pms 主键后再 `incrementSales`（新增 `SeckillSpuMapper.findPmsSpuIdBySeckillId`）；顺带修掉同源的 **#64** |
-| 构建/测试 | `mvn -o -B -DskipTests -pl mall-seckill/mall-seckill-webapi -am package` ✅ · `-Dtest=MessageRetryTaskTest,RedisLockUtilsTest` → **9/9 通过** ✅ |
-| 部署 | 🔴 **第一次只升了老机 ⇒ A/B 不通过**：新机副本 `csmall-seckill-2` 仍是 9/9 的旧镜像（compose 里 tag 写死 `csmall/mall-seckill-replica:20260909`）→ 实测**副本消费了那条 MQ**（其日志 `05:48:38` 有 `秒杀成功记录处理完成`），销量仍写到内部 id。 ⇒ 新机 jar 替换 + `compose build mall-seckill-2` + `up -d` 后再测 |
-| **A/B 证伪** | 采样"恢复窗口"内的全量 `pms_spu.sales`：**4 次动作**（含 **sku 27：内部 5 → pms 15**，**非重合 id**）→ 销量只落在**目标商品**上、脚本"**非目标 spu**"告警 **0 次**（修复前 3 次实测次次告警）；终态 `SUM(sales)` 回到 **84**、`success` **59**、残留订单 **0**、三类锁 **0** |
-| ⚠️ 残留 | 历史错记的 `sales` **无法自动纠正**（`sales` 是累计值）—— 本次只把**我方测试**造成的 +1 手工还原（`pms_spu[4]` 3→1、`[6]` 2→1）；**生产历史值**若要对账，只能按 `success` 表重算或人工订正 |
-
-> 🆕 **由此暴露的集群纪律缺口（已写进 A 册 §G G14）**：**秒杀是双实例（老机 10007 + 新机 10017，竞争同一 MQ 队列）**，而**副本镜像 tag 在 compose 里写死、两实例各有各的 jar** ⇒ **"双实例必须同版本"没有任何机制保证**。后排修复类改动必须**两台一起部署**并各自核 `docker exec … md5sum /app/app.jar`。
-**关联**：[[TODO中低优先级]]（🟡 中优先级 + ⏸️ 暂缓 / 仅评估）· [[TODO已完成]]（已完成明细 + §二十 归档区）· [[文档索引]]（方案 / 评估文档登记）· [[项目上下文文档]]
-
-**维护提示**：本文件 = **高优先级状态源**。新增条目：高优先级写入本文件登记表 A，中 / 低优先级写入 [[TODO中低优先级]]；完成后迁 [[TODO已完成]]。
----
-
 ## 🧭 七、历史批次摘要（瘦身 · 2026-09-12）
 
 > 原本文档顶部用 **~55 行**逐批叙述 ①~⑮，与 [[TODO已完成]] / [[文档索引]] 大量重复；现压缩为下表 —— **每条都留指针**，明细随时可查。
