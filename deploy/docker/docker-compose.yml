@@ -412,6 +412,10 @@ services:
     build:
       context: ./jars
       dockerfile: ../dockerfiles/mall-seckill.Dockerfile
+    # 🆕 2026-09-12（G14）：给镜像打**版本 tag**，并与副本**共用同一个镜像**
+    #   部署时改 .env 的 MALL_SECKILL_TAG（或临时 MALL_SECKILL_TAG=20260912）⇒ tag 即版本，
+    #   不会再出现"tag 写死成旧日期、内容却是新 jar"的混乱（旧写法见 git 历史里的 mall-seckill-2）。
+    image: csmall-mall-seckill:${MALL_SECKILL_TAG:-latest}
     container_name: csmall-seckill
     ports: ["10007:10007"]
     environment:
@@ -665,11 +669,16 @@ services:
 
   # 秒杀副本（新机）：注册宿主内网 IP + 映射端口，老机 gateway lb:// 与 order 的 Dubbo 才能连到
   mall-seckill-2:
-    build:
-      context: ./jars
-      dockerfile: ../dockerfiles/mall-seckill-replica.Dockerfile
-    image: csmall/mall-seckill-replica:20260909
+    # 🔴 G14（2026-09-12 血泪）：**与老机 mall-seckill 复用同一个镜像**，不再单独 build/单独一份 jar。
+    #   原因：双实例注册同一 Dubbo 服务、**竞争消费同一个 MQ 队列**；各自一份 jar 时必然出现
+    #   "只升了一台"的版本漂移 —— 实测（#69 修复）只重建老机后，MQ 被**新机副本**（旧 jar）消费，
+    #   修复"A/B 不通过"。⇒ 一份 jar / 一个镜像 tag / 两台同版本，并逐台核 md5（见
+    #   deploy/scripts/deploy-seckill-both.ps1）。
+    #   与老机的差异只有两点，均在下面显式声明：**SW_AGENT_NAME**（镜像 ENTRYPOINT 里写死 -D，
+    #   只能用 entrypoint 覆盖）与 **SERVER_PORT**（10017 vs 10007）。
+    image: csmall-mall-seckill:${MALL_SECKILL_TAG:-latest}
     container_name: csmall-seckill-2
+    entrypoint: ["java","-Xms256m","-Xmx448m","-XX:+UseG1GC","-XX:MaxGCPauseMillis=200","-XX:MaxMetaspaceSize=256m","-XX:+HeapDumpOnOutOfMemoryError","-XX:HeapDumpPath=/tmp","-javaagent:/skywalking-agent/skywalking-agent.jar","-DSW_AGENT_NAME=mall-seckill-2","-DSW_AGENT_COLLECTOR_BACKEND_SERVICES=skywalking-oap:11800","-DSW_LOGGING_DIR=/tmp","-jar","app.jar"]
     ports:
       - "10017:10017"                       # HTTP：老机 gateway lb://mall-seckill 轮询
       - "20880:20880"                       # Dubbo：老机 order 消费 IForOrderSeckillRecordService

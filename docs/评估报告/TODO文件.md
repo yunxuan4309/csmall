@@ -518,6 +518,20 @@ ERROR o.s.b.a.w.s.e.ErrorMvcAutoConfiguration$StaticView - Cannot render error p
 
 **做法**：① 造数 / 秒杀前先 `bash /data/csmall/backup/backup-db.sh`（`ecs-user`）；② 把**文件名**写进对应批次的 `sim_batch.dump_file`；③ 事后核对文件**存在且非空**（别只记名字）。**脚本侧可选加固**：加 `--require-dump <文件名>` 开关，未提供则**拒绝开跑**（把"提醒"变成"强制"）。
 
+**🆕 2026-09-12 复核修正（本条的表述要更准）**：实测老机 `/data/csmall/backup/` 里**每日 02:30 的 cron dump 一直在跑**（`cs_mall_20260909~20260912_0230.sql.gz`，各约 **49~57 KB** ⇒ 库很小、dump 只需**秒级**），另有 09-11 18:56 / 19:14 / 19:19 三次**手工** dump（正是校准造数那几次）。
+
+⇒ 缺口**不是"没有备份"**，而是：
+① **造数/秒杀之前的那一次**没做（拿不到"操作前"的确切快照点）；
+② **文件名从未登记**到 `sim_batch.dump_file`（7 个批次全 NULL）⇒ 事后无法把"某次造数"与"某个 dump"对上。
+
+**执行（老机 · 以 `ecs-user`，约 1 分钟）**
+```bash
+bash /data/csmall/backup/backup-db.sh          # 输出 /data/csmall/backup/cs_mall_<STAMP>.sql.gz（--single-transaction，读操作）
+# 再把文件名登记到批次（把 <STAMP>/<批次> 换成实际值）：
+#   UPDATE cs_mall_sim.sim_batch SET dump_file='cs_mall_<STAMP>.sql.gz' WHERE batch_id='<批次>';
+```
+**验收**：`ls -lh /data/csmall/backup/cs_mall_<STAMP>.sql.gz` 非空即可（脚本自带"<1000B 即失败"的保护）；保留策略 7 天，磁盘现余 **40G** ✅
+
 **关联**：[[Python模拟数据与数据隔离方案]] §五 第 3 步 / §2.2 数据隔离 · [[TODO中低优先级]] §67（④ 的前置）· #65（库存扣减链路失效：本次"没扣库存"的巧合来源）
 
 ### 69. 【数据正确性】秒杀把 `seckill_spu.id` 当 pms spu 用 → **给"错误商品"加销量** 🔴 P1（2026-09-12 实测 + 读码双证）
