@@ -96,8 +96,13 @@ public class OrderQueueConfig {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(new Jackson2JsonMessageConverter());
-        // ↓ #70：与 OrderQueueConsumer 里的手动 basicAck/Nack **配套**（否则自动+手动双确认 ⇒ 406）
-        factory.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        // ↓ #70 补修 D（2026-09-12 实测）：这里必须是 **AUTO**（ack 交给容器），**不能**是 MANUAL！
+        //   原因：MANUAL 模式下容器**不碰 channel**，监听器"抛异常"并不会 reject
+        //   ⇒ 消息会**永远 unacked**（实测：order_queue 挂着 1 unacked、DLX 恒 0、告警不响），
+        //   而 `RejectAndDontRequeueRecoverer` 只有 AUTO 模式才会真正 reject(requeue=false) ⇒ 进 DLX。
+        //   配套：OrderQueueConsumer **不再调用任何 basicAck/basicNack**（成功即正常返回 ⇒ 容器自动 ack），
+        //   否则自动 + 手动会**双确认**（`406 PRECONDITION_FAILED unknown delivery tag`）。
+        factory.setAcknowledgeMode(AcknowledgeMode.AUTO);
         // ↓ 未捕获异常不再无脑 requeue（默认 true 会造成无限重投）
         factory.setDefaultRequeueRejected(false);
         // ↓ 限次重试：重试 3 次后 reject(requeue=false) ⇒ 进 DLX（等价于 yml 里那套，但**这里才生效**）

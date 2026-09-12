@@ -1,13 +1,11 @@
 package com.cooxiao.mall.order.mq;
 
 import com.cooxiao.mall.product.service.order.IForOrderSkuService;
-import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.rabbit.annotation.RabbitHandler;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
@@ -51,8 +49,7 @@ public class OrderQueueConsumer {
     private IForOrderSkuService dubboSkuService;
 
     @RabbitHandler
-    public void process(OrderStockMessage message, Channel channel,
-                        @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag,
+    public void process(OrderStockMessage message,
                         @Header(name = "x-death", required = false) List<Map<String, Object>> xDeath) {
         // 统计已 requeue 次数（x-death 由 RabbitMQ 在每次 requeue 后自动附加）
         int requeueCount = countRequeue(xDeath);
@@ -60,8 +57,7 @@ public class OrderQueueConsumer {
             List<OrderItemMessage> items = message == null ? null : message.getItems();
             if (items == null || items.isEmpty()) {
                 log.warn("订单库存扣减消息体为空（payload 为 null 或空集合），直接确认，避免无意义重投");
-                channel.basicAck(deliveryTag, false);
-                return;
+                return;   // 正常返回 ⇒ 容器（AUTO ack）自动确认
             }
             for (OrderItemMessage item : items) {
                 int rows = dubboSkuService.reduceStockNum(item.getSkuId(), item.getQuantity());
@@ -81,7 +77,7 @@ public class OrderQueueConsumer {
                 }
                 log.debug("库存扣减成功，skuId: {}, quantity: {}", item.getSkuId(), item.getQuantity());
             }
-            channel.basicAck(deliveryTag, false);
+            // 🔴 不要再手动 ack：容器是 AUTO 模式（见 OrderQueueConfig 的说明）
             log.info("订单库存扣减完成，共 {} 个商品", items.size());
         } catch (AmqpRejectAndDontRequeueException e) {
             throw e;   // 毒消息（库存不足等）：放行给容器 reject(requeue=false) → DLX

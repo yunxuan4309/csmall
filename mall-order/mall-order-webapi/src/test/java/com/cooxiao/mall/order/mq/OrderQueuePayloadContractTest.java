@@ -44,7 +44,8 @@ class OrderQueuePayloadContractTest {
     private final Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter();
 
     private static Method processMethod() throws Exception {
-        return OrderQueueConsumer.class.getMethod("process", OrderStockMessage.class, Channel.class, long.class, List.class);
+        // #70 补修 D：ack 交给容器（AUTO），监听器不再收 Channel/deliveryTag
+        return OrderQueueConsumer.class.getMethod("process", OrderStockMessage.class, List.class);
     }
 
     @Test

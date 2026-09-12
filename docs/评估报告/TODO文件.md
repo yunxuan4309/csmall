@@ -352,7 +352,13 @@ sudo systemctl reload sshd
 **⚠️ 补修发现 C（同日 · 被"再检查一遍"抓出）：yml 是「影子配置」，压根没生效** 🔴
 - **现象**：把 `acknowledge-mode: manual` 写进 `application-prod.yml` 后，**运行日志里仍是 `acknowledgeMode=AUTO`**，且成功 ack 之后紧跟一条 `channel error 406 PRECONDITION_FAILED unknown delivery tag`（**自动 + 手动双确认**）。
 - **根因**：mall-order 在 `OrderQueueConfig` 里**自定义了 `rabbitListenerContainerFactory` bean**，`@RabbitListener` 用的就是它；而 **`spring.rabbitmq.listener.simple.*` 只作用于 Spring Boot 自动配置的那个 factory** ⇒ **yml 里写什么都没用**（= **G16"改到影子 key"的同类**：配置在 jar 里，却**没有任何代码去读它**）。
-- **修复**：权威设置搬进**代码里的 factory** —— `setAcknowledgeMode(MANUAL)` + `setDefaultRequeueRejected(false)` + `RetryInterceptorBuilder.stateless().maxAttempts(3).recoverer(new RejectAndDontRequeueRecoverer())`；并把 yml 那段**删掉、换成指路注释**（避免以后再有人改错地方）。
+- **修复**：权威设置搬进**代码里的 factory** —— ~~`setAcknowledgeMode(MANUAL)`~~ + `setDefaultRequeueRejected(false)` + `RetryInterceptorBuilder.stateless().maxAttempts(3).recoverer(new RejectAndDontRequeueRecoverer())`；并把 yml 那段**删掉、换成指路注释**（避免以后再有人改错地方）。
+
+**⚠️ 补修发现 D（同日 · 我对 C 的修法本身有坑，又被实测抓出）：MANUAL 模式下"抛异常"不会 reject** 🔴
+- **现象**：改成 MANUAL 后，毒消息的重试上限**确实生效了**（3 次后 `Retries exhausted` + `ConditionalRejectingErrorHandler`，日志见 `RejectAndDontRequeueRecoverer`）✅ **不再死循环**；但 —— `order_queue` 出现 **1 条 `unacked`**、**`order_queue_dlx` 恒 0**、**告警不响** ❌。
+- **根因**：**MANUAL ack 模式下容器不碰 channel** ⇒ 监听器"抛 `AmqpRejectAndDontRequeueException`"**不会**触发 reject ⇒ 消息**永远 unacked**（只在重启/断连时才重投）；而 `RejectAndDontRequeueRecoverer` **只有 AUTO 模式才真的 reject(requeue=false)**。
+- **最终修复（本次定稿）**：**`AcknowledgeMode.AUTO`**（ack 交给容器）+ **监听器完全不碰 channel**（删掉 `basicAck`/`Channel`/`deliveryTag` 参数）+ `setDefaultRequeueRejected(false)` + retry advice。三条路径因此都收敛：成功 → 容器 ack ✅ · 毒消息 → 3 次重试后 reject ⇒ **DLX + 告警** ✅ · 瞬时异常 → 同上 ✅。
+- **判据/设计教训**："**抛异常让容器处理**"这条思路**只在 AUTO 模式下成立**；选 MANUAL 就等于把 ack 的责任（含"失败也要 reject"）**全部**揽给业务代码 —— 两者不能各做一半，否则就是这次的"消息永远 unacked"。
 - **判据教训（又一次）**：`ack_required=true` **不能**用来判断"是否 manual ack"（AUTO 模式下 Spring 同样是 autoAck=false）；**真判据是容器日志里的 `acknowledgeMode=`**。
 - ℹ️ **对照**：`mall-seckill` **没有**自定义 factory（配置类里 4 个 bean 无 Factory）⇒ 它的 yml 那套**是生效的** ✅ ⇒ **"抄别人的配置"这次不成立 —— 必须先确认自己这条链路读的是哪个配置源**。
 
