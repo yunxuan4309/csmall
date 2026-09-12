@@ -169,6 +169,22 @@ python3 simulate_data.py --compare-baseline --batch sim_YYYYMMDD_HHMM
 > 为什么连"合计"也要记：`stock`/`sales` 是**不可逆的累加字段**（删行删不回累加值）—— **#69（秒杀给"错误商品"加销量）就是靠它抓出来的**，只比对"行数"永远发现不了。
 > ⚠️ 基线是**批次级**的：同一批次的"造数前"与"清理后"才有可比性；拿 A 批的基线比 B 批的状态没有意义。
 
+### 4.11 🔴 快照闸门（`--require-dump`，2026-09-12 新增 · TODO #68）
+
+```bash
+# ① 老机（ecs-user）先做整库快照
+bash /data/csmall/backup/backup-db.sh          # 输出 /data/csmall/backup/cs_mall_YYYYMMDD_HHMM.sql.gz
+# ② 造数/秒杀时带上它 —— 不带就【拒绝开跑】
+python3 simulate_data.py --days 1 --per-day 1000 --users 125 --require-dump cs_mall_20260912_1452.sql.gz
+```
+> **为什么强制**：造数/秒杀会**真写生产**（含不可逆的 `pms_spu.sales` / `pms_sku.stock`），而影子登记表**只能删行、删不回累加值** ⇒ 必须先有一份整库快照。
+> **怎么校验**（脚本跑在新机、dump 落在老机，看不到那个文件）：**解析文件名里的时间戳**，超过 `--dump-max-age-min`（默认 **120** 分钟）即拒绝 ⇒ 专治"忘了跑、拿旧包糊弄"。
+> **自动登记**：通过后会把文件名写进 `cs_mall_sim.sim_batch.dump_file`（一并写进 `note`）—— #68 要的"文件名登记"由脚本代劳，不靠人记。
+> **豁免**：纯只读/练习跑可显式加 `--allow-no-dump`，但启动时会**大声警告**。
+> 只读入口（`--preflight` / `--verify` / `--compare-baseline`）与 `--clean` **不受闸门约束**。
+
+> 🧪 **实测（2026-09-12）**：不带 → `🔴 拒绝开跑…`；旧包 → `快照太旧（3628 分钟）`；不合规名 → `文件名不合规`；合法 → `✅ 快照闸门通过` + 批次 `dump_file` 自动写入 ✅
+
 ## 七、⚠️ 尚未实现 / 待补
 
 | 项 | 状态 | 说明 |
@@ -177,6 +193,8 @@ python3 simulate_data.py --compare-baseline --batch sim_YYYYMMDD_HHMM
 | 清理 Redis | ✅ **已完成（2026-09-12 晚）**：`--clean` 按**登记坐标** `sku:user` 精确删三类键（`reseckill`/`ordered`/`orderLock`；dry-run 打印清单）—— 实测注入合成键 → **精确命中并删除**；**禁止 `--scan --pattern` 全删** |
 | 秒杀真跑 | ✅ **2026-09-12 晚真跑 3 次**（批次 `1329`/`1333`/`1335`）：每次"快照 → 提交 → 登记 → 恢复 → 复核"，`seckill_ok=1`/`seckill_verify_bad=0`；🔴 过程中抓到 **#69**（秒杀给错误商品加销量）→ 已改成"全量 sales 快照 + 按实际变化回补 + 纳入校验" | 需按登记 user id 精确拼 key 删（`reseckill`/`ordered`/`orderLock`）；**禁止 `--scan --pattern` 全删**；当前这三类实测各 **0 个**（§〇.1 D9） |
 | 基线快照表写入 | ✅ **已完成（2026-09-12 晚）** | `--baseline` 造数**前**记基线（**11** 张表行数 + `stock`/`sales` 合计）· `--compare-baseline --batch X` 清理**后**比对（有差异**退出码 1**）；实测**闭环 0 差异**，且 **#69 就是靠它抓出来的** |
+| 快照闸门（`--require-dump`） | ✅ **已强制（2026-09-12 · #68）** | 造数/秒杀**不带就不给跑**；带了校验**新鲜度**（默认 120 分钟）并**自动写进** `sim_batch.dump_file`；`--allow-no-dump` 可显式豁免（大声警告） |
+| 基线快照表写入 | ✅ **已完成（2026-09-12 晚）** | 见上（`--baseline` / `--compare-baseline`） |
 | 结果回填 | ✅ **已写**：`sim_batch.done_actions` / `note`（含动作分布 / 标记数 / `backfill_problems`）；🆕 造数后可 **`--verify --batch X`** 按批次复核（2026-09-12 新增） |
 
 ## 八、验证记录（2026-09-11 → 🆕 2026-09-12 正式造数）

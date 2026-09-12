@@ -692,7 +692,8 @@ DELETE FROM cs_mall_ums.ums_user        WHERE username LIKE 'testsim%';   -- 旧
       （🔴 **不要用 venv** —— 2026-09-11 晚实测：`ensurepip` 缺失 → venv 无 pip；且无外网，仅阿里云镜像可达。详见 §〇.1 D6 修订）
  1. 老机建影子库：执行 deploy/scripts/sim/init_sim_db.sql
  2. 给凭据：export SIM_DB_PASSWORD=…（脚本只从环境变量取，不落盘）
- 3. 快照先行：`bash /data/csmall/backup/backup-db.sh`（复用 #29 脚本，须 **ecs-user** 执行）—— 🔴 **2026-09-12 实测：历次 7 个批次的 `sim_batch.dump_file` 全为 NULL，这一步从未真正做** → 已登记 **[[TODO文件]]#68**（**做秒杀真跑前必须先补**，因为秒杀会真动 `stock`/`sales`，脚本内快照挡不住中途失败）
+ 3. 快照先行：`bash /data/csmall/backup/backup-db.sh`（复用 #29 脚本，须 **ecs-user** 执行）—— 🔴 **2026-09-12 实测：历次 7 个批次的 `sim_batch.dump_file` 全为 NULL，这一步从未真正做** → 已登记 **[[TODO文件]]#68**（**做秒杀真跑前必须先补**，因为秒杀会真动 `stock`/`sales`，脚本内快照挡不住中途失败）。
+      ✅ **2026-09-12 收口**：① **已执行一次**（`cs_mall_20260912_1452.sql.gz`，319 KB / 6 库 / `gzip -t` 通过）② **已强制**：脚本新增 **`--require-dump <文件名>`** —— **不提供即拒绝开跑**，提供则校验**新鲜度**（`--dump-max-age-min`，默认 120 分钟）并**自动写进** `sim_batch.dump_file`；`--allow-no-dump` 可显式豁免（大声警告）
  4. 小规模试跑：--days 1 --per-day 50（约 2~3 单），只校准 4 件事：
       · 注册接口的用户名/密码正则能否过
       · 加购 / 下单的字段是否被接受（金额、data、mainPicture）

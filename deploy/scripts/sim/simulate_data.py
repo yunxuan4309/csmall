@@ -1468,6 +1468,56 @@ def baseline_compare(conn, batch: str) -> List[str]:
     return diffs
 
 # =============================================================================
+# 🔴 #68 快照闸门：把"造数/秒杀前必须先有整库快照"从**提醒**变成**强制**
+# =============================================================================
+
+_DUMP_RE = re.compile(r"cs_mall_(\d{8})_(\d{4})\.sql\.gz$")
+
+
+def check_dump_gate(args) -> Optional[str]:
+    """① 未提供快照 ⇒ **拒绝开跑**（除非显式 --allow-no-dump）；② 提供了 ⇒ 校验**新鲜度**并返回登记值。
+
+    ⚠️ 为什么校验"新鲜度"而不是"文件是否存在"：**脚本跑在新机、dump 落在老机**
+    （`/data/csmall/backup/` 归 ecs-user），新机根本看不到那个文件 ⇒ 只能靠**文件名里的时间戳**
+    （`backup-db.sh` 用宿主本地时间生成）来证伪"今天忘了跑"。时间比对用**新机本地时钟**
+    —— 别用 DB 的 `NOW()`（那是 UTC，见 §G **G13**）。
+    """
+    if not args.require_dump:
+        if args.allow_no_dump:
+            log("⚠️⚠️ 已豁免快照要求（--allow-no-dump）：**本批没有『操作前整库快照』兜底**"
+                "（仅应用于零写入的练习/自测；正式造数/秒杀务必提供 --require-dump）")
+            return None
+        sys.exit(
+            "🔴 拒绝开跑：未提供 `--require-dump`（TODO #68）——\
+"
+            "   造数/秒杀会**真写生产**（含不可逆的 `pms_spu.sales` / `pms_sku.stock`），\
+"
+            "   而影子登记表只能删行、**删不回累加值** ⇒ 必须先有一份整库快照。\
+"
+            "   ① 老机（ecs-user）执行：bash /data/csmall/backup/backup-db.sh\
+"
+            "   ② 带上它打印出的文件名：--require-dump cs_mall_YYYYMMDD_HHMM.sql.gz\
+"
+            "   （纯只读/练习跑可显式加 --allow-no-dump 豁免，但会大声警告）")
+
+    m = _DUMP_RE.search(args.require_dump.strip())
+    if not m:
+        sys.exit(f"🔴 --require-dump 的文件名不合规：{args.require_dump}\
+"
+                 "   期望形如 cs_mall_YYYYMMDD_HHMM.sql.gz（backup-db.sh 生成的格式）")
+    stamp = dt.datetime.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M")
+    age_min = (dt.datetime.now() - stamp).total_seconds() / 60.0
+    if age_min > args.dump_max_age_min:
+        sys.exit(f"🔴 --require-dump 的快照太旧：{args.require_dump}（{age_min:.0f} 分钟前生成，"
+                 f"上限 {args.dump_max_age_min:.0f} 分钟）⇒ **重新跑一次** backup-db.sh 再开跑"
+                 "（这条检查专治「忘了跑、拿旧包糊弄」）")
+    if age_min < -5:
+        sys.exit(f"🔴 --require-dump 的时间戳在未来（{age_min:.0f} 分钟）⇒ 核对文件名与时钟：{args.require_dump}")
+    log(f"✅ 快照闸门通过：{args.require_dump}（{age_min:.0f} 分钟前生成，上限 {args.dump_max_age_min:.0f} 分钟）")
+    return args.require_dump
+
+
+# =============================================================================
 # main
 # =============================================================================
 
@@ -1505,6 +1555,14 @@ def main() -> None:
     ap.add_argument("--compare-baseline", action="store_true",
                     help="⑥ 与 --batch 的基线比对（清理后跑）：有差异退出码 1")
     ap.add_argument("--base", default=BASE, help=f"网关地址（默认 {BASE}）")
+    # 🆕 2026-09-12（[[TODO文件]]#68）：把"造数/秒杀前先做整库快照"从**提醒**变成**强制**
+    ap.add_argument("--require-dump", metavar="FILE",
+                    help="🔴 本批『操作前快照』文件名（形如 cs_mall_YYYYMMDD_HHMM.sql.gz）。**不提供则拒绝开跑**；"
+                         "提供后会校验**新鲜度**并自动写进 sim_batch.dump_file")
+    ap.add_argument("--dump-max-age-min", type=float, default=120.0,
+                    help="--require-dump 的新鲜度上限（分钟，默认 120）—— 防「拿几天前的旧包糊弄」")
+    ap.add_argument("--allow-no-dump", action="store_true",
+                    help="⚠️ 显式豁免快照要求（**仅用于零写入的练习/自测**）；启动时大声警告")
     args = ap.parse_args()
 
     # 依赖检查放在 parse_args 之后：保证 `--help` 在没装依赖时也能用
@@ -1548,14 +1606,21 @@ def main() -> None:
             log("--preflight 结束：未写入任何数据 ✅")
             return
 
+        # 🔴 #68 快照闸门：**在任何写入之前**（未提供/太旧 ⇒ 直接拒绝开跑）
+        dump_name = check_dump_gate(args)
+
         batch = "sim_" + dt.datetime.now().strftime("%Y%m%d_%H%M")
         registry = Registry(batch)
         with conn.cursor() as cur:
             cur.execute("INSERT INTO cs_mall_sim.sim_batch"
-                        "(batch_id, started_at, days, per_day, status, note) VALUES (%s, NOW(), %s, %s, 'running', %s)",
-                        (batch, args.days, args.per_day, f"dump_file=待填；base={args.base}"))
+                        "(batch_id, started_at, days, per_day, status, dump_file, note) "
+                        "VALUES (%s, NOW(), %s, %s, 'running', %s, %s)",
+                        (batch, args.days, args.per_day, dump_name,
+                         f"dump_file={dump_name or '豁免(--allow-no-dump)'}；base={args.base}"))
         conn.commit()
-        log(f"批次 {batch} 已开（记得在造数**前**做 mysqldump 并把文件名写进 sim_batch.dump_file）")
+        log(f"批次 {batch} 已开"
+            + (f"（操作前快照：{dump_name} ✅）" if dump_name else "（⚠️ 无操作前快照）"))
+
         if args.baseline:
             # ⑥ 基线必须在**任何写入之前**采（下面 ensure_users 就开始写了）
             base = baseline_save(conn, batch)
