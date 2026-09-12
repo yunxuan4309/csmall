@@ -12,6 +12,7 @@ import com.cooxiao.mall.order.mapper.OmsOrderMapper;
 import com.cooxiao.mall.order.mapper.OmsPaymentRecordMapper;
 import com.cooxiao.mall.order.mq.OrderItemMessage;
 import com.cooxiao.mall.order.mq.OrderQueueConfig;
+import com.cooxiao.mall.order.mq.OrderStockMessage;
 import com.cooxiao.mall.order.payment.PaymentCallbackResult;
 import com.cooxiao.mall.order.payment.PaymentResult;
 import com.cooxiao.mall.order.payment.PaymentStrategyFactory;
@@ -134,8 +135,12 @@ public class OmsOrderServiceImpl implements IOmsOrderService {
         // 4.执行新增订单项
         omsOrderItemMapper.insertOrderItemList(omsOrderItems);
         // 5.发送 MQ 消息，异步扣减库存（削峰填谷）
+        // 🔴 #65 修复（2026-09-12）：改发**非泛型 POJO 包装** OrderStockMessage。
+        //   原来直接发 List<OrderItemMessage> ⇒ 转换器写入 __TypeId__=java.util.ArrayList，
+        //   消费端既挑不中 String 参数，改成 List<...> 后元素还会退化成 LinkedHashMap（实测见
+        //   OrderQueuePayloadContractTest）。生产端与消费端在同一个 jar，必须一起发布。
         rabbitTemplate.convertAndSend(
-                OrderQueueConfig.ORDER_EX, OrderQueueConfig.ORDER_RK, orderItemMessages);
+                OrderQueueConfig.ORDER_EX, OrderQueueConfig.ORDER_RK, new OrderStockMessage(orderItemMessages));
         log.info("订单 {} 已发送库存扣减消息，共 {} 件商品", order.getSn(), orderItemMessages.size());
         // 第三部分:收集需要的返回值
         // 实例化返回值类型对象,为其赋值,最后返回

@@ -3,7 +3,6 @@ package com.cooxiao.mall.order.mq;
 import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
-import org.springframework.amqp.rabbit.annotation.RabbitHandler;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.messaging.handler.annotation.Header;
@@ -29,12 +28,20 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@RabbitListener(queues = OrderQueueConfig.ORDER_DLX_QUEUE)
 public class OrderDlxConsumer {
 
     private static final String ALARM_PREFIX = "【MQ死信告警】";
 
-    @RabbitHandler
+    /**
+     * 🔴 <b>#65 修复（2026-09-12）：监听注解必须写在方法上、方法参数收原始 {@code Message}</b>。
+     *
+     * <p>原来用的是「类级 {@code @RabbitListener} + {@code @RabbitHandler}」—— 框架会先把载荷
+     * 反序列化成对象、再<b>按载荷类型挑方法</b>；死信消息的载荷是 {@code java.util.ArrayList}
+     * （JSON 数组反序列化结果），与 {@code Message} 参数不匹配 ⇒ <b>连死信告警也一起失效</b>
+     * （本该打印 {@code 【MQ死信告警】} 的 ERROR 根本没执行）。
+     * 方法级监听没有"按类型挑方法"这一步 ⇒ 无论载荷是什么，都能拿到原始字节做留痕。
+     */
+    @RabbitListener(queues = OrderQueueConfig.ORDER_DLX_QUEUE)
     public void onDlxMessage(Message message, Channel channel,
                              @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
         String body = new String(message.getBody(), StandardCharsets.UTF_8);

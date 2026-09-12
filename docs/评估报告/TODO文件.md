@@ -81,19 +81,17 @@
 | **#54** | **RabbitMQ 凭据仍是 `guest/guest`**（服务侧变量名写错：应 `SPRING_RABBITMQ_*`） | 🔴 P2 | §54 |
 | **#55** | **SSH 允许密码 + 允许 root 登录（两台）** → 公网可爆破 | 🔴 **P1** | §55 |
 | **#56** | 公开仓库暴露 IP/拓扑/弱凭据事实 | 🟡 P3（**已决定接受**） | §56 |
-| **#57** | **Schema 漂移只读核实**（含 2026-09-11 新发现 2 处） | 🟡 P3 | §57 |
-| **#65** | **普通订单库存扣减 MQ 链路整体失效** → `pms_sku.stock` 永不减少、下单无库存校验 | 🔴 **P1** | §65 |
+| **#57** | ✅ **只读核实完成（2026-09-12）**：**14 处差异全部是"服务器比快照新"**（9 张表的 `data_source` / `oms_order.order_type` / 4 处 `gmt_modified` / `ams_permission.value` / `seckill_message_retry` 整表）⇒ **0 处需要 ALTER** | ✅ 已完成 | §57 |
+| **#65** | **普通订单库存扣减 MQ 链路整体失效** → `pms_sku.stock` 永不减少、下单无库存校验 | ✅ **已修复（代码+回归测试全绿，2026-09-12）· 待你部署 mall-order** | §65 |
 | **#66** | Sentinel 面板上报缺口（8 服务未配 dashboard 地址） | ✅ 已修复验收 | §66 |
-| **#61** | **外部端到端探活**（"21 容器全 Up、health 200，业务却挂了 24h"的根治） | 🟡 P2 | §61 |
+| **#61** | **外部端到端探活**（"21 容器全 Up、health 200，业务却挂了 24h"的根治） | ✅ **脚本已交付并真机验证（2026-09-12）· 待你挂 cron** | §61 |
 | **#62** | mall-ai `/ai/chat/stream` 并发下 ~50% HTTP 500（`AccessDeniedException`：ASYNC/ERROR 二次派发被授权规则拒绝） | ✅ **已修复验收**（2026-09-12） | §62 |
 | ~~**#64**~~ | ✅ **已修复并部署验收**（2026-09-12 晚）：预热 Job 改用 `seckill_spu.getId()`；预热日志现覆盖 **12/12** 个 SKU，且 11/12/13/14 的 key 已由 Job 按 DB 值**带 TTL** 重新预热（不再是永久 key） | §64 |
-| **#69** | ✅ **已修复并部署验收**（2026-09-12 晚）：秒杀 `incrementSales` 写到错误商品（`seckill_spu.id` 当 pms spu 用） | §69 |
-| **#67** | **#48 的剩余部分**：① 录像 🟡暂缓 · ~~② 正式造数~~ ✅ · ~~③ AI 并发压测~~ ✅ · **④ `--with-seckill` 真跑** · **⑤ `--clean` 的 Redis 清理** · **⑥ `sim_baseline`** | 🟢 **2/6 完成**（②③，2026-09-12）· ④⑤⑥ 待做 | [[TODO中低优先级]] §67 |
-| **#68** | 🆕 **`sim_batch.dump_file` 从未落盘** → 方案要求的"**造数前快照兜底**"从未落实（可逆性目前只靠影子登记表） | 🔴 P2（**做 ④ 秒杀真跑前先补**） | §68 |
-| **#69** | ✅ **已修复并部署验收**（2026-09-12 晚）：秒杀时把 `seckill_spu.id` 当 pms spu 用 → `incrementSales` **给"错误商品"加销量**。**两台实例**（老机 `csmall-seckill` + 新机 `csmall-seckill-2`）均已升级并 A/B 证伪 | §69 |
-| **#64** | ✅ **已修复并部署验收**（2026-09-12 晚）：秒杀预热 Job 用 pms id 查 `seckill_sku.spu_id` → 4/12 个 SKU（11/12/13/14）从不预热；现预热日志覆盖 **12/12**，且那 4 个 key 已由 Job 按 DB 值重新预热（**带 TTL**，不再是永久 key） | §64 |
+| **#69** | ✅ **已修复并部署验收**（2026-09-12 晚）：秒杀时把 `seckill_spu.id` 当 pms spu 用 → `incrementSales` **给"错误商品"加销量**（实测 `pms_spu.sales[4] 1→2→3`、`sales[6] 1→2`）。**两台实例**（老机 `csmall-seckill` + 新机 `csmall-seckill-2`）均已升级并 A/B 证伪 | §69 |
+| **#67** | **#48 的剩余部分**：① 录像 🟡暂缓 · ~~② 正式造数~~ ✅ · ~~③ AI 并发压测~~ ✅（含晚间可选深化）· ~~④ `--with-seckill` 真跑~~ ✅ · ~~⑤ `--clean` Redis 精确清理~~ ✅ · ~~⑥ `sim_baseline` 基线比对~~ ✅ | 🟢 **5/6 完成**（2026-09-12 一天内做完；**仅 ① 录像暂缓**） | [[TODO中低优先级]] §67 |
+| **#68** | ✅ **已关闭（2026-09-12）**：dump 已执行一次（`cs_mall_20260912_1452.sql.gz`）+ **机制固化**（`--require-dump` 不提供即拒绝开跑 / 新鲜度校验 / 自动登记 `dump_file`） | ✅ 已完成 | §68 |
 
-| **#31** | **生产开启向量检索**（前置**全解除**，仅剩"改配置 + 部署 + 验证"） | 🟢 可实施 | §31 |
+| **#31** | **生产开启向量检索**（✅ **2026-09-12 可行性评估完成：三项前置实测通过**（额度 200 / ES `dense_vector` 已就位 / 启动自检+运行时降级均已上线）⇒ **改为 env 覆盖、免重建镜像**） | 🟢 **可实施（待你拍板开或不开）** | §31 |
 ### D. ✅ 已完成 / 📦 已归档（**明细见 [[TODO已完成]]**，此处只留指针）
 
 | 编号 | 一句话 | 状态 | 明细 |
@@ -173,8 +171,7 @@
 | **#66** | 🟠 Sentinel 面板只收到 3 个服务的指标（其余 8 个未配 dashboard 地址） | §66 |
 | **#67** | ✅ **#48 的剩余部分**（① 录像🟡暂缓 · ~~②~~ ✅ · ~~③~~ ✅ **（含晚间的可选深化：75/150 档 + 单次占槽）** · ~~④~~ ✅ · ~~⑤~~ ✅ · ~~⑥~~ ✅ —— **2026-09-12 一天内做完全部可做的**） | [[TODO中低优先级]] §67 |
 | **#68** | ✅ **已关闭（2026-09-12）**：**已执行一次**（`cs_mall_20260912_1452.sql.gz`，319 KB / 6 库）+ **机制固化** —— 脚本新增 **`--require-dump`**：不提供即**拒绝开跑**、校验**新鲜度**、**自动登记** `sim_batch.dump_file` | ✅ 已完成 | §68 |
-| **#69** | 🔴 **秒杀 `incrementSales` 写错商品**（把 `seckill_spu.id` 当 pms spu 用） | §69 |
-| **#68** | 🆕 **`sim_batch.dump_file` 从未落盘** → "造数前快照兜底"从未落实（**做 ④ 前先补**） | §68 |
+| **#69** | ✅ **已修复并部署验收（2026-09-12）**：秒杀 `incrementSales` 写错商品（把 `seckill_spu.id` 当 pms spu 用）；**两台实例同版本** + A/B 证伪 | §69 |
 | **#60** | Spring AI 引入评估（结论：暂不引入，前置 = Boot 全站升级） | [[TODO中低优先级]] §60 |
 
 > ✅ **#58 已完成并部署（2026-09-10）** —— AI 模型名停用风险 + `thinking` 开关 + **模型配置可配化**（含「双 bean 重复注册」隐患修复）。生产验证：路由日志恰好 1 次 / JSON 重排 5s / CHAT 4s / 预算记账正常 / 告警 0。详见 [[TODO已完成]] §十四 与 [[AI模型名停用风险与thinking参数改造方案]] §十一。
@@ -240,12 +237,69 @@
 
 **方案**：① `.env` 设强密码 + RabbitMQ 侧 `rabbitmqctl add_user/change_password/set_user_tags/set_permissions`（⚠️ `RABBITMQ_DEFAULT_*` 只在**首次初始化**生效，数据卷已存在时无效）→ 删或禁用 `guest`；② compose 服务侧改用 **`SPRING_RABBITMQ_USERNAME` / `SPRING_RABBITMQ_PASSWORD`**（当前名字是错的）；③ 可选 `loopback_users.guest = true` 恢复默认限制。
 
-**注**：`.env.example` 里的 `RABBITMQ_PASSWORD=guest` **不是泄露**（公开默认值），但**等于生产无密码**；**且仓库是公开的**（`github.com/yunxuan4309/csmall`，`private: false`）→ 这个事实等于公开写明了"生产 MQ 用 guest"。 
+**注**：`.env.example` 里的 `RABBITMQ_PASSWORD=guest` **不是泄露**（公开默认值），但**等于生产无密码**；**且仓库是公开的**（`github.com/yunxuan4309/csmall`，`private: false`）→ 这个事实等于公开写明了"生产 MQ 用 guest"。
+
+**✅ 可执行操作单（2026-09-12 补 · 分两步，第一步零回归）**
+
+**第 1 步：让服务"认得出"新凭据（纯配置补变量，部署后行为与现状等价）**
+- ✅ **仓库侧已改**（`deploy/docker/docker-compose.yml`，2026-09-12）：3 个用 MQ 的服务（`mall-order` / `mall-seckill` / `mall-seckill-2`）**都补上** `SPRING_RABBITMQ_USERNAME` / `SPRING_RABBITMQ_PASSWORD`，并**保留**原有 `RABBITMQ_USERNAME` / `RABBITMQ_PASSWORD`。
+- ⚠️ **为什么两套都要（2026-09-12 读码核实，很重要）**：`mall-order/mall-order-webapi/src/main/resources/application-prod.yml` **没有任何 rabbitmq 段** ⇒ 它只认 Spring Boot 标准的 `SPRING_RABBITMQ_*`（**此前它永远用默认 `guest/guest`，与 `.env` 无关**）；而 `mall-seckill/.../application-prod.yml:73-74` 写的是 **`${RABBITMQ_USERNAME:guest}` 占位符** ⇒ 它只认 `RABBITMQ_*`。**只改一套，另一个服务就会掉线**。
+- **你要做**：把 `deploy/docker/docker-compose.yml` 同步到**两台** → `docker compose up -d mall-order mall-seckill mall-seckill-2`（~1 分钟）→ 验证功能无损（下单后仍出现 `订单库存扣减完成`）。
+
+**第 2 步：真正换掉 guest（强密码 + 删默认用户）**
+```bash
+# ① 生成强密码写入两台 .env（ecs-user）
+RABBITMQ_USERNAME=cs_mq_admin
+RABBITMQ_PASSWORD=$(openssl rand -base64 24)
+#    ⚠️ RABBITMQ_DEFAULT_* 只在"首次初始化空数据卷"时生效 —— 数据卷已存在，必须用 rabbitmqctl：
+# ② 建用户 + 授权（在跑 rabbitmq 的老机执行）
+docker exec csmall-rabbitmq rabbitmqctl add_user "$RABBITMQ_USERNAME" "$RABBITMQ_PASSWORD"
+docker exec csmall-rabbitmq rabbitmqctl set_user_tags "$RABBITMQ_USERNAME" administrator
+docker exec csmall-rabbitmq rabbitmqctl set_permissions -p / "$RABBITMQ_USERNAME" ".*" ".*" ".*"
+# ③ recreate 三个 MQ 服务，让它们用新凭据
+docker compose up -d mall-order mall-seckill mall-seckill-2
+# ④ 验证：三条连接的 user 都应是新用户
+docker exec csmall-rabbitmq rabbitmqctl list_connections user peer_host
+# ⑤ 确认已无 guest 连接后，才删默认用户
+docker exec csmall-rabbitmq rabbitmqctl delete_user guest
+# ⑥ 复验：再重启一次服务，确认仍能连（排除"只在新容器首次生效"的假象）
+```
+⚠️ **顺序纪律**：**先建新用户 → 再切服务 → 最后删 guest**；反过来会让服务侧断连、消息堆积。
+🔙 **回滚**：`.env` 改回 `guest` → `docker compose up -d` 三个服务 → `rabbitmqctl add_user guest guest && rabbitmqctl set_user_tags guest administrator && rabbitmqctl set_permissions -p / guest ".*" ".*" ".*"`。
+📌 **另外两个可选收尾**：① `loopback_users.guest = true`（**2026-09-12 实测当前 `loopback_users=[]`** ⇒ guest **可远程登录**，这正是风险来源）；② 5672/15672 只绑私网（当前监听 `0.0.0.0`，公网靠安全组挡）。 
 
 
 ### 55. SSH 暴露面：允许密码登录 + 允许 root 登录（两台）
 
- 🔴 **P1（2026-09-09 推送前安全审查发现）**：两台 `sshd_config` 均为 `PermitRootLogin yes` + `PasswordAuthentication yes`（无 drop-in 覆盖），而安全组 **22 端口对 `0.0.0.0/0` 开放** → 公网可**直接暴力破解**（阿里云 ECS 是扫描最密集的目标之一）。**方案**：① `PasswordAuthentication no`（`ecs-user` / `ai-*` 均已配置密钥登录，不影响使用）；② `PermitRootLogin prohibit-password`；③ 可选：安全组把 22 收紧到固定来源 IP。**⚠️ 操作顺序**：先确认密钥登录可用（`ssh -i <key> ecs-user@<ip>`）→ `sshd -t` 校验语法 → `systemctl reload sshd`（**reload 不断开现有连接**，比 restart 安全）。 
+ 🔴 **P1（2026-09-09 推送前安全审查发现）**：两台 `sshd_config` 均为 `PermitRootLogin yes` + `PasswordAuthentication yes`（无 drop-in 覆盖），而安全组 **22 端口对 `0.0.0.0/0` 开放** → 公网可**直接暴力破解**（阿里云 ECS 是扫描最密集的目标之一）。**方案**：① `PasswordAuthentication no`（`ecs-user` / `ai-*` 均已配置密钥登录，不影响使用）；② `PermitRootLogin prohibit-password`；③ 可选：安全组把 22 收紧到固定来源 IP。**⚠️ 操作顺序**：先确认密钥登录可用（`ssh -i <key> ecs-user@<ip>`）→ `sshd -t` 校验语法 → `systemctl reload sshd`（**reload 不断开现有连接**，比 restart 安全）。
+
+**✅ 可执行操作单（2026-09-12 补 · 需 `ecs-user` / sudo，AI 账号无权限）**：
+
+```bash
+# 0) 先确认“密钥登录”可用（另开一个窗口验证，别关当前会话！）
+ssh -i <你的key> ecs-user@<老机IP> "echo key-ok"
+ssh -i <你的key> ecs-user@<新机IP> "echo key-ok"
+
+# 1) 备份原配置 + 落盘加固（两台各执行一次）
+sudo cp -a /etc/ssh/sshd_config /etc/ssh/sshd_config.bak-$(date +%F)
+sudo sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sudo sshd -T | grep -Ei 'permitrootlogin|passwordauthentication'   # 期望：prohibit-password / no
+
+# 2) 语法校验（必须通过才继续）
+sudo sshd -t && echo SYNTAX-OK
+
+# 3) reload（不断开现有连接，比 restart 安全）
+sudo systemctl reload sshd
+
+# 4) 验证：另开窗口确认密钥登录仍可用；再试密码登录应被拒
+#    ssh ecs-user@<IP>   → Permission denied (publickey)
+```
+
+⚠️ **顺序纪律**：`sshd -t` 不过**绝不 reload**；reload 后**先确认密钥能进**再关当前窗口。
+🔙 **回滚（一条命令）**：`sudo cp -a /etc/ssh/sshd_config.bak-<日期> /etc/ssh/sshd_config && sudo systemctl reload sshd`。
+⚠️ **可选第三步**：安全组把 22 收紧到固定来源 IP（比改 sshd 更彻底）—— 但会让你换网络时进不去，**演示/面试期间建议先不动安全组**。
+✅ **做完请在登记表把 #55 标为已完成**（并把 `sshd -T` 的实际输出贴一行到本条）。 
 
 
 ### 56. 公开仓库的信息暴露（服务器 IP / 拓扑 / 弱凭据事实）
@@ -257,7 +311,24 @@
 
  🟡 **P3（2026-09-10 文档核查发现，来源 [[数据库Schema漂移审计]]）**：该审计（2026-08-04；本地 MySQL 39 表 × mall-pojo 32 实体 × `database/` 34 个 SQL 三方对比）结论是"**本地已全部修复**（企业级升级过程中已补列），但**服务器部署前需执行 [[本次修改部署指南--2026-08-04]] 同款 ALTER**"。**待办**：① 用报告里的对比清单在服务器 `information_schema` 上做**一次只读核对**；② 若有差异 → 生成 ALTER 并在低峰执行；③ 核对完回填两份文档状态。
 
-🆕 **2026-09-11 又发现 2 处漂移（同属本条目范围，本次一并登记）**：① **`cs_mall_seckill.seckill_message_retry` 在生产存在（79 行）但 `database/` 目录里没有对应 DDL 文件**；② **生产 `ams_permission` 表多出一列 `value`（全 NULL），DDL 里没有该列**。两处均**未追根因**，待并入本条的只读核对清单。 
+🆕 **2026-09-11 又发现 2 处漂移（同属本条目范围，本次一并登记）**：① **`cs_mall_seckill.seckill_message_retry` 在生产存在（79 行）但 `database/` 目录里没有对应 DDL 文件**；② **生产 `ams_permission` 表多出一列 `value`（全 NULL），DDL 里没有该列**。两处均**未追根因**，待并入本条的只读核对清单。
+
+**✅ 只读核对结果（2026-09-12 完成 · 结论：无需任何 ALTER）**：
+
+- **方法**：服务器 `information_schema`（实际事实）↔ `database/*/*.sql`（仓库快照）**逐表逐列 diff**（脚本落在 `work/schema-diff.ps1`，服务器快照 `work/schema-server-dump.txt`，均本地未入库）。
+- **表级**：服务器 **30** 张业务表（不含 `undo_log` / `flyway_schema_history`）× 快照 **29** 张 → **唯一差异 = `cs_mall_seckill.seckill_message_retry`（服务器有、快照无文件）**；**快照里没有任何"服务器上不存在"的表**。
+- **列级**：**14 张表有差异，全部是 `ONLY_ON_SERVER`（服务器多列），`ONLY_IN_DDL` = 0** ⇒ **服务器从不缺列**，原担心的"服务器未执行 ALTER"被**证伪**：
+
+| 服务器多出的列 | 涉及表 | 来源（已核实） |
+|---|---|---|
+| `data_source`（造数标识） | **9 张**：`oms_cart` / `oms_order` / `oms_order_item` / `oms_payment_record` / `res_upload_record` / `success` / `ums_login_log` / `ums_user` / `seckill_message_retry` | **#48**（各模块 Flyway `V6` 迁移加列） |
+| `order_type` | `oms_order` | **#14-P0 治本**（秒杀订单类型） |
+| `gmt_modified` | **4 张**：`ams_admin_role` / `ams_role_permission` / `pms_brand_category` / `pms_category_attribute_template` | 企业级升级补列（本地已补、快照未导出） |
+| `value` | `ams_permission` | ⭐ **`Permission.java:38` 实体本来就声明了它**（`insertPermission` 不写该列 ⇒ 15 行全 NULL 合理）⇒ **是快照缺列，不是"生产多列"** |
+| 整表 11 列 | `seckill_message_retry` | ⭐ **Flyway `V5__seckill_message_retry.sql` 建的**（`V6` 再加 `data_source`，与线上列逐一对上）⇒ **是快照缺文件，不是"线上长出来的表"** |
+
+- **结论**：**生产 = 最新（与实体/迁移一致）**，`database/` 导出**滞后 14 处** ⇒ ① **不需要任何 ALTER**；② 原登记的"疑似历史残留、删不删要追根因"**方向反了** —— `value` 是实体字段，**保留不动**（删了反而与实体冲突）。
+- **遗留（可选 · 纯仓库文件、零生产风险）**：刷新 `database/` 导出（补 1 个文件 + 13 个文件的列），消除"快照滞后 ⇒ 下次三方对比又误报"的坑。 
 
 
 ### 65. 🔴 普通订单的库存扣减 MQ 链路失效（`pms_sku.stock` 永不减少）
@@ -278,7 +349,23 @@
 
 **对 #48 的影响**：方案 §2.2.1「下单累加 `sales` / 扣库存 → 不可逆污染」**实测不成立** —— `sales` 只由**秒杀**链路累加（`incrementSales` 全仓唯一调用方是 `SeckillQueueConsumer:98`），普通订单本就不加；库存那条是**缺陷导致失效**而非设计。→ 普通订单造数**不会**不可逆消耗库存，**但不能依赖这个"幸运"**。
 
-**🔎 只读验证（任何人可复现，无需改代码）**：① `docker logs csmall-order \
+**🔎 只读验证（任何人可复现，无需改代码）**：① **消费者侧**：`docker logs csmall-order 2>&1 | grep -c "No listener method found"` → **21 次**（= 7 笔订单 × 3 次重试），而成功分支 `docker logs csmall-order 2>&1 | grep -c "订单库存扣减完成"` → **0 次**；② **数据侧**：订单支付成功后 `SELECT stock FROM pms_sku WHERE id=<skuId>`（实测 **1456**）与 `SELECT sales FROM pms_spu WHERE id=<spuId>`（实测 **83**）**均不变**，而 `oms_order.state=3` 且 `gmt_pay` 有值；③ **死信侧**：`docker exec csmall-rabbitmq rabbitmqctl list_queues name messages` 可见死信队列**持续堆积**（`OrderDlxConsumer` 同样类型不匹配 ⇒ 本该打印 `【MQ死信告警】` 的 ERROR 根本没执行）。
+
+**✅ 修复完成（2026-09-12 · 代码改动 + 本地回归测试全绿；部署由用户执行）**
+
+- **根因再澄清一步（比"类型不匹配"更准确）**：Spring AMQP 在「**类级 `@RabbitListener` + `@RabbitHandler`**」下，会先用消息转换器把载荷转成对象、**再按对象类型挑处理方法**。生产端发的是 `List<OrderItemMessage>` ⇒ 转换器写入 `__TypeId__ = java.util.ArrayList` ⇒ 消费端的 `String` 参数**挑不中**（`No listener method found ... for class java.util.ArrayList`）。
+- ⚠️ **而"把参数改成 `List<OrderItemMessage>`"并不够** —— **本地回归测试实测**：`SmartMessageConverter.fromMessage(msg, methodParameter)` **不会按方法参数推断泛型**，集合元素会退化成 `LinkedHashMap`，跑到 `item.getSkuId()` 就抛 `ClassCastException`。**这个结论是跑出来的，不是推测**（第一版修复正是被这条测试拦下的）。
+- **修复方案（采用本工程已被生产验证的写法）**：载荷改为**非泛型 POJO**（对照秒杀链路 `SeckillQueueConsumer(Success success, ...)`，线上正常）：
+  1. **新增** `OrderStockMessage` —— 包装 `List<OrderItemMessage> items` 的 POJO；
+  2. **生产端** `OmsOrderServiceImpl`：`convertAndSend(..., new OrderStockMessage(orderItemMessages))`；
+  3. **消费端** `OrderQueueConsumer.process(OrderStockMessage message, ...)`：取 `message.getItems()`，并补**空集合守卫**（空则直接 ack，避免无意义重投）；
+  4. **死信消费者** `OrderDlxConsumer`：改为**方法级** `@RabbitListener` + 原始 `Message` 参数（方法级没有"按类型挑方法"这一步 ⇒ 无论载荷是什么都能留痕告警）。
+- **本地验证（已做）**：新增回归测试 `OrderQueuePayloadContractTest`（3 项：载荷必须绑定成 `OrderStockMessage` 且元素就是 `OrderItemMessage` / 参数类型回归保护 / 死信监听必须方法级）→ **`Tests run: 3, Failures: 0` + BUILD SUCCESS**。
+  ⚠️ 同模块既有测试 `OmsOrderServiceImplTest` 有 5 个 `Could not initialize plugin: MockMaker` 错误 —— **已用 `git stash` 在改动前的代码上复跑取证：同样 5 个错误**（环境级问题，与本次改动无关）。
+- **部署（用户执行 · 变更窗口）**：`mvn -o -B -pl mall-order/mall-order-webapi -am -DskipTests package` → 重建 `mall-order` 镜像 → `docker compose up -d mall-order`（**只动这一个服务**）。
+  ⚠️ **发布前检查**：`order_queue` 与 `order_queue_dlx` **不能有积压**（**消息格式变了**：旧格式是裸 JSON 数组、新格式是 POJO 包装）→ `docker exec csmall-rabbitmq rabbitmqctl list_queues name messages` 确认为 0。
+  ⚠️ **生产端与消费端在同一个 jar**（都在 mall-order）⇒ 不存在"只升一半"的问题。
+- **部署后验收（3 条）**：① 下一单 → `docker logs csmall-order 2>&1 | grep -c "订单库存扣减完成"` **≥ 1**；② `grep -c "No listener method found"` **不再增长**；③ **`SELECT stock FROM pms_sku WHERE id=<sku>` 真实下降** —— 这条就是本缺陷修好的标志（以前永不减少）。
 
 
 ### 66. 🟠 Sentinel 面板只收到 3 个服务的指标（其余 8 个未配 dashboard 地址）
@@ -327,7 +414,7 @@
 
 **现状（服务器 + 代码实证，2026-09-11 复核更新）**：
 - prod yml `embedding-enabled: false` + 注释"生产默认关闭，按需开启"；test 环境 true
-- ES `cool_shark_mall_ai` 索引实测**无 `semanticVector` 字段**，且 mapping 是 **dynamic 的（与代码期望完全不同）** → **必须先修 #63**，否则向量**无处可写**
+- ~~ES `cool_shark_mall_ai` 索引实测无 `semanticVector` 字段、mapping 是 dynamic 的~~ ✅ **2026-09-12 复核更正：已由 #63 重建修复** —— 线上实测 `semanticVector: {"type":"dense_vector","dims":1024,"index":true,"similarity":"cosine"}` **已就位**（`dynamic` 问题同步修掉）⇒ **"必须先修 #63" 这个前置✅已完成；本项不再需要删索引、也不需要停机**
 - .env 已有 `EMBEDDING_API_KEY`（硅基流动，**2026-09-11 实测可用：HTTP 200 / `dims=1024`**）；`AiProperties`/`EsIndexInitializer`/`VectorSyncServiceImpl`/`RagServiceImpl` 代码全就绪
 
 **当时关闭的理由（2026-09-02；部分仍成立）**：① 20 条商品 IK 毫秒级且准，语义优势兑现不了 = 收益 0 ② 向量化依赖硅基流动外部 API = 多一个故障点 ③ 稳定优先（sync-auto-on-startup 要部署即用）④ 全量重同步几千条会限流耗时
@@ -342,7 +429,19 @@
    - `vectorSearch():352-355`：catch 里日志写 **"ES 向量检索失败，降级到全文检索"**，但**实际 `return List.of()`** → **日志与行为不符**：检索变空、回答变成"未检索到相关商品信息"，**排查时会被这条日志误导**；
    - ⇒ ✅ **已于 2026-09-11 补齐（用户授权"顺便处理"）**：`ask()` 改为走 `vectorSearchWithFallback()`（embedding 失败 / 向量检索失败 / 结果为空 **三种都回落 `fullTextSearch()`**）；`vectorSearch()` 的误导日志已改成"是否回落由调用方决定"；`syncAll`/`syncSpu` 的向量化失败**降级为"仅全文索引"**（商品照旧可被 BM25 搜到）并**在汇总里显式暴露降级条数**。**56 项单测全绿**（`mvn -o -pl mall-ai/mall-ai-webapi -am test`）→ 详见 [[问题解决--外部依赖的降级与可替换性]] §二 / §三。
 
-**面试价值**：开 = 完整 RAG 链路真实运行；关 = 讲"按需开"的工程判断——两者都可讲；决策点 = 外部 API 稳定性能否接受
+> ✅ **2026-09-12 可行性评估完成（三项前置全部实测通过 ⇒ 可实施，且比原计划更省事）**：
+> 1. **额度**：用生产 key 实测 `POST /v1/embeddings`（`BAAI/bge-m3`）→ **HTTP 200 + 返回真实向量**（不再 402）⇒ **#59 充值已生效，外部依赖可用**。
+> 2. **ES 地基**：线上已有 **`semanticVector: dense_vector(dims=1024, index=true, similarity=cosine)`**（#63 重建时建好）⇒ **无需删索引、无需停机**；当前 `_count?q=semanticVector:*` = **0 / 19**（开关关着，符合预期）。
+> 3. **安全网已在线上**：启动日志实证 `EmbeddingSelfCheck - Embedding 启动自检：跳过（embedding-enabled=false…）`（2026-09-12 06:44）⇒ **翻开关后启动会真的做维度探针**（维度不符则**启动失败**并给可操作报错）；且部署 jar 时间（**09-12 03:33 UTC**）**晚于**修复提交 `9122e5d`（09-11 08:06 UTC）⇒ **运行时三支降级（`vectorSearchWithFallback`）也已上线**。
+>
+> **✅ 执行方案（改进：改用环境变量覆盖，免重建镜像/免重推 jar）**
+> - `.env` 加 `AI_EMBEDDING_ENABLED`；compose 的 `mall-ai` 透传 `COOXIAO_AI_EMBEDDING_ENABLED: ${AI_EMBEDDING_ENABLED:-false}`（Spring Boot relaxed binding 覆盖 jar 内 yml）⇒ **开/关都只 `docker compose up -d mall-ai`（~45s），回滚同一条命令**。
+> - **验证三步**：① 启动日志 `Embedding 启动自检：通过`；② `sync-auto-on-startup` 后 ES `_count?q=semanticVector:*` = **19**；③ `/ai/search` 语义召回抽查（如"学生党性价比"）+ **旧查询回归**（确认 IK 侧没退化）。
+>
+> **⚠️ 开启后的真实代价（诚实边界）**：① 每次检索**多一次外部 API 调用**（embedding 按量计费、单价极低；与 DeepSeek 的 2 元/日预算**不是同一账**）；② **排序会变**（语义召回 ≠ IK 全文）⇒ **录像前必须回归**几条演示查询；③ 可用性多一个外部依赖（已有三支降级兜底，最坏=回落全文检索）。
+> **📌 建议**：**开**（简历/面试价值：从"代码写了、开关关着"变成"线上真在跑 RAG 向量检索"），但**在录像定稿前完成并回归**，避免演示期间排序变化。
+
+**面试价值**：开 = 完整 RAG 链路真实运行；关 = 讲"按需开"的工程判断——两者都可讲；决策点 = 外部 API 稳定性能否接受（**2026-09-12 实测：可接受**）
 
 ---
 
@@ -394,6 +493,25 @@
 ### 61. 【监控】外部端到端探活（防"静默故障"）🟡 P2（2026-09-10 抢修衍生）
 
 > **来源**：2026-09-10 生产故障（nginx 静态上游 IP 缓存 → 网关重建后**全站 API 502 约 24.5 小时无人发现**）。原理与排查链见 [[问题解决--服务注册与网关路由]] **问题 2**。
+
+**✅ 脚本已交付并真机验证（2026-09-12）**：`deploy/scripts/ops/e2e_probe.py`（纯标准库 Python3，无需 pip）。
+
+- **它刻意不查 `/actuator/health`** —— 那次故障里每个组件、每个 health 都是 200，坏的是**组件之间那条路**；所以本探针只按**真实业务入口**打（nginx:80 → 网关 → 具体服务）。
+- **必须跑在被测系统之外**（新机/本机），跨机走**内网私网地址**（同 VPC 不计费、不限速）：
+  ```bash
+  python3 e2e_probe.py --base http://172.29.193.239 --gateway http://172.29.193.239:10087
+  # 深度模式（带浏览器里复制的 JWT）：会真的打到 MySQL/Redis/ES，验证"业务数据可用"
+  python3 e2e_probe.py --base http://172.29.193.239 --token '<JWT>'
+  ```
+- **两条实测得到的判据（决定了脚本怎么判）**：① 🔴 **本项目"鉴权失败"是 HTTP 200 + body 里 `state=401`**（不是 HTTP 401）⇒ **只看状态码的监控会把"没登录"当"一切正常"，必须解析 body**；② **所有业务 API（`/front/*` `/seckill/*` `/ai/*` `/pms/*` `/search/*` `/admin/*`）都要登录**，未带 token 时探针证明的是「**nginx 路由 + 网关 + 鉴权链**」这一层（正是那次坏掉的层），带 token 才验业务数据。
+- **判定规则**：连接失败/超时/**502/503/504** → FAIL；API 路径却返回 **HTML（SPA 兜底）** → FAIL（路由漏配）；`state ∈ {500,...}` → FAIL；`state=401/403` → PASS（未带 token 时）；`--token` 下仍 401 → FAIL（token 过期）。
+- **真机验证（已做）**：在新机跑 → **9 项全 PASS**（`✅ 全部通过`）；失败分支也已实测（早期版本 3 项 FAIL 时 ssh 退出码为 1）⇒ 可直接接 cron 告警。
+- **建议的 cron（跑在新机 · 每 5 分钟 · 失败发邮件）**：
+  ```bash
+  */5 * * * * /usr/bin/python3 /tmp/e2e_probe.py --base http://172.29.193.239 >/tmp/e2e.log 2>&1 || \
+    tail -n 20 /tmp/e2e.log | mail -s "[CoolShark] 端到端探活失败" you@example.com
+  ```
+  ⚠️ 探针脚本本身建议纳入仓库（已入库 `deploy/scripts/ops/`），cron 里用绝对路径指向部署副本。
 > **痛点一句话**：**"21 个容器全 Up、网关 `/actuator/health` = 200，业务却全挂了 24 小时"** —— 内部健康检查（容器级 / 服务级）**天然抓不到**"路由层地址漂移""证书过期""上游 DNS 变了"这类故障，因为**每个组件自己都是健康的**。
 
 **要做什么（最小可用版，先不做全套 Prometheus）**：
