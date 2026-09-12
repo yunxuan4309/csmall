@@ -74,10 +74,12 @@
 | **#66** | Sentinel 面板上报缺口（8 服务未配 dashboard 地址） | ✅ 已修复验收 | §66 |
 | **#61** | **外部端到端探活**（"21 容器全 Up、health 200，业务却挂了 24h"的根治） | 🟡 P2 | §61 |
 | **#62** | mall-ai `/ai/chat/stream` 并发下 ~50% HTTP 500（`AccessDeniedException`：ASYNC/ERROR 二次派发被授权规则拒绝） | ✅ **已修复验收**（2026-09-12） | §62 |
-| **#64** | **秒杀预热两套 `spu_id` 语义冲突** → 4/12 个秒杀 SKU 从不预热（靠凌晨永久 key 兜住） | 🔴 P2 | §64 |
+| ~~**#64**~~ | ✅ **已修复并部署验收**（2026-09-12 晚）：预热 Job 改用 `seckill_spu.getId()`；预热日志现覆盖 **12/12** 个 SKU，且 11/12/13/14 的 key 已由 Job 按 DB 值**带 TTL** 重新预热（不再是永久 key） | §64 |
+| **#69** | ✅ **已修复并部署验收**（2026-09-12 晚）：秒杀 `incrementSales` 写到错误商品（`seckill_spu.id` 当 pms spu 用） | §69 |
 | **#67** | **#48 的剩余部分**：① 录像 🟡暂缓 · ~~② 正式造数~~ ✅ · ~~③ AI 并发压测~~ ✅ · **④ `--with-seckill` 真跑** · **⑤ `--clean` 的 Redis 清理** · **⑥ `sim_baseline`** | 🟢 **2/6 完成**（②③，2026-09-12）· ④⑤⑥ 待做 | [[TODO中低优先级]] §67 |
 | **#68** | 🆕 **`sim_batch.dump_file` 从未落盘** → 方案要求的"**造数前快照兜底**"从未落实（可逆性目前只靠影子登记表） | 🔴 P2（**做 ④ 秒杀真跑前先补**） | §68 |
-| **#69** | 🆕 **秒杀把 `seckill_spu.id` 当 pms spu 用** → `incrementSales` **给"错误商品"加销量**（每次 +1、静默无报错、且"恢复"永远恢复不到那一行） | 🔴 **P1** | §69 |
+| **#69** | ✅ **已修复并部署验收**（2026-09-12 晚）：秒杀时把 `seckill_spu.id` 当 pms spu 用 → `incrementSales` **给"错误商品"加销量**。**两台实例**（老机 `csmall-seckill` + 新机 `csmall-seckill-2`）均已升级并 A/B 证伪 | §69 |
+| **#64** | ✅ **已修复并部署验收**（2026-09-12 晚）：秒杀预热 Job 用 pms id 查 `seckill_sku.spu_id` → 4/12 个 SKU（11/12/13/14）从不预热；现预热日志覆盖 **12/12**，且那 4 个 key 已由 Job 按 DB 值重新预热（**带 TTL**，不再是永久 key） | §64 |
 
 | **#31** | **生产开启向量检索**（前置**全解除**，仅剩"改配置 + 部署 + 验证"） | 🟢 可实施 | §31 |
 ### D. ✅ 已完成 / 📦 已归档（**明细见 [[TODO已完成]]**，此处只留指针）
@@ -495,6 +497,13 @@ ERROR o.s.b.a.w.s.e.ErrorMvcAutoConfiguration$StaticView - Cannot render error p
 
 **顺带（扩容时的硬约束）**：**新增秒杀必须让 `seckill_spu.id == seckill_sku.spu_id == pms_spu.id` 三者相等**；若走后台管理接口 `/seckill/manage/spu` 新增，MyBatis-Plus 会给**雪花 id** → `id ≠ spu_id` → **预热永不生效**。→ **扩容实施方案（含"哪些 Redis key 能手工写、哪些绝不能"与验证清单）见 [[商品与秒杀扩容方案]] §三**。
 
+**✅ 修复与部署验收（2026-09-12 晚 · 与 #69 同一次变更）**
+
+> **修法一行**：`SeckillInitialJob` 的 `findSeckillSkusBySpuId(spu.getSpuId())` → **`spu.getId()`**。
+> ⚠️ **随机码键 `getRandCodeKey(spu.getSpuId())` 不动** —— 读码确认详情接口 `/seckill/spu/{spuId}` 收的就是 **pms 主键**（`SeckillSpuVO.id` 来自 pms 商品 `copyProperties`），那处**本来就是对的**，改它反而会引入新 bug。
+> **验收**：升级后 Job 日志覆盖 **12/12** 个 sku（`开始将13号sku…` / `14号sku…`）；把 4 个永久 key 删掉后，Job 在 **05:59:00** 打印 `11/12/13/14号sku库存数成功预热到缓存!`（该分支就是**带 TTL 的写**）⇒ 值取自 DB、键再也不是"永久 key"。
+> **证据链**：删前 Redis 值(100/80/40/25) 与 `seckill_sku.seckill_stock` 逐一相等 ⇒ 删旧键不会丢/改数据。
+
 ---
 
 ### 68. 【可逆性缺口】`sim_batch.dump_file` 从未落盘 → "造数前快照兜底"从未落实 🔴 P2（2026-09-12 正式造数时发现）
@@ -536,6 +545,18 @@ dubboSeckillSpuService.incrementSales(sku.getSpuId());   // ← sku 是 SeckillS
 **生产侧修法（待单独窗口）**：`incrementSales` 改传 **pms spu id**（`seckill_spu.spu_id`，或用 `skuId → seckill_spu.spu_id` 查一次）；⚠️ `sales` 是累计值，**历史错记的行无法自动纠正**，只能按 `success` 表重算或人工订正。
 
 **关联**：**#64**（同一对命名空间的另一个受害者：预热 Job 从不预热 4/12 个 SKU）· [[问题解决--代码与线上不一致的静默失效]]（"两个事实来源不对齐 → 不报错"）· [[问题解决--生产造数的数据隔离与复核方法]]（**是靠基线比对抓出来的**）
+
+**✅ 修复与部署验收（2026-09-12 晚）**
+
+| 阶段 | 结果 |
+|---|---|
+| 代码 | `SeckillQueueConsumer` 反查 pms 主键后再 `incrementSales`（新增 `SeckillSpuMapper.findPmsSpuIdBySeckillId`）；顺带修掉同源的 **#64** |
+| 构建/测试 | `mvn -o -B -DskipTests -pl mall-seckill/mall-seckill-webapi -am package` ✅ · `-Dtest=MessageRetryTaskTest,RedisLockUtilsTest` → **9/9 通过** ✅ |
+| 部署 | 🔴 **第一次只升了老机 ⇒ A/B 不通过**：新机副本 `csmall-seckill-2` 仍是 9/9 的旧镜像（compose 里 tag 写死 `csmall/mall-seckill-replica:20260909`）→ 实测**副本消费了那条 MQ**（其日志 `05:48:38` 有 `秒杀成功记录处理完成`），销量仍写到内部 id。 ⇒ 新机 jar 替换 + `compose build mall-seckill-2` + `up -d` 后再测 |
+| **A/B 证伪** | 采样"恢复窗口"内的全量 `pms_spu.sales`：**4 次动作**（含 **sku 27：内部 5 → pms 15**，**非重合 id**）→ 销量只落在**目标商品**上、脚本"**非目标 spu**"告警 **0 次**（修复前 3 次实测次次告警）；终态 `SUM(sales)` 回到 **84**、`success` **59**、残留订单 **0**、三类锁 **0** |
+| ⚠️ 残留 | 历史错记的 `sales` **无法自动纠正**（`sales` 是累计值）—— 本次只把**我方测试**造成的 +1 手工还原（`pms_spu[4]` 3→1、`[6]` 2→1）；**生产历史值**若要对账，只能按 `success` 表重算或人工订正 |
+
+> 🆕 **由此暴露的集群纪律缺口（已写进 A 册 §G G14）**：**秒杀是双实例（老机 10007 + 新机 10017，竞争同一 MQ 队列）**，而**副本镜像 tag 在 compose 里写死、两实例各有各的 jar** ⇒ **"双实例必须同版本"没有任何机制保证**。后排修复类改动必须**两台一起部署**并各自核 `docker exec … md5sum /app/app.jar`。
 **关联**：[[TODO中低优先级]]（🟡 中优先级 + ⏸️ 暂缓 / 仅评估）· [[TODO已完成]]（已完成明细 + §二十 归档区）· [[文档索引]]（方案 / 评估文档登记）· [[项目上下文文档]]
 
 **维护提示**：本文件 = **高优先级状态源**。新增条目：高优先级写入本文件登记表 A，中 / 低优先级写入 [[TODO中低优先级]]；完成后迁 [[TODO已完成]]。
