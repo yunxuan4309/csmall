@@ -543,7 +543,7 @@ SELECT COUNT(*) FROM cs_mall_oms.oms_order WHERE mobile_phone LIKE '1390000%';
 """
 simulate_data.py — CoolShark 业务数据模拟器（规范设计版）
 用法:
-  python simulate_data.py --days 30 --per-day 1000            # 造数（登记每个实体）
+  python simulate_data.py --days 30 --per-day 1000 --require-dump cs_mall_YYYYMMDD_HHMM.sql.gz   # 造数（登记每个实体；🔴 #68 闸门已强制）
   python simulate_data.py --clean --batch sim_20260911_1530    # 预览将清理什么（dry-run）
   python simulate_data.py --clean --batch ... --apply          # 真正删除
 """

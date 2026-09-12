@@ -11,6 +11,8 @@
 
 ## 一、本次执行流程（命令级台账）
 
+> ⚠️ 本节的命令是**当时实际执行的原样**（按"零改写"纪律保留）。其中**造数类命令早于 `--require-dump` 快照闸门**（2026-09-12 晚新增，见 `deploy/scripts/sim/README.md` §4.11）：**现在复用这些命令时必须补上 `--require-dump <快照文件名>`**（否则会被拒绝开跑），或显式加 `--allow-no-dump` 豁免。
+
 | 顺序 | 做了什么 | 关键命令 / 产物 | 结果 |
 |---|---|---|---|
 | 0 | **先读契约，不靠记忆** | 读 `DeepSeekAiClient`（端点 + SSE 四条解析口径）、`ChatServiceImpl`（三类降级文案）、`AiController`（限流返回形态）、`AiProperties` + `application.yml`（闸门/频控/预算） | 直接暴露 §二 ①②⑤⑥ |

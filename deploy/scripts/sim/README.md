@@ -99,11 +99,12 @@ docker exec -i csmall-mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < init_sim_db.
 # ② 预检（不写任何数据；不通过直接退出）
 python3 simulate_data.py --preflight --days 2 --per-day 1000
 
-# ③ ★ 快照先行：造数前做全量快照（老机 MySQL 数据目录实测仅 207M，成本极低）
-#    docker exec csmall-mysql mysqldump ... （复用 #29 的 cron 备份脚本）
+# ③ ★ 快照先行（**已强制**，见 §4.11）：老机以 ecs-user 执行
+#    bash /data/csmall/backup/backup-db.sh   → 得到 cs_mall_YYYYMMDD_HHMM.sql.gz
 
 # ④ 造数（慢节奏；每创建一个实体都写一行 sim_entity）
-python3 simulate_data.py --days 2 --per-day 1000 --users 20
+#    🔴 必须带 --require-dump（**不提供即拒绝开跑**）；文件名就是③产出的那个
+python3 simulate_data.py --days 2 --per-day 1000 --users 20 --require-dump cs_mall_YYYYMMDD_HHMM.sql.gz
 
 # ⑤ 清理**预览**（默认 dry-run，只统计行数）
 python3 simulate_data.py --clean --batch sim_20260911_1530
@@ -161,7 +162,7 @@ python3 simulate_data.py --verify --batch sim_YYYYMMDD_HHMM   # 有问题退出�
 
 ```bash
 # ① 造数时带上 --baseline（在**任何写入之前**采基线）
-python3 simulate_data.py --days 1 --per-day 1000 --users 125 --baseline
+python3 simulate_data.py --days 1 --per-day 1000 --users 125 --baseline --require-dump cs_mall_YYYYMMDD_HHMM.sql.gz   # 闸门要求（见 §4.11）
 # ② 清理后再比对（有差异 → 退出码 1）
 python3 simulate_data.py --compare-baseline --batch sim_YYYYMMDD_HHMM
 ```
