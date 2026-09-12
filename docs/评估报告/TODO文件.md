@@ -418,6 +418,18 @@ ERROR o.s.b.a.w.s.e.ErrorMvcAutoConfiguration$StaticView - Cannot render error p
 > 触发一次 ASYNC 派发，那一刻**容器线程上已无认证对象** → `anyRequest().authenticated()` 拒绝。
 > **两种派发都必须放行**（只放 ERROR 仍会 ~50% 失败）。默认 REQUEST 派发**仍然要求登录**，
 > `/ai/**` 防匿名刷 Token 的收紧（2026-08-14）不受影响；同时消掉日志噪声与"状态码不可靠"隐患。
+>
+> 🆕 **影响面复核（2026-09-12 **全仓审计**，结论：其余 7 个模块**不可能触发**）**
+>
+> | 检查项（排除 `target/`） | 结果 |
+> |---|---|
+> | 会触发 **ASYNC 二次派发**的写法（`StreamingResponseBody` / `SseEmitter` / `WebAsyncTask` / `DeferredResult` / `ResponseBodyEmitter`） | **只有 `mall-ai`**（`AiController:137/156/227/246` · `ChatServiceImpl:560`）✅ |
+> | `dispatcherTypeMatchers(ASYNC, ERROR).permitAll()` | **只有 `mall-ai`** 有（`ResourceWebSecurityConfiguration:71`）✅ |
+> | 其余 7 个模块（ams / front / order / product / search / seckill / ums）与 sso | 都有 `anyRequest().authenticated()`，但**没有任何异步 / 流式端点** ⇒ **本缺陷在这 7 个模块无法触发**（属**潜伏**，不是现存故障） |
+> | ERROR 派发那一半 | 走 `/error`，而各模块的 permitAll 白名单**都含 `/error`** ⇒ 已覆盖 ✅ |
+>
+> **⇒ 决策：不为它做"8 服务重建"** —— 为潜伏项重建 7 个服务，代价（30+ 分钟 + 重启在生产路径上的 front/gateway）远大于收益。
+> **⇒ 纪律（写在这里，避免以后重犯）**：**任何模块将来新增流式 / 异步端点时，必须在它的 `ResourceWebSecurityConfiguration` 授权链最前面补一行** `dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()`；该服务因别的原因重建时也顺手补上。
 > ⚠️ 文件里原有的 `MODE_INHERITABLETHREADLOCAL` static 块**解决不了**：ASYNC 派发用的是容器线程池里的
 > **另一个线程**，不是"当前线程的子线程"（该块保留未动、未夹带）。
 
