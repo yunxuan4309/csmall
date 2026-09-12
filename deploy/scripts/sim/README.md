@@ -157,13 +157,26 @@ python3 simulate_data.py --verify --batch sim_YYYYMMDD_HHMM   # 有问题退出�
 > 🔴 **为什么要单独有这个入口**：脚本跑完时的自动校验**曾经**是**全局口径**（拿全局 `data_source='SIM'` 计数当实标行数）⇒ 库里并存 ≥2 个批次就**必然误报**（2026-09-12 实测：11 条全是假警报，真漏标 0）。现已改为**按批次圈定范围**，并把这个能力暴露成 `--verify`，方便**事后对任意历史批次重新复核**。
 > ℹ️ 输出里 `ℹ️ 登记 N / 现存 M（K 行已被业务删除）` 是**正常**的（如下单会清掉购物车行）；`ℹ️ 另有已标 SIM 的行属于别的批次` 也**不是本批问题**。**只有 `漏标 / 误标` 才需要处理。**
 
+### 4.10 🆕 基线比对（`--baseline` / `--compare-baseline`，2026-09-12 晚新增）
+
+```bash
+# ① 造数时带上 --baseline（在**任何写入之前**采基线）
+python3 simulate_data.py --days 1 --per-day 1000 --users 125 --baseline
+# ② 清理后再比对（有差异 → 退出码 1）
+python3 simulate_data.py --compare-baseline --batch sim_YYYYMMDD_HHMM
+```
+> **基线内容**：**11 张表**行数（9 张标识表 + `pms_sku` + `pms_spu`）+ **`stock` / `sales` 合计**。
+> 为什么连"合计"也要记：`stock`/`sales` 是**不可逆的累加字段**（删行删不回累加值）—— **#69（秒杀给"错误商品"加销量）就是靠它抓出来的**，只比对"行数"永远发现不了。
+> ⚠️ 基线是**批次级**的：同一批次的"造数前"与"清理后"才有可比性；拿 A 批的基线比 B 批的状态没有意义。
+
 ## 七、⚠️ 尚未实现 / 待补
 
 | 项 | 状态 | 说明 |
 |---|---|---|
 | 秒杀动作（`--with-seckill`） | ✅ **2026-09-12 已实现**（`--with-seckill --seckill-count N`；每次动作"**快照 → 提交 → 登记 → 自动恢复 → 复核**"；`--no-seckill-restore` 可关）。**只差真跑**（#67④） | 需要先 `GET /seckill/spu/list` 取回 **randCode**（`mall:seckill:spu:url:rand:code:<spuId>`，**JDK 序列化**，不能用 redis-cli 手工写），再 `POST /seckill/{randCode}`。且注意**秒杀限购**：同一用户同一 SKU 支付后**永久不能买**（Redis `mall:seckill:reseckill:<skuId>:<userId>`）→ 必须换 SKU 或换用户 |
-| 清理 Redis | 🟡 **部分**：**秒杀后恢复**路径已按 id 精确删（`reseckill`/`ordered`/`orderLock` + 预热库存键）；但 **`--clean` 批次清理里的 Redis 部分仍未实现** → #67⑤ | 需按登记 user id 精确拼 key 删（`reseckill`/`ordered`/`orderLock`）；**禁止 `--scan --pattern` 全删**；当前这三类实测各 **0 个**（§〇.1 D9） |
-| 基线快照表写入 | 📝 DDL 已备（`sim_baseline`），脚本未写入 | 清理后"行数对比基线"的比对逻辑待补 |
+| 清理 Redis | ✅ **已完成（2026-09-12 晚）**：`--clean` 按**登记坐标** `sku:user` 精确删三类键（`reseckill`/`ordered`/`orderLock`；dry-run 打印清单）—— 实测注入合成键 → **精确命中并删除**；**禁止 `--scan --pattern` 全删** |
+| 秒杀真跑 | ✅ **2026-09-12 晚真跑 3 次**（批次 `1329`/`1333`/`1335`）：每次"快照 → 提交 → 登记 → 恢复 → 复核"，`seckill_ok=1`/`seckill_verify_bad=0`；🔴 过程中抓到 **#69**（秒杀给错误商品加销量）→ 已改成"全量 sales 快照 + 按实际变化回补 + 纳入校验" | 需按登记 user id 精确拼 key 删（`reseckill`/`ordered`/`orderLock`）；**禁止 `--scan --pattern` 全删**；当前这三类实测各 **0 个**（§〇.1 D9） |
+| 基线快照表写入 | ✅ **已完成（2026-09-12 晚）** | `--baseline` 造数**前**记基线（**11** 张表行数 + `stock`/`sales` 合计）· `--compare-baseline --batch X` 清理**后**比对（有差异**退出码 1**）；实测**闭环 0 差异**，且 **#69 就是靠它抓出来的** |
 | 结果回填 | ✅ **已写**：`sim_batch.done_actions` / `note`（含动作分布 / 标记数 / `backfill_problems`）；🆕 造数后可 **`--verify --batch X`** 按批次复核（2026-09-12 新增） |
 
 ## 八、验证记录（2026-09-11 → 🆕 2026-09-12 正式造数）
