@@ -1,4 +1,4 @@
-﻿# 08 JVM 性能
+# 08 JVM 性能
 > **核心问题**：JVM 调优依据、堆/堆外内存、GC、压测
 > 难度：高
 > **内容时效声明（2026-09-06 第一轮复习完成）**：本文档内容已按当时服务器/代码实测核对。**此后不随意修改**——若因 TODO 实施、代码变更导致内容过期，先更新对应事实来源文档（问题解决/评估报告/上下文文档），再回来改本档；面试使用请以最新实测为准。
@@ -59,7 +59,7 @@
 - YGC/YGCT（Minor GC 次数/耗时）、FGC/FGCT（Full GC 次数/耗时）、GCT（总耗时）
 - 其他指令：`jstat -gcutil`（使用率百分比，更直观）、`-gccapacity`（含未分配容量）、`-gcnew`/`-gcold`（只看新生代/老年代）、`-class`（类加载数）、`-compiler`（JIT 编译）
 - **兄弟工具**：`jps`（找 PID，一切的前提）/ `jmap -heap`（堆概览）/ `jstack`（线程栈，CPU 暴涨时抓）/ `jinfo`（看参数）/ `jcmd`（万能入口）
-- ⚠️ **诚实点**：生产容器是 JRE（temurin:21-jre-alpine），只有 java/jfr/keytool，**无 jstat/jstack/jmap/jcmd**（TODO #28 实测）——调优当时能跑 jstat 是因为 Seata 官方镜像是 JDK。面试答"用什么测的"要补一句"现在容器是 JRE 抓不了，所以我评估换 JDK 镜像/装 Arthas"
+- ⚠️ **诚实点**：生产容器是 JRE（`eclipse-temurin:21-jre`，**注意：无 `-alpine`** —— 曾用 Alpine，因 musl 上 MD5 校验失败已统一换 Debian 系），只有 java/jfr/keytool，**无 jstat/jstack/jmap/jcmd**（TODO #28 实测）——调优当时能跑 jstat 是因为 Seata 官方镜像是 JDK。面试答"用什么测的"要补一句"现在容器是 JRE 抓不了，所以我评估换 JDK 镜像/装 Arthas"
 
 **五、对象的一生（场景流程：秒杀压测）**
 
@@ -157,7 +157,7 @@ GC Roots（栈上局部变量 order）
 - **第一层 JVM 内部**（超 -Xmx/Metaspace/DirectMemory）：先 Full GC 自救 → 救不了抛 `OutOfMemoryError`（Java heap space / Metaspace / Direct buffer memory）——**可捕获、有现场**（项目配 `HeapDumpOnOutOfMemoryError` 自动留 dump）  
 - **第二层 容器层**（RSS 超 mem_limit，cgroup）：**内核 OOM Killer SIGKILL 强杀**——无异常、无 dump，容器 OOMKilled、RestartCount+1，服务直接消失靠 restart 拉起。类比：超公司预算=HR 谈话（有交代）；超房东合同上限=断水断电赶人（没机会收拾）  
 - **顺序认知**：堆内分配失败 → JVM 抛 OOM（自己管，有现场）；RSS 超容器限制 → 内核强杀（OS 管，无现场）  
-- **项目现状**：容器 `mem_limit=0`（无限制，TODO R7 实测）→ 失控进程可吃满宿主 16G → 宿主机 OOM 连坐（历史杀过 ES）；R7 加 mem_limit 后：被杀的是超限容器进程，宿主机安全 = 隔离故障边界  
+- **项目现状（R7 已执行）**：曾实测容器 `mem_limit=0`（无限制，R7 实测）→ 失控进程可吃满宿主 16G → 宿主机 OOM 连坐（历史杀过 ES）；**✅ 已完成（2026-09-07，R7）**：21 容器全部加 `mem_limit` + Nacos 堆 1g→512m + Sentinel 降堆 + **Swap 2G 已上** ⇒ 现在被杀的是超限容器进程，宿主机安全 = 隔离故障边界  
 - 面试话术："超内存分两层：JVM 内部先 Full GC 自救，救不了抛 OOM——可捕获、配 HeapDump 留现场；但更危险的是容器层——RSS 超 mem_limit 被内核 OOM Killer 直接强杀，没异常没 dump。所以我两边都做：JVM 限制 + HeapDump，容器 mem_limit 兜底防连坐"
 - 面试话术："很多人以为 -Xmx 就是内存上限，其实**RSS =   堆 + 堆外**，堆外默认无上限。这也是容器里 JVM   内存虚高的原因"
 ---
@@ -174,8 +174,8 @@ GC Roots（栈上局部变量 order）
 - **诚实边界 + 真实用户来了怎么办**（追问3）：  
 - **诚实点**：当前数据来源 = 秒杀压测（100 并发）+ 测试环境 + 空转观测（CPU<5%、Seata 5 天 0 笔事务）——是**低负载基线**，不是真实用户流量；真实用户进来堆使用/GC/RSS 一定会变  
 - **判断分两类**：① **静态事实**（不依赖流量）——Seata 2G 堆只用 27MB = 资源错配（"交通指挥灯不需要停车场"），有没有用户都是浪费，这类修正永远成立；② **动态容量**（会随流量变）——-Xmx/Metaspace 是"当前负载 + 20~30% 余量"设的，不是结论是"当前值"，靠**测量→调整→再测量**循环修正（调优本质 = 循环，不是一次性交付）  
-- **真实用户进来的五步应对**：① 上线前压测建模（已有压测演练）② 灰度小流量观察（盯 jstat/GC/RSS）③ 按新数据重调参数 ④ **架构扩容优先**（流量涨 10 倍先想缓存/限流/加副本，不是调参——单机 4C16G 有物理极限，见 TODO #4 集群化）⑤ 告警兜底（没告警调得再好挂了不知道 = 白调，见 TODO #30）  
-- **一句话**：JVM 调参是**最后 10% 的优化**，前 90% 是架构（缓存/异步/限流/扩容）——这也解释 TODO #4 结论"无流量压力不加副本"  
+- **真实用户进来的五步应对**：① 上线前压测建模（已有压测演练）② 灰度小流量观察（盯 jstat/GC/RSS）③ 按新数据重调参数 ④ **架构扩容优先**（流量涨 10 倍先想缓存/限流/加副本，不是调参——单机 4C16G 确有物理极限，**#4 集群化已完成**：秒杀跨机双实例（老机 `csmall-seckill` + 新机 `csmall-seckill-2`，60 请求实测 30:30）+ #9 Redis 主从+3 哨兵，选主 6.1s / 客户端 9.1s 自愈）⑤ 告警兜底（没告警调得再好挂了不知道 = 白调，见 TODO #30）  
+- **一句话**：JVM 调参是**最后 10% 的优化**，前 90% 是架构（缓存/异步/限流/扩容）——当时 TODO #4 的结论是"无流量压力不加副本"，后来被跨机集群实验**推翻并修正**：副本不只为流量，还能做故障剔除/优雅下线演练（秒杀双实例停一个实例仍 30/30 成功）  
 - 面试话术："演示项目数据来自压测和空转，不是真实流量。但判断分两类：静态事实（Seata 用 27MB 配 2G 就是浪费，有无用户都是浪费）和动态容量（确实会变，靠测量-调整-再测量循环）。真实用户进来：先压测建模、灰度观察、按新数据重调，更关键的是先架构扩容——JVM 调参只是最后 10%"
 - **面试话术**："压测验证的不是'扛 100 QPS'，  而是**保护机制在高并发下真的在工作**——限流拦住了超出的请求，  库存没超卖"
 ---
@@ -229,7 +229,7 @@ pool.submit(TtlRunnable.get(() -> System.out.println(ttl.get())));  // 随任务
 - **与项目连接**：HTTP 链路 MDC 有值，但**定时任务/MQ/Dubbo 线程 `[]` 空**（ThreadLocal 默认不跨线程）→ 跨线程传递方案 = TTL；项目选 SW logback 集成（TODO #16）覆盖全场景，更省人力。面试讲："跨线程 traceId 我知道 TTL 方案，项目用 SW logback 集成覆盖"  
 - 话术："ThreadLocal 是线程隔离变量，泄漏根因 = 弱引用 key + 线程池长命线程；MDC 就是 ThreadLocal，用完必须 remove。跨线程传递：InheritableThreadLocal 只复制一次，线程池要用 TTL"
 - **生产诊断工具**：Arthas（阿里开源，免重启在线诊断  dashboard/thread/stack——大厂生产标配）；JDK 自带  jstack/jstat/jmap + MAT
-- **⭐ 你的容器是 JRE 没有诊断工具**（2026-08-28 实测）：  temurin:21-jre-alpine 只有 java/jfr/keytool，**无 jstack/jmap/  jstat/jcmd**——当前生产想抓线程栈/堆转储抓不了。有  HeapDumpOnOutOfMemoryError（OOM 自动 dump ✅）+ JFR 可用。  改进：换 JDK 镜像 / 装 Arthas / 启动加 JFR 录制（TODO #28）
+- **⭐ 你的容器是 JRE 没有诊断工具**（2026-08-28 实测）：  `eclipse-temurin:21-jre`（**无 `-alpine`**）只有 java/jfr/keytool，**无 jstack/jmap/  jstat/jcmd**——当前生产想抓线程栈/堆转储抓不了。有  HeapDumpOnOutOfMemoryError（OOM 自动 dump ✅）+ JFR 可用。  改进：换 JDK 镜像 / 装 Arthas / 启动加 JFR 录制（TODO #28）
 - **Arthas 速查**（阿里开源，生产诊断标配）：  能力：`dashboard` 全局指标 / `thread` 看线程（CPU/锁）/    `stack` 定位方法调用 / `watch` 观察方法入参返回值 /    `trace` 链路耗时——**免重启在线诊断**（JRE 也能 attach）  使用：`java -jar arthas-boot.jar` → 选 PID attach →    命令即输即用；比 jstack/jmap 强在"不用重启 + 在线观察"  大厂用法：**不是直接 SSH 敲，而是平台化**——命令走内部    诊断平台（Web/代理），**权限验证（普通研发只读，dump/    watch 要审批）+ 审计留痕**；金融/信创因 attach 权限大    禁用或审批。类比：不是不用螺丝刀，是做成带门禁的    电动工具箱；最小权限原则在诊断领域的应用
 - 面试话术："Druid 线程挂死是真实踩过的坑，  最终**换连接池解决**。我也配了 HeapDump，OOM   时能留现场分析。CPU/Full GC 排查流程我清楚（top→  jstack / jstat→MAT），生产标配 Arthas（免重启在线  诊断）；大厂把 Arthas 平台化——权限+审批+审计。  诚实说我的容器是 JRE 抓不了 jstack，要换 JDK 镜像或  装 Arthas"
 ---
@@ -242,8 +242,8 @@ pool.submit(TtlRunnable.get(() -> System.out.println(ttl.get())));  // 随任务
 - **谨慎降**：ES（查询性能依赖内存）、MySQL（缓冲池）
 - **为什么 OAP 512M 够**：OAP   是流式处理——Agent 发数据 → OAP 聚合 →   写 ES →   释放内存，不长期持有
 - **为什么 Seata 512M 够**：事务协调器，  一个事务上下文几 KB，几百并发事务也只要几十 MB
-- **完整故事线（面试讲述版，五步）**：  ① **发现**：`free -h` 看内存 93%，可用只剩 1.1G；     且历史 ES 被 OOM Killer 杀过（内存不足的教训在前）  ② **排查**：`docker stats` 逐个看容器 → 定位大头     （Seata 1.46G / OAP 1.17G / ES 1.12G / Nacos 963M）；     深入用 `jstat -gc` 实测 Seata：Old Gen 容量 776MB     **实际只用 27MB（3.5%）**——2G 堆 97% 是浪费；     再看 RSS vs -Xmx 差（堆外虚高，Q2 知识）  ③ **决策**（数据驱动 + 分类型）：     能降 = Seata 2G→512M（实测 27MB，留足余量）、       OAP 1G→512M（流式不驻留）、       11 微服务加堆外限制（DirectMemory/Metaspace/CodeCache）     不能降 = ES（查询性能靠内存，降了分片/OOM）、       MySQL buffer pool（性能）、       product/order/seckill（秒杀突发 Full GC 风险）  ④ **结果**：内存 93%→71%，释放 ~3G，可用 1.1G→4.4G；     容器更稳；**给后续加副本（TODO #4）留了空间**  ⑤ **原则**：够用就好 + 留余量 + **先测再调**；     **能降的降、不能降的碰都不碰**（业务核心/性能敏感保留）
-- 面试话术："降内存要看**服务类型**——协调型（Seata/OAP）  堆利用率低可以降，数据型（ES/MySQL）要保性能不能乱降。  我的故事线：free 发现 93% → docker stats 定位大头 →  jstat 实测 Seata 只用 27MB → 才敢降 2G→512M →  结果释放 3G、可用翻 4 倍、给加副本留了空间。  核心：**数据驱动 + 分类型权衡，不是一刀切**"
+- **完整故事线（面试讲述版，五步）**：  ① **发现**：`free -h` 看内存 93%，可用只剩 1.1G；     且历史 ES 被 OOM Killer 杀过（内存不足的教训在前）  ② **排查**：`docker stats` 逐个看容器 → 定位大头     （Seata 1.46G / OAP 1.17G / ES 1.12G / Nacos 963M）；     深入用 `jstat -gc` 实测 Seata：Old Gen 容量 776MB     **实际只用 27MB（3.5%）**——2G 堆 97% 是浪费；     再看 RSS vs -Xmx 差（堆外虚高，Q2 知识）  ③ **决策**（数据驱动 + 分类型）：     能降 = Seata 2G→512M（实测 27MB，留足余量）、       OAP 1G→512M（流式不驻留）、       11 微服务加堆外限制（DirectMemory/Metaspace/CodeCache）     不能降 = ES（查询性能靠内存，降了分片/OOM）、       MySQL buffer pool（性能）、       product/order/seckill（秒杀突发 Full GC 风险）  ④ **结果**：内存 93%→71%，释放 ~3G，可用 1.1G→4.4G；     容器更稳；**为后续加副本腾出了空间**（后来 #4 跨机秒杀双实例 + R7 都在此基础上做成）  ⑤ **原则**：够用就好 + 留余量 + **先测再调**；     **能降的降、不能降的碰都不碰**（业务核心/性能敏感保留）
+- 面试话术："降内存要看**服务类型**——协调型（Seata/OAP）  堆利用率低可以降，数据型（ES/MySQL）要保性能不能乱降。  我的故事线：free 发现 93% → docker stats 定位大头 →  jstat 实测 Seata 只用 27MB → 才敢降 2G→512M →  结果释放 3G、可用翻 4 倍，**并且这些腾出的空间后面真的用上了**（R7 加 `mem_limit`+Swap、#4 跨机秒杀双实例）。  核心：**数据驱动 + 分类型权衡，不是一刀切**"
 ---
 ### Q7. 调优后效果怎么验证的？
 【追问1】指标对比？
