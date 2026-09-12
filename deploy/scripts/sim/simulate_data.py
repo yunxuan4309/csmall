@@ -30,6 +30,7 @@ import datetime as dt
 import os
 import random
 import re
+import socket
 import sys
 import time
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -519,6 +520,28 @@ class Api:
             "id": order_id, "paymentType": 2,
         })
 
+    # --- 秒杀（#67 之 ④ · 2026-09-12）---
+    def seckill_spu_list(self, token_header: str, page: int = 1, page_size: int = 50):
+        """`/seckill/spu/list` —— 行里 `id` 是 **PMS spu 主键**，`url` 只在**秒杀时间窗内**才有值"""
+        return self._call("GET", "/seckill/spu/list", token_header=token_header,
+                          params={"page": page, "pageSize": page_size})
+
+    def seckill_sku_list(self, token_header: str, spu_id: int):
+        """`/seckill/sku/list/{spuId}`（同样以 PMS spu 主键为参）"""
+        return self._call("GET", f"/seckill/sku/list/{spu_id}", token_header=token_header)
+
+    def seckill_commit(self, token_header: str, rand_code: str, dto: Dict[str, Any]):
+        """`POST /seckill/{randCode}`（body = SeckillOrderAddDTO；服务端**不校验金额**）"""
+        return self._call("POST", f"/seckill/{rand_code}", token_header=token_header, json=dto)
+
+    def seckill_spu_detail(self, token_header: str, spu_id: int):
+        """`GET /seckill/spu/{spuId}`（PMS spu 主键）—— 🔴 **randCode 只能从这里拿**：
+        设置 `url` 的代码在 `SeckillSpuServiceImpl.getSeckillSpuVO()`（:135-156），
+        **列表接口不设 url**（2026-09-12 干跑实测：list 的 url 全为 None）。
+        ⚠️ 路由是 `/seckill/spu/{id}`（控制器 `@RequestMapping("/seckill/spu")` + `@GetMapping("/{spuId}")`）；
+        写成 `/seckill/{id}` 会命中 `POST /seckill/{randCode}` ⇒ `state=500 Request method 'GET' is not supported`"""
+        return self._call("GET", f"/seckill/spu/{spu_id}", token_header=token_header)
+
 
 # =============================================================================
 # 目录与地址模板（直接读 MySQL —— 比猜 VO 结构准确，且这正是脚本需要 DB 权限的原因）
@@ -736,7 +759,8 @@ def ensure_users(api: Api, conn, registry: Registry, n_users: int) -> List[Dict[
 
 
 def run_funnel(api: Api, conn, registry: Registry, catalog, users, days: int, per_day: int,
-               sleep_min: float, sleep_max: float, with_seckill: bool) -> Dict[str, int]:
+               sleep_min: float, sleep_max: float, with_seckill: bool,
+               qps: float = 0.0, jitter: float = 0.3) -> Dict[str, int]:
     stat = {"browse": 0, "cart": 0, "order": 0, "paid": 0, "pay_fail": 0, "fail": 0}
     actions = days * per_day
 
@@ -750,8 +774,11 @@ def run_funnel(api: Api, conn, registry: Registry, catalog, users, days: int, pe
     address = load_address_template(conn)
     conn.commit()                       # 结束"读地址"开启的事务，确保后续 SELECT 拿新快照
 
-    log(f"开始造数：{days} 天 × {per_day} 行为 = {actions} 次动作（慢节奏 {sleep_min}~{sleep_max}s）")
+    log(f"开始造数：{days} 天 × {per_day} 行为 = {actions} 次动作"
+        + (f"（目标 **{qps:.1f} QPS**，含 ±{jitter * 100:.0f}% 抖动）" if qps > 0
+           else f"（慢节奏 {sleep_min}~{sleep_max}s）"))
     for n in range(1, actions + 1):
+        t_action = time.perf_counter()          # 本动作起点（--qps 配速要用）
         r, acc = random.random(), 0.0
         kind = "order"
         for name, p in FUNNEL:
@@ -811,14 +838,330 @@ def run_funnel(api: Api, conn, registry: Registry, catalog, users, days: int, pe
         if n % 50 == 0:
             log(f"   进度 {n}/{actions}：浏览 {stat['browse']} / 加购 {stat['cart']} / "
                 f"下单 {stat['order']}（已支付 {stat['paid']}，支付失败 {stat['pay_fail']}）/ 失败 {stat['fail']}")
-        time.sleep(random.uniform(sleep_min, sleep_max))
+        # 🔴 节奏（2026-09-12 新增 `--qps`）：把"提量"与"提 QPS"解耦 ——
+        #    qps > 0 时按**目标速率**配速（用"本动作实际耗时"回补等待时间，含抖动），
+        #    否则沿用 sleep-min/max 的随机慢节奏（模拟真人）。
+        #    ⚠️ 写动作有 Sentinel 天花板（秒杀提交 10 QPS / 新增订单 20 / 支付订单 20），
+        #      浏览类无规则 ⇒ 需要更高 QPS 时请把动作结构调成"多浏览 + 少写"。
+        if qps > 0:
+            target = 1.0 / qps
+            spent = time.perf_counter() - t_action
+            wait = target - spent + target * jitter * (random.random() * 2 - 1)
+            if wait > 0:
+                time.sleep(wait)
+        else:
+            time.sleep(random.uniform(sleep_min, sleep_max))
     if with_seckill:
         log("⚠️ --with-seckill 未实现（随机码需先从 /seckill/spu/list 取回，见 README「待补」）→ 本次跳过")
     return stat
 
 
 # =============================================================================
-# 清理：逆序 · 分批 · 幂等 · 默认 dry-run
+# 秒杀动作 + 「秒杀后恢复」（#67 之 ④ · 2026-09-12 新增）
+# =============================================================================
+# 【契约 · 读码实测 —— 实施前请按此对齐】
+#   · 列表  GET /seckill/spu/list?page&pageSize（需 token）
+#       行里 `id` = **PMS spu 主键**（`SeckillSpuServiceImpl:119-124` 用 `standardVO` 复制构造 VO，
+#       `id` 来自 pms_spu 且未被覆盖）；`url` = "/seckill/<randCode>"
+#       🔴 **只有当前时间落在秒杀时间窗内才会赋值**（`:142-156`）⇒ **取不到 url = 不在窗口内**
+#       `purchased` = 该 spu 下是否已购买（读 `reseckill` 永久标记）
+#   · SKU   GET /seckill/sku/list/{spuId}（同样以 PMS spu 主键为参）→ skuId / seckillPrice / stock
+#   · 提交  POST /seckill/{randCode}，body = `SeckillOrderAddDTO`（必填字段与普通下单同构，见 Api.order_add）
+#   · 服务端**不校验金额**：只用 `item.price` 记 `success.seckillPrice`（`SeckillServiceImpl:141-142`）
+#   · Redis 时序（决定"要恢复什么"）：
+#       提交时 → `order:lock`(1min, setIfAbsent)；提交成功 → `ordered`=sn(2h)
+#       支付成功 → **由 order 模块**写 `reseckill`（**永久**，`OmsOrderServiceImpl:235-243`）并删 `ordered`
+#       ⇒ 未支付：删 order:lock + ordered；已支付：**还要删 reseckill**
+#   · 库存：Redis `mall:seckill:sku:stock:<skuId>` 在提交时 `decrement`；**DB 侧由 MQ 消费者异步回写**
+#       ⇒ 恢复必须 Redis 立即回补 + DB 按快照回填，并**等一拍再重读校验**（异步写入可能比我们晚到）
+SECKILL_RE_SECKILL = "mall:seckill:reseckill:"
+SECKILL_ORDER_LOCK = "mall:seckill:order:lock:"
+SECKILL_ORDERED = "mall:seckill:ordered:"
+SECKILL_SKU_STOCK = "mall:seckill:sku:stock:"
+
+
+class Redis:
+    """极简 RESP 客户端（**纯标准库**，避免为"秒杀后恢复"引入 redis 依赖）。
+
+    ⚠️ 生产 Redis 是**哨兵模式**：本客户端必须**直连主库**（默认 `172.29.193.239:6379`）——
+       连到从库时写命令会收 `READONLY`；哨兵地址只在故障转移后才需要。
+    """
+
+    def __init__(self, host: str, port: int = 6379, password: Optional[str] = None,
+                 timeout: float = 5.0):
+        self.sock = socket.create_connection((host, int(port)), timeout)
+        self.f = self.sock.makefile("rb")
+        if password:
+            self.cmd("AUTH", password)
+
+    def cmd(self, *args: Any) -> Any:
+        """RESP 数组协议（任意参数都安全，不依赖 inline 命令的转义规则）"""
+        buf = b"*%d\r\n" % len(args)
+        for a in args:
+            b = str(a).encode()
+            buf += b"$%d\r\n%s\r\n" % (len(b), b)
+        self.sock.sendall(buf)
+        return self._read()
+
+    def _read(self) -> Any:
+        line = self.f.readline().rstrip(b"\r\n")
+        if not line:
+            raise RuntimeError("Redis 连接被关闭")
+        t, rest = line[:1], line[1:]
+        if t == b"+":
+            return rest.decode()
+        if t == b"-":
+            raise RuntimeError("Redis 错误：" + rest.decode())
+        if t == b":":
+            return int(rest)
+        if t == b"$":
+            n = int(rest)
+            if n < 0:
+                return None
+            return self.f.read(n + 2)[:-2].decode()
+        if t == b"*":
+            n = int(rest)
+            return None if n < 0 else [self._read() for _ in range(n)]
+        raise RuntimeError(f"未知 RESP 类型：{t!r}")
+
+    def exists(self, key: str) -> bool:
+        return int(self.cmd("EXISTS", key)) == 1
+
+    def close(self) -> None:
+        try:
+            self.f.close()
+            self.sock.close()
+        except Exception:      # noqa: BLE001
+            pass
+
+
+def open_redis(args) -> Optional[Redis]:
+    """连**主库**；连不上只告警、返回 None（不阻断造数主流程）"""
+    pw = os.environ.get("SIM_REDIS_PASSWORD")
+    if not pw:
+        log("⚠️ 未设 SIM_REDIS_PASSWORD → **秒杀后恢复的 Redis 部分将跳过**"
+            "（限购标记与预热库存会残留）")
+        return None
+    try:
+        r = Redis(args.redis_host, args.redis_port, pw)
+        r.cmd("PING")
+        log(f"✅ Redis 主库已连接（{args.redis_host}:{args.redis_port}）")
+        return r
+    except Exception as e:      # noqa: BLE001
+        log(f"⚠️ Redis 连接失败（{e}）→ 恢复的 Redis 部分将跳过")
+        return None
+
+
+def seckill_targets(api: "Api", token: str) -> List[Dict[str, Any]]:
+    """取**在秒杀时间窗内、未购买**的目标。
+
+    🔴 **randCode 只能从详情接口拿**（2026-09-12 干跑实测）：`url` 由
+    `SeckillSpuServiceImpl.getSeckillSpuVO()` 赋值（:135-156），**列表接口不设 url**。
+    所以流程是：列表拿候选 `id`（= PMS spu 主键）→ 逐个详情接口读 `url`。
+    """
+    page = api.seckill_spu_list(token, 1, 50) or {}
+    out: List[Dict[str, Any]] = []
+    for row in (page.get("list") or []):
+        if row.get("purchased"):
+            continue                                   # 已购买（reseckill 永久标记）
+        spu_id = row.get("id")
+        try:
+            detail = api.seckill_spu_detail(token, spu_id) or {}
+        except Exception as e:      # noqa: BLE001
+            # 不在窗口内时服务端可能直接报错（"随机码不存在"）→ 属正常，跳过
+            log(f"   · spu {spu_id} 详情不可用（{e}）→ 跳过")
+            continue
+        url = str(detail.get("url") or "").strip()
+        if not url.startswith("/seckill/"):
+            continue                                   # 不在时间窗内 / 拿不到随机码
+        rc = url.rsplit("/", 1)[-1]
+        if rc:
+            out.append({"spu_id": spu_id, "name": detail.get("name") or row.get("name"),
+                        "rand_code": rc, "url": url})
+    return out
+
+
+def seckill_snapshot(conn, r: Optional[Redis], sku_id: int) -> Dict[str, Any]:
+    """秒杀前**记账**：DB 三值 + Redis 预热库存（恢复的唯一依据）"""
+    snap: Dict[str, Any] = {"sku_id": sku_id}
+    with conn.cursor() as cur:
+        cur.execute("SELECT seckill_stock FROM cs_mall_seckill.seckill_sku WHERE sku_id=%s", (sku_id,))
+        row = cur.fetchone()
+        snap["seckill_stock"] = row["seckill_stock"] if row else None
+        cur.execute("SELECT stock FROM cs_mall_pms.pms_sku WHERE id=%s", (sku_id,))
+        row = cur.fetchone()
+        snap["stock"] = row["stock"] if row else None
+        cur.execute("SELECT p.sales FROM cs_mall_pms.pms_spu p "
+                    "JOIN cs_mall_pms.pms_sku s ON s.spu_id=p.id WHERE s.id=%s", (sku_id,))
+        row = cur.fetchone()
+        snap["sales"] = row["sales"] if row else None
+    snap["redis_stock"] = None
+    if r is not None:
+        try:
+            snap["redis_stock"] = r.cmd("GET", SECKILL_SKU_STOCK + str(sku_id))
+        except Exception as e:      # noqa: BLE001
+            log(f"   ⚠️ 读预热库存失败：{e}")
+    return snap
+
+
+def seckill_restore(conn, r: Optional[Redis], snap: Dict[str, Any], user_id: int) -> List[str]:
+    """**秒杀后恢复**（用户 2026-09-12 明确要求"每次秒杀之后就恢复数据"）。
+
+    ① Redis：删三类秒杀标记（`order:lock` / `ordered` / **`reseckill`**）+ 预热库存回补
+    ② DB  ：按快照回填 `seckill_stock` / `pms_sku.stock` / `pms_spu.sales`
+            —— 这是**记账回补**（秒杀前读到的确值），不是"减回去"的补偿运算
+    ③ 返回值 = 恢复动作清单（**不静默**）
+    """
+    acts: List[str] = []
+    sku_id = snap["sku_id"]
+    if r is not None:
+        keys = [SECKILL_ORDER_LOCK + f"{sku_id}:{user_id}",
+                SECKILL_ORDERED + f"{sku_id}:{user_id}",
+                SECKILL_RE_SECKILL + f"{sku_id}:{user_id}"]
+        try:
+            existed = [k for k in keys if r.exists(k)]
+            if existed:
+                r.cmd("DEL", *existed)
+            names = "/".join(k.split(":")[-3] for k in existed)
+            acts.append(f"Redis: DEL {len(existed)} 个秒杀标记键" + (f"（{names}）" if existed else ""))
+            if snap.get("redis_stock") is not None:
+                r.cmd("SET", SECKILL_SKU_STOCK + str(sku_id), snap["redis_stock"])
+                acts.append(f"Redis: SET 预热库存 ← {snap['redis_stock']}")
+        except Exception as e:      # noqa: BLE001
+            acts.append(f"🔴 Redis 恢复失败：{e}")
+    else:
+        acts.append("⚠️ Redis 未连接 → 三类标记键**未清理**")
+    with conn.cursor() as cur:
+        if snap.get("seckill_stock") is not None:
+            cur.execute("UPDATE cs_mall_seckill.seckill_sku SET seckill_stock=%s WHERE sku_id=%s",
+                        (snap["seckill_stock"], sku_id))
+            acts.append(f"DB: seckill_stock ← {snap['seckill_stock']}")
+        if snap.get("stock") is not None:
+            cur.execute("UPDATE cs_mall_pms.pms_sku SET stock=%s WHERE id=%s", (snap["stock"], sku_id))
+            acts.append(f"DB: pms_sku.stock ← {snap['stock']}")
+        if snap.get("sales") is not None:
+            cur.execute("UPDATE cs_mall_pms.pms_spu p JOIN cs_mall_pms.pms_sku s ON s.spu_id=p.id "
+                        "SET p.sales=%s WHERE s.id=%s", (snap["sales"], sku_id))
+            acts.append(f"DB: pms_spu.sales ← {snap['sales']}")
+    conn.commit()
+    return acts
+
+
+def seckill_verify(conn, r: Optional[Redis], snap: Dict[str, Any], user_id: int) -> Tuple[bool, str]:
+    """重读校验：DB 三值是否回到快照；Redis 三类标记是否已清、预热库存是否回补"""
+    sku_id = snap["sku_id"]
+    bad: List[str] = []
+    with conn.cursor() as cur:
+        cur.execute("SELECT seckill_stock FROM cs_mall_seckill.seckill_sku WHERE sku_id=%s", (sku_id,))
+        row = cur.fetchone()
+        if snap.get("seckill_stock") is not None and row and row["seckill_stock"] != snap["seckill_stock"]:
+            bad.append(f"seckill_stock={row['seckill_stock']}≠{snap['seckill_stock']}")
+        cur.execute("SELECT stock FROM cs_mall_pms.pms_sku WHERE id=%s", (sku_id,))
+        row = cur.fetchone()
+        if snap.get("stock") is not None and row and row["stock"] != snap["stock"]:
+            bad.append(f"stock={row['stock']}≠{snap['stock']}")
+    if r is not None:
+        for k in (SECKILL_ORDER_LOCK, SECKILL_ORDERED, SECKILL_RE_SECKILL):
+            try:
+                if r.exists(k + f"{sku_id}:{user_id}"):
+                    bad.append(f"残留键 {k}…")
+            except Exception as e:      # noqa: BLE001
+                bad.append(f"校验 Redis 失败：{e}")
+        if snap.get("redis_stock") is not None:
+            try:
+                cur_v = r.cmd("GET", SECKILL_SKU_STOCK + str(sku_id))
+                if str(cur_v) != str(snap["redis_stock"]):
+                    bad.append(f"预热库存={cur_v}≠{snap['redis_stock']}")
+            except Exception as e:      # noqa: BLE001
+                bad.append(f"校验预热库存失败：{e}")
+    return (not bad), ("；".join(bad) if bad else "全部回位")
+
+
+def run_seckill_phase(api: "Api", conn, registry: Registry, users: List[Dict[str, Any]],
+                      address: Dict[str, str], args, r: Optional[Redis]) -> Dict[str, int]:
+    """秒杀阶段：每次动作都"快照 → 提交 → 登记 → **恢复** → 校验"（可用 `--no-seckill-restore` 关掉）"""
+    stat = {"seckill_ok": 0, "seckill_fail": 0, "seckill_restored": 0, "seckill_verify_bad": 0}
+    targets = seckill_targets(api, users[0]["token"])
+    if not targets:
+        log("⚠️ 没有**在秒杀时间窗内且未购买**的目标（`url` 为空 = 不在窗口内）→ 本次跳过秒杀动作")
+        return stat
+    log(f"🐝 秒杀目标 {len(targets)} 个（第一个：{targets[0]['name']} · randCode={targets[0]['rand_code']}）")
+    for i in range(1, args.seckill_count + 1):
+        user = random.choice(users)
+        target = random.choice(targets)
+        try:
+            skus = api.seckill_sku_list(user["token"], target["spu_id"]) or []
+        except Exception as e:      # noqa: BLE001
+            log(f"   ⚠️ 取秒杀 SKU 失败：{e}")
+            stat["seckill_fail"] += 1
+            continue
+        skus = [s for s in skus if int(s.get("stock") or 0) > 0]
+        if not skus:
+            log("   ⚠️ 该 SPU 下没有库存 > 0 的秒杀 SKU → 跳过")
+            stat["seckill_fail"] += 1
+            continue
+        sku = random.choice(skus)
+        sku_id = int(sku["skuId"] if sku.get("skuId") is not None else sku.get("id"))
+        price = float(sku.get("seckillPrice") or sku.get("price") or 0)
+        snap = seckill_snapshot(conn, r, sku_id)
+        dto = {
+            "spuId": target["spu_id"],
+            "contactName": f"模拟{random.randint(0, 99):02d}",
+            "mobilePhone": FAKE_PHONE_PREFIX + f"{random.randint(0, 9999):04d}",
+            "provinceCode": address["province_code"], "provinceName": address["province_name"],
+            "cityCode": address["city_code"], "cityName": address["city_name"],
+            "districtCode": address["district_code"], "districtName": address["district_name"],
+            "streetCode": address["street_code"], "streetName": address["street_name"],
+            "detailedAddress": f"模拟地址 {random.randint(1, 999)} 号",
+            "paymentType": 2,
+            "amountOfOriginalPrice": price, "amountOfFreight": 0.0,
+            "amountOfDiscount": 0.0, "amountOfActualPay": price,
+            "seckillOrderItemAddDTO": {
+                "skuId": sku_id, "title": sku.get("title"), "barCode": sku.get("barCode"),
+                "data": "{}", "mainPicture": first_picture(sku.get("pictures")) or "",
+                "price": price, "quantity": 1,
+            },
+        }
+        try:
+            vo = api.seckill_commit(user["token"], target["rand_code"], dto)
+            stat["seckill_ok"] += 1
+        except Exception as e:      # noqa: BLE001
+            log(f"   ⚠️ 秒杀 {i} 失败：{e}")
+            stat["seckill_fail"] += 1
+            vo = None
+        # 登记 `success`（G7 式防御：**按 user_id+sku_id 反查**，不依赖响应字段）
+        def _register_success() -> bool:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM cs_mall_seckill.success WHERE user_id=%s AND sku_id=%s "
+                            "ORDER BY id DESC LIMIT 1", (user["id"], sku_id))
+                row = cur.fetchone()
+            if row:
+                registry.register(conn, "success", row["id"], "cs_mall_seckill", user_ref=str(user["id"]))
+                conn.commit()
+                return True
+            return False
+        try:
+            if vo or _register_success():
+                _register_success()
+        except Exception as e:      # noqa: BLE001
+            log(f"   ⚠️ 登记 success 失败：{e}")
+        if args.seckill_restore:
+            # ⚠️ DB 侧由 MQ 消费者**异步**回写 ⇒ 等一拍再恢复/校验，避免"我们回填后它又改回来"
+            time.sleep(args.seckill_restore_wait)
+            acts = seckill_restore(conn, r, snap, user["id"])
+            ok, why = seckill_verify(conn, r, snap, user["id"])
+            if not ok:              # 异步写入后到 → 再补一次（只补一次，避免无限循环）
+                acts += seckill_restore(conn, r, snap, user["id"])
+                ok, why = seckill_verify(conn, r, snap, user["id"])
+            stat["seckill_restored"] += 1
+            if not ok:
+                stat["seckill_verify_bad"] += 1
+            log(f"   🧹 秒杀 {i} 恢复：{'；'.join(acts)} → "
+                + ("✅ 校验通过" if ok else f"🔴 校验未通过（{why}）"))
+    return stat
+
+
+
 # =============================================================================
 
 def _registered(conn, batch: str, db_name: str, table: str) -> List[str]:
@@ -928,7 +1271,22 @@ def main() -> None:
     ap.add_argument("--users", type=int, default=20, help="预置模拟用户数")
     ap.add_argument("--sleep-min", type=float, default=0.5, help="动作间隔下限（秒）")
     ap.add_argument("--sleep-max", type=float, default=3.0, help="动作间隔上限（秒）")
-    ap.add_argument("--with-seckill", action="store_true", help="附加秒杀动作（当前未实现，仅预检）")
+    ap.add_argument("--qps", type=float, default=0.0,
+                    help="目标速率（>0 时**按它配速**，覆盖 sleep-min/max；例：--qps 5）。"
+                         "⚠️ 写动作受 Sentinel 天花板（秒杀 10 / 订单 20 / 支付 20 QPS），超了会 429")
+    ap.add_argument("--jitter", type=float, default=0.3,
+                    help="--qps 配速的抖动比例（默认 0.3 = ±30%%，让流量不至于完全均匀）")
+    ap.add_argument("--with-seckill", action="store_true",
+                    help="附加秒杀阶段（2026-09-12 已实现：列表取 randCode → 提交 → 登记 → **秒杀后恢复**）")
+    ap.add_argument("--seckill-count", type=int, default=5, help="秒杀动作次数（默认 5）")
+    ap.add_argument("--no-seckill-restore", dest="seckill_restore", action="store_false",
+                    help="🔴 **不恢复**秒杀后的数据（默认**恢复**：Redis 三类标记 + 预热库存 + DB 三值）")
+    ap.add_argument("--seckill-restore-wait", type=float, default=1.5,
+                    help="提交后等待多久再恢复（秒，默认 1.5）—— 给 MQ 消费者异步回写 DB 留出时间")
+    ap.add_argument("--redis-host", default=os.environ.get("SIM_REDIS_HOST", "172.29.193.239"),
+                    help="Redis **主库**地址（哨兵模式下必须直连主库；默认 172.29.193.239）")
+    ap.add_argument("--redis-port", type=int, default=int(os.environ.get("SIM_REDIS_PORT", "6379")),
+                    help="Redis 主库端口（默认 6379）")
     ap.add_argument("--preflight", action="store_true", help="只做预检，不写任何数据")
     ap.add_argument("--clean", action="store_true", help="清理模式（默认 dry-run）")
     ap.add_argument("--batch", help="清理指定批次号")
@@ -963,9 +1321,30 @@ def main() -> None:
         log(f"批次 {batch} 已开（记得在造数**前**做 mysqldump 并把文件名写进 sim_batch.dump_file）")
 
         api = Api(args.base)
+        # 🆕 2026-09-12：用户池真实感告警（§九：20 人 × 每天 1000 行为 = 每人 50 次动作，真人远低于此）
+        if args.per_day > 0 and args.users < max(4, args.per_day // 4):
+            log(f"⚠️ 用户池偏小：{args.users} 人 × 每天 {args.per_day} 行为 = 每人每天 "
+                f"{args.per_day / max(1, args.users):.0f} 次动作（真人一天十几次量级）→ "
+                f"建议 `--users` ≈ per_day/8 = {max(4, args.per_day // 8)}")
         users = ensure_users(api, conn, registry, args.users)
         stat = run_funnel(api, conn, registry, catalog, users, args.days, args.per_day,
-                         args.sleep_min, args.sleep_max, args.with_seckill)
+                         args.sleep_min, args.sleep_max, args.with_seckill,
+                         qps=args.qps, jitter=args.jitter)
+
+        # 🐝 秒杀阶段（#67 之 ④）：每次动作都"快照 → 提交 → 登记 → **恢复** → 校验"
+        if args.with_seckill:
+            # G7 教训：地址模板**只读一次**且读后 commit（否则 REPEATABLE READ 会把快照定格）
+            address = load_address_template(conn)
+            conn.commit()
+            r = open_redis(args)
+            seck = run_seckill_phase(api, conn, registry, users, address, args, r)
+            stat.update(seck)
+            if r is not None:
+                r.close()
+            if args.seckill_restore:
+                log(f"🧹 秒杀后恢复：{seck['seckill_restored']} 次；"
+                    f"校验未通过 {seck['seckill_verify_bad']} 次"
+                    + ("（✅ 全部回位）" if seck["seckill_verify_bad"] == 0 else "（🔴 需人工核对）"))
 
         # 🏷️ 回填专用列标识（**服务端零改动**）：造完数按影子登记表补写 data_source='SIM'
         log("🏷️ 回填 data_source='SIM'（按登记表；服务端零改动）…")
