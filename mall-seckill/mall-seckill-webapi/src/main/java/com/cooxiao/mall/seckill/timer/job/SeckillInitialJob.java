@@ -65,9 +65,16 @@ public class SeckillInitialJob implements Job {
         log.debug("秒杀商品预热列表: {}", seckillSpus);
         // 遍历当前批次所有秒杀商品的spu列表
         for(SeckillSpu spu : seckillSpus){
-            // 库存数据是保存在sku中的,所以要根据spu的spuId查询sku列表
+            // 🔴 #64 修复（2026-09-12）：这里**必须用 seckill_spu 的主键 `getId()`** ——
+            //   `seckill_sku.spu_id` 存的是 `seckill_spu.id`（秒杀内部 id，取值 1~6），
+            //   而 `spu.getSpuId()` 是 **pms_spu 主键**（取值 1,2,5,6,15,20）。
+            //   原实现拿 pms id 去查 `seckill_sku.spu_id` ⇒ 只有"两套 id 恰好同号"的少数 spu 能命中：
+            //   实测命中 {1,2} ∪ {5,6} ∪ {26,27} ∪ {35,36} = 8 个 sku，**skus 11/12/13/14 从不被预热**
+            //   （靠每天 03:30 的对账任务写出**永久 key** 兜住，TTL=-1，等于掩盖了这个 bug）。
+            //   ⚠️ 随机码键仍用 pms id（下面 `getRandCodeKey(spu.getSpuId())` 是**对的**）：详情接口
+            //   `/seckill/spu/{spuId}` 收的就是 pms 主键（VO.id 来自 pms 商品的 copyProperties）。
             List<SeckillSku> seckillSkus=seckillSkuMapper
-                    .findSeckillSkusBySpuId(spu.getSpuId());
+                    .findSeckillSkusBySpuId(spu.getId());
             // 遍历seckillSkus集合,从集合中的sku对象中获取库存数,保存到redis
             for(SeckillSku sku : seckillSkus){
                 log.info("开始将{}号sku库存数保存预热到redis",sku.getSkuId());

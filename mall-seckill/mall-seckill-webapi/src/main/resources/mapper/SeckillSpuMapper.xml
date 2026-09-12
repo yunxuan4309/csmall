@@ -62,4 +62,9 @@
         select spu_id from seckill_spu
     </select>
 
+    <!-- 🔴 #69：seckill_spu.id（秒杀内部 id）→ pms_spu.id；`seckill_sku.spu_id` 存的是前者 -->
+    <select id="findPmsSpuIdBySeckillId" resultType="long">
+        select spu_id from seckill_spu where id = #{id}
+    </select>
+
 </mapper>

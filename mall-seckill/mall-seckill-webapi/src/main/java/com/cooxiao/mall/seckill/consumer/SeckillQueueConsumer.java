@@ -6,6 +6,7 @@ import com.cooxiao.mall.pojo.seckill.model.Success;
 import com.cooxiao.mall.product.service.seckill.IForSeckillSpuService;
 import com.cooxiao.mall.seckill.config.RabbitMqComponentConfiguration;
 import com.cooxiao.mall.seckill.mapper.SeckillSkuMapper;
+import com.cooxiao.mall.seckill.mapper.SeckillSpuMapper;
 import com.cooxiao.mall.seckill.mapper.SuccessMapper;
 import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +43,8 @@ public class SeckillQueueConsumer {
 
     @Autowired
     private SeckillSkuMapper seckillSkuMapper;
+    @Autowired
+    private SeckillSpuMapper seckillSpuMapper;
     @Autowired
     private SuccessMapper successMapper;
     @DubboReference
@@ -95,7 +98,17 @@ public class SeckillQueueConsumer {
             try {
                 SeckillSku sku = seckillSkuMapper.findBySkuId(success.getSkuId());
                 if (sku != null) {
-                    dubboSeckillSpuService.incrementSales(sku.getSpuId());
+                    // 🔴 #69 修复（2026-09-12）：`seckill_sku.spu_id` 存的是 **seckill_spu.id（秒杀表内部 id）**，
+                    //   而 `incrementSales` 的 SQL 是 `UPDATE pms_spu SET sales=sales+1 WHERE id=#{spuId}`
+                    //   ⇒ 直接把内部 id 喂进去会**给另一个命名空间的同号商品加销量**
+                    //   （实测：目标 pms spu 6/20，被 +1 的却是 pms spu 4/6）。这里先反查成 pms 主键再累加。
+                    Long pmsSpuId = seckillSpuMapper.findPmsSpuIdBySeckillId(sku.getSpuId());
+                    if (pmsSpuId != null) {
+                        dubboSeckillSpuService.incrementSales(pmsSpuId);
+                    } else {
+                        log.warn("【秒杀销量】反查 pms spuId 为空，跳过销量累加：skuId={}, seckillSpuId={}",
+                                success.getSkuId(), sku.getSpuId());
+                    }
                 }
             } catch (Exception e) {
                 log.warn("更新SPU销量失败, skuId={}: {}", success.getSkuId(), e.getMessage());
