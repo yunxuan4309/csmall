@@ -1,10 +1,14 @@
 package com.cooxiao.mall.seckill.consumer;
 
 import com.cooxiao.mall.pojo.seckill.model.Success;
+import com.cooxiao.mall.seckill.config.RabbitMqComponentConfiguration;
 import com.rabbitmq.client.Channel;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.rabbit.annotation.RabbitHandler;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.core.MethodParameter;
 import org.springframework.util.ClassUtils;
@@ -17,7 +21,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -112,5 +118,44 @@ class SeckillQueueContractTest {
                 "必须显式 default-requeue-rejected: false；否则重试耗尽后仍会 requeue = 无限重投");
         assertFalse(yml.contains("acknowledge-mode: manual"),
                 "不得再退回 acknowledge-mode: manual（手动 ack 的土壤，见 #70 B/D）");
+    }
+
+    /**
+     * TODO #72：死信链路。
+     * <p>核心约束：**主队列不得声明 `x-dead-letter-*` 参数** —— 该队列早已存在于 broker，
+     * RabbitMQ 不允许修改已存在队列的参数（{@code PRECONDITION_FAILED} ⇒ 容器起不来、消费断流）；
+     * 死信必须靠 **broker policy** 施加（命令见 {@code RabbitMqComponentConfiguration#seckillQueue()}）。
+     * 同时 DLX 三组件（交换机 / 死信队列 / 绑定）必须由应用声明出来，否则死信会被静默丢弃。
+     */
+    @Test
+    void dlxComponents_mustExist_andMainQueueMustStayParamless() {
+        RabbitMqComponentConfiguration cfg = new RabbitMqComponentConfiguration();
+        Queue main = cfg.seckillQueue();
+        assertEquals(RabbitMqComponentConfiguration.SECKILL_QUEUE, main.getName());
+        assertFalse(main.getArguments().containsKey("x-dead-letter-exchange"),
+                "seckill_queue 不得带 x-dead-letter-* 参数（改已存在队列参数会 PRECONDITION_FAILED；"
+                        + "死信请用 broker policy 施加）");
+        assertTrue(main.getArguments().isEmpty(), "seckill_queue 的声明参数应保持为空");
+
+        assertEquals("seckill_queue_dlx", cfg.seckillDlxQueue().getName());
+        assertTrue(cfg.seckillDlxQueue().isDurable(), "死信队列必须持久化");
+        assertEquals("seckill_ex_dlx", cfg.seckillDlxExchange().getName());
+        assertEquals("seckill_dlx_rk", RabbitMqComponentConfiguration.SECKILL_DLX_RK);
+        assertNotEquals(RabbitMqComponentConfiguration.SECKILL_QUEUE,
+                RabbitMqComponentConfiguration.SECKILL_QUEUE_DLX, "死信队列不能与主队列同名");
+        assertNotNull(cfg.seckillDlxBinding(), "DLQ 必须绑定到死信交换机（否则死信无处可去）");
+    }
+
+    /** TODO #72 + #65 教训：死信监听必须**方法级**且收原始 Message（格式一变，类级按类型挑方法连告警都失效） */
+    @Test
+    void dlxListener_mustBeMethodLevelAndTakeRawMessage() throws Exception {
+        Method onDlx = SeckillDlxConsumer.class.getMethod("onDlxMessage", Message.class);
+        assertNotNull(onDlx.getAnnotation(RabbitListener.class),
+                "死信监听注解必须写在方法上（方法级没有按载荷类型挑方法这一步）");
+        assertNull(SeckillDlxConsumer.class.getAnnotation(RabbitListener.class),
+                "类上不得再有 @RabbitListener");
+        assertNull(onDlx.getAnnotation(RabbitHandler.class), "方法上不得用 @RabbitHandler");
+        assertEquals(Message.class, onDlx.getParameterTypes()[0],
+                "死信消费者必须收原始 Message（无论载荷是什么都能留痕）");
     }
 }
