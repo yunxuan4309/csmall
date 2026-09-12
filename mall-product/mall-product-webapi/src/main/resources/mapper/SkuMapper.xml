@@ -150,9 +150,12 @@
         order by sort desc, gmt_modified desc
     </select>
 
+    <!-- 🆕 2026-09-12（TODO #70）修复：原条件 `stock>#{stock}`（**严格大于**）⇒ **买"最后一件"永远匹配 0 行**
+         —— 实测：stock=1、quantity=1 ⇒ `1 > 1` = false ⇒ 消费者判"库存扣减失败"⇒ 消息被无限重投。
+         现改为 `>=`，与秒杀侧 `seckill_stock >= #{quantity}` 口径一致（**防超卖正是靠这个条件**）。 -->
     <update id="updateStockById">
         update pms_sku set stock=stock-#{stock}
-        where id=#{id} and stock>#{stock}
+        where id=#{id} and stock>=#{stock}
     </update>
 
     <!-- int deleteBySpuId(Long spuId); -->

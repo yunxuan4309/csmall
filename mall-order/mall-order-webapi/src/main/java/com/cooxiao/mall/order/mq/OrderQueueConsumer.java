@@ -4,6 +4,7 @@ import com.cooxiao.mall.product.service.order.IForOrderSkuService;
 import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.dubbo.config.annotation.DubboReference;
+import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.rabbit.annotation.RabbitHandler;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
@@ -65,31 +66,43 @@ public class OrderQueueConsumer {
             for (OrderItemMessage item : items) {
                 int rows = dubboSkuService.reduceStockNum(item.getSkuId(), item.getQuantity());
                 if (rows == 0) {
-                    // 库存扣减失败：可能瞬时（Dubbo 抖动）也可能永久（库存不足/下架）
-                    log.warn("库存扣减失败，skuId: {}, quantity: {}, requeue {}/{} 次后仍未成功",
-                            item.getSkuId(), item.getQuantity(), requeueCount, MAX_REQUEUE);
-                    channel.basicNack(deliveryTag, false, requeueCount < MAX_REQUEUE);
-                    return;
+                    // 🔴 TODO #70 修复（2026-09-12）：rows==0 = 这条消息**永远不可能成功**（库存不足 / SKU 不可用）
+                    //   ⇒ 属**毒消息**，必须直接进死信，绝不能 requeue。
+                    //   ⚠️ 原写法 `basicNack(tag, false, requeueCount < MAX_REQUEUE)` 实测会**无限重投**：
+                    //      classic 队列下 `basicNack(requeue=true)` **不会**给消息加 `x-death` 头，
+                    //      而 countRequeue() 只数 x-death ⇒ 计数**恒为 0** ⇒ `0 < 3` 恒真
+                    //      （实测：10 分钟重投 **114 次**，约每秒一次，一直打 Dubbo 商品服务）。
+                    //   现在抛 AmqpRejectAndDontRequeueException ⇒ 容器 reject(requeue=false) ⇒ 进 DLX，
+                    //   由 OrderDlxConsumer 打【MQ死信告警】留痕，供人工补偿。
+                    log.warn("库存扣减失败（毒消息），skuId: {}, quantity: {}, x-death 计数: {}（classic 队列恒 0，故不再用它判上限）→ 转入 DLX",
+                            item.getSkuId(), item.getQuantity(), requeueCount);
+                    throw new AmqpRejectAndDontRequeueException(
+                            "库存扣减失败（库存不足或 SKU 不可用）→ 死信：" + item);
                 }
                 log.debug("库存扣减成功，skuId: {}, quantity: {}", item.getSkuId(), item.getQuantity());
             }
             channel.basicAck(deliveryTag, false);
             log.info("订单库存扣减完成，共 {} 个商品", items.size());
+        } catch (AmqpRejectAndDontRequeueException e) {
+            throw e;   // 毒消息（库存不足等）：放行给容器 reject(requeue=false) → DLX
         } catch (Exception e) {
-            log.error("订单库存扣减异常，requeue {}/{} 次后仍未成功", requeueCount, MAX_REQUEUE, e);
-            try {
-                // 未达上限 requeue 重试；达上限则丢弃并留痕（配合 TODO #36 DLX/人工补偿）
-                channel.basicNack(deliveryTag, false, requeueCount < MAX_REQUEUE);
-            } catch (Exception ignored) {
-                Thread.currentThread().interrupt();
-            }
+            // 🔴 TODO #70 修复（2026-09-12）：不再手动 nack。抛出后由容器按
+            //   `spring.rabbitmq.listener.simple.retry.max-attempts=3` 重试；耗尽后
+            //   RejectAndDontRequeueRecoverer 会 reject(requeue=false) ⇒ 自动进 DLX（带告警）。
+            //   ⚠️ 这里**必须抛**：若吞掉异常，容器会按自动确认认为消费成功 ⇒ **静默丢消息**。
+            log.error("订单库存扣减异常（容器将重试 {} 次后转入死信）", MAX_REQUEUE, e);
+            throw new RuntimeException("订单库存扣减异常", e);
         }
     }
 
     /**
      * 从 x-death 头统计该消息已被 requeue 的次数。
-     * RabbitMQ 在 basicNack(requeue=true) 后重新投递时，header 会带 x-death，
-     * 其中 reason=requeued 的 count 即重试次数。
+     *
+     * <p>⚠️ <b>2026-09-12（TODO #70）实测更正</b>：这个计数**在 classic 队列上恒为 0** ——
+     * {@code basicNack(requeue=true)} 只是把消息放回原队列，<b>不会</b>写 {@code x-death} 头
+     * （{@code x-death} 只在"被死信"时才加；只有 quorum 队列才带 {@code reason=requeued}）。
+     * ⇒ <b>不能用它做"限次重试"的上限判断</b>（本类曾因此无限重投）。
+     * 现在只用于日志留痕；真正的限次重试交给容器（{@code retry.max-attempts=3} + reject → DLX）。
      */
     private int countRequeue(List<Map<String, Object>> xDeath) {
         if (xDeath == null || xDeath.isEmpty()) {

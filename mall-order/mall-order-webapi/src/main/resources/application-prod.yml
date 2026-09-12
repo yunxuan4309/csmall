@@ -1,4 +1,4 @@
-﻿# ##################################################################### #
+# ##################################################################### #
 #                            【生产】环境配置                              #
 # ##################################################################### #
 #  当前文件是Profile配置，需要主配置文件中通过spring.profiles.active激活后生效   #
@@ -71,6 +71,19 @@ spring:
       host: ${my.server.addr}
       port: 6379
       password: ${REDIS_PASSWORD:}
+  # 🆕 2026-09-12（TODO #70）：对齐 mall-seckill 的**已验证**配置。
+  #   ⚠️ 缺这一段时容器是 **AUTO ack**：代码里的 channel.basicAck/Nack 与容器自动确认会**双确认**
+  #      （实测日志 `channel error 406 PRECONDITION_FAILED unknown delivery tag`），
+  #      且异常会按默认 `defaultRequeueRejected=true` **无限 requeue**。
+  #   连接参数仍由 compose 的 SPRING_RABBITMQ_* 注入（环境变量优先级高于 yml，故这里不必再写 host/port）。
+  rabbitmq:
+    listener:
+      simple:
+        acknowledge-mode: manual
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
 
 dubbo:
   application:

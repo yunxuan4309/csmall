@@ -14,7 +14,8 @@
 | 顺位 | 编号 | 事项 | 我已完成的部分 | 你要做的动作 | 预计 |
 |---|---|---|---|---|---|
 | ~~1~~ | ~~**#55**~~ | ✅ **已收口（2026-09-12 · 无需动作）**：**root 账号本就是锁定的**（无密码可爆破）· `ecs-user` 保留密码登录属**接受项**（实测 247 次/6 天 爆破噪音，密码强 + 学习用途）· 副产品：**密钥登录已打通** | — | **无** | — |
-| **2** | **#65** | 普通订单**库存扣减 MQ 链路整条失效**（`stock` 永不减少 + 下单无库存校验） | ✅ 修复 + 回归测试 **3/3 绿**（见 §65） | 重建 `mall-order` → `docker compose up -d mall-order`（**先确认 `order_queue`/`order_queue_dlx` 0 积压**） | 30~60 分钟 |
+| **2** | **#65** | 普通订单**库存扣减 MQ 链路整条失效**（`stock` 永不减少 + 下单无库存校验） | ✅ 修复 + 回归测试 **3/3 绿**；**已部署并验收（2026-09-12）**：容器内 jar md5 一致 · `No listener method found` **0 次** · 消费者收到**正确类型**的消息（见 §65） | ~~重建 mall-order~~ ✅ 已完成 | ✅ |
+| **2b** | **#70** 🆕 | **#65 修复后暴露的两个真缺陷**：① `mall-product` 库存扣减 SQL **off-by-one**（`stock>#{quantity}` ⇒ **买最后一件永远失败**）② `mall-order` 失败路径**无限重投**（classic 队列 requeue **不写 `x-death`** ⇒ 限次计数恒 0；实测 10 分钟重投 **114 次**） | ✅ **代码已修**（含 `application-prod.yml` 补 manual ack + 限次重试） | 重建并部署 **`mall-product` + `mall-order`** 两个服务（jar 已由 AI 传到老机 `/tmp`，见 §70） | 20~30 分钟 |
 | **3** | **#54** | RabbitMQ 仍是 `guest/guest`（同 VPC 任何实例可拿 administrator） | ✅ compose 已补 `SPRING_RABBITMQ_*` + 两步操作单（见 §54） | 同步 compose → 建新用户 → 切服务 → **最后**删 `guest` | 15 分钟（两步） |
 | **4** | **#31** | 生产开启**向量检索**（RAG 真实运行，简历亮点） | ✅ 可行性评估完成：**三项前置实测通过**，且改为 env 覆盖**免重建**（见 §31） | **拍板开/不开**；开 = 改 `.env` + `recreate mall-ai` + 回归几条搜索 | 30 分钟 |
 | **5** | **#61** | 外部端到端探活（防"全 Up、health 200，业务却挂 24h"） | ✅ 脚本 `deploy/scripts/ops/e2e_probe.py` **真机验证 9/9 PASS**（见 §61） | 脚本放新机 + 挂 cron（§61 有现成 cron 行） | 10 分钟 |
@@ -74,6 +75,7 @@
 | **#68** | ✅ **已关闭（2026-09-12）**：dump 已执行一次（`cs_mall_20260912_1452.sql.gz`）+ **机制固化**（`--require-dump` 不提供即拒绝开跑 / 新鲜度校验 / 自动登记 `dump_file`） | ✅ 已完成 | §68 |
 
 | **#31** | **生产开启向量检索**（✅ **2026-09-12 可行性评估完成：三项前置实测通过**（额度 200 / ES `dense_vector` 已就位 / 启动自检+运行时降级均已上线）⇒ **改为 env 覆盖、免重建镜像**） | 🟢 **可实施（待你拍板开或不开）** | §31 |
+| **#70** | 🆕 **库存扣减链路的两个真缺陷**（**#65 修复后暴露**）：① `mall-product` SQL **off-by-one**（买最后一件必失败）② `mall-order` 失败路径**无限重投**（DLX 永远收不到） | ✅ **已修复（2026-09-12）· 待部署 mall-product + mall-order** | §70 |
 ### D. ✅ 已完成 / 📦 已归档（**明细见 [[TODO已完成]] 与 [[文档索引]]**，此处只保证"**编号可查**"）
 
 | 编号 | 一句话 | 明细 |
@@ -326,6 +328,28 @@ sudo systemctl reload sshd
 - **部署后验收（3 条）**：① 下一单 → `docker logs csmall-order 2>&1 | grep -c "订单库存扣减完成"` **≥ 1**；② `grep -c "No listener method found"` **不再增长**；③ **`SELECT stock FROM pms_sku WHERE id=<sku>` 真实下降** —— 这条就是本缺陷修好的标志（以前永不减少）。
 
 
+
+### 70. 🆕 库存扣减链路的两个真缺陷（2026-09-12 实测发现 —— **由 #65 修复后暴露**）
+
+> **发现路径**：把 #65（类型契约）修好、部署并**真下了一单**后，第一次真正跑到"库存扣减"的业务分支，立刻撞出这两个问题 —— **#65 之前它们是死代码**（消费者根本没被调到）。
+
+**缺陷 A：off-by-one —— 买"最后一件"永远失败** 🔴
+- **文件**：`mall-product/mall-product-webapi/src/main/resources/mapper/SkuMapper.xml` → `updateStockById`
+- **问题**：`update pms_sku set stock=stock-#{stock} where id=#{id} and **stock>#{stock}**` ⇒ 当 `stock == quantity`（买最后一件）时**匹配 0 行**。
+- **实测证据**：订单 `41528a60-…`（sku `2084644661212008449`，`stock=1`、quantity=1）⇒ `1 > 1` = false ⇒ 消费者判"库存扣减失败"。
+- **修复**：`>` → **`>=`**（与秒杀侧 `seckill_stock >= #{quantity}` 口径一致；**防超卖靠的就是这个条件**）。
+
+**缺陷 B：失败路径无限重投（"限次重试"从未生效）** 🔴
+- **问题**：`OrderQueueConsumer` 用 `basicNack(tag, false, requeueCount < MAX_REQUEUE)` 想表达"限次重试"，但 **classic 队列上 `basicNack(requeue=true)` 不会写 `x-death` 头**（`x-death` 只在"被死信"时加；只有 quorum 队列才有 `reason=requeued`）⇒ `countRequeue()` **恒为 0** ⇒ `0 < 3` 恒真 ⇒ **永久重投**。
+- **实测证据**：**近 10 分钟重投 114 次**（约每秒一次，一直打 Dubbo 商品服务）；`order_queue` 长期积压 1 条、`order_queue_dlx` **恒 0**（⇒ **DLX 永远收不到**，告警链路形同不存在）。
+- **修复**：① `rows==0`（= 这条消息**永远不可能成功** = **毒消息**）→ 抛 **`AmqpRejectAndDontRequeueException`** ⇒ 容器 reject(requeue=false) ⇒ **进 DLX**，由（已修好的）`OrderDlxConsumer` 打【MQ死信告警】留痕；② 其它异常**抛出**，交给容器 `retry.max-attempts=3` 重试，耗尽后 reject → DLX；③ **删掉两处手动 `basicNack`**。
+- **附带修复（配置）**：`mall-order/application-prod.yml` 此前**整段没有 `rabbitmq`** ⇒ 容器是 **AUTO ack**，与代码里的手动 ack/nack **双确认**（实测 `channel error 406 PRECONDITION_FAILED unknown delivery tag`），且异常按默认 `defaultRequeueRejected=true` **无限 requeue**。现补齐（对齐 mall-seckill 的**已验证**配置）：`acknowledge-mode: manual` + `default-requeue-rejected: false` + `retry: enabled / max-attempts: 3`。
+
+**⚠️ 同类风险（未修 · 已登记）**：`mall-seckill` 的 `SeckillQueueConsumer` 用的是**同一套** `basicNack(requeueCount < MAX_REQUEUE)` ⇒ 它的 `rows==0`（秒杀库存不足）**同样会无限重投**（虽然它配了 manual ack + retry，但**手动 nack 绕过了重试**）。修法与上面 ② 完全一致（改 1 处 + 加一句 throw）。**代价**：秒杀是**双实例**，必须**两台一起**重建（G14 纪律）。
+
+**部署（待用户执行）**：`mall-product` + `mall-order` 两个服务（jar 已由 AI 传到老机 `/tmp/mall-product-new.jar` / `/tmp/mall-order-new.jar`）⇒ 部署后**那条积压的消息会自然成功**（stock 1→0），循环随之结束。
+
+---
 
 ## 📦 五、暂不做条目正文（想做时从这里捡起来 · 要点与取舍都留着）
 
