@@ -71,19 +71,15 @@ spring:
       host: ${my.server.addr}
       port: 6379
       password: ${REDIS_PASSWORD:}
-  # 🆕 2026-09-12（TODO #70）：对齐 mall-seckill 的**已验证**配置。
-  #   ⚠️ 缺这一段时容器是 **AUTO ack**：代码里的 channel.basicAck/Nack 与容器自动确认会**双确认**
-  #      （实测日志 `channel error 406 PRECONDITION_FAILED unknown delivery tag`），
-  #      且异常会按默认 `defaultRequeueRejected=true` **无限 requeue**。
-  #   连接参数仍由 compose 的 SPRING_RABBITMQ_* 注入（环境变量优先级高于 yml，故这里不必再写 host/port）。
-  rabbitmq:
-    listener:
-      simple:
-        acknowledge-mode: manual
-        default-requeue-rejected: false
-        retry:
-          enabled: true
-          max-attempts: 3
+  # ⚠️ #70（2026-09-12 实测）：ack 模式 / 限次重试 **不能写在这里** —— 写了也不生效！
+  #   原因：mall-order 在 OrderQueueConfig 里**自己定义了** `rabbitListenerContainerFactory` bean，
+  #   `@RabbitListener` 用的是它；而 `spring.rabbitmq.listener.simple.*` 只作用于
+  #   "Spring Boot **自动配置**的那个 factory" ⇒ 这里是**影子配置**（配置在 jar 里、却没有任何代码读它）。
+  #   实测：这里写了 `acknowledge-mode: manual`，运行日志仍是 `acknowledgeMode=AUTO`
+  #   ⇒ 容器自动 ack 与代码手动 ack **双确认** ⇒ `channel error 406 PRECONDITION_FAILED unknown delivery tag`。
+  #   ✅ 权威设置在**代码**：`OrderQueueConfig#rabbitListenerContainerFactory`
+  #      （setAcknowledgeMode(MANUAL) + setDefaultRequeueRejected(false) + RetryInterceptorBuilder 3 次后进 DLX）。
+  #   （连接参数仍由 compose 的 SPRING_RABBITMQ_* 注入 —— 环境变量优先级确实高于 yml。）
 
 dubbo:
   application:

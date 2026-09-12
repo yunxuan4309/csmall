@@ -1,12 +1,15 @@
 package com.cooxiao.mall.order.mq;
 
+import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.rabbit.config.RetryInterceptorBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.retry.RejectAndDontRequeueRecoverer;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
@@ -77,12 +80,31 @@ public class OrderQueueConfig {
         return new Jackson2JsonMessageConverter();
     }
 
-    /** 让 @RabbitListener 使用 JSON 反序列化，解决 LinkedHashMap 转换失败 */
+    /**
+     * 让 {@code @RabbitListener} 使用 JSON 反序列化（解决 LinkedHashMap 转换失败）。
+     *
+     * <p>🔴 <b>#70 补修（2026-09-12）：ack 模式与限次重试<b>必须在这里设</b>，写在 yml 里没用！</b>
+     * 本类自己定义了名为 {@code rabbitListenerContainerFactory} 的 bean ⇒ {@code @RabbitListener}
+     * 用的就是<b>它</b>；而 {@code spring.rabbitmq.listener.simple.*} <b>只作用于 Spring Boot 自动配置的那个 factory</b>。
+     * <p><b>实测踏坑</b>：把 {@code acknowledge-mode: manual} 写进 {@code application-prod.yml} 后，
+     * 运行日志仍是 {@code acknowledgeMode=AUTO} ⇒ 容器自动 ack 与代码里的手动 ack <b>双确认</b>：
+     * {@code channel error 406 PRECONDITION_FAILED unknown delivery tag}。
+     * （这是 G16"改到了影子 key"的同类问题：配置在 jar 里，但<b>没有任何代码去读它</b>。）
+     */
     @Bean
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(ConnectionFactory connectionFactory) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(new Jackson2JsonMessageConverter());
+        // ↓ #70：与 OrderQueueConsumer 里的手动 basicAck/Nack **配套**（否则自动+手动双确认 ⇒ 406）
+        factory.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        // ↓ 未捕获异常不再无脑 requeue（默认 true 会造成无限重投）
+        factory.setDefaultRequeueRejected(false);
+        // ↓ 限次重试：重试 3 次后 reject(requeue=false) ⇒ 进 DLX（等价于 yml 里那套，但**这里才生效**）
+        factory.setAdviceChain(RetryInterceptorBuilder.stateless()
+                .maxAttempts(3)
+                .recoverer(new RejectAndDontRequeueRecoverer())
+                .build());
         return factory;
     }
 }

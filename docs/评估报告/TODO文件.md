@@ -347,7 +347,14 @@ sudo systemctl reload sshd
 
 **⚠️ 同类风险（未修 · 已登记）**：`mall-seckill` 的 `SeckillQueueConsumer` 用的是**同一套** `basicNack(requeueCount < MAX_REQUEUE)` ⇒ 它的 `rows==0`（秒杀库存不足）**同样会无限重投**（虽然它配了 manual ack + retry，但**手动 nack 绕过了重试**）。修法与上面 ② 完全一致（改 1 处 + 加一句 throw）。**代价**：秒杀是**双实例**，必须**两台一起**重建（G14 纪律）。
 
-**部署（待用户执行）**：`mall-product` + `mall-order` 两个服务（jar 已由 AI 传到老机 `/tmp/mall-product-new.jar` / `/tmp/mall-order-new.jar`）⇒ 部署后**那条积压的消息会自然成功**（stock 1→0），循环随之结束。
+**✅ 部署与验收（2026-09-12）**：两个服务已部署 —— 容器内 jar md5 与构建产物一致；那条积压消息**自然成功**（`stock` 1→0 · `order_queue` 归零 · `订单库存扣减完成` +1）；且从**线上 jar 里抽出**的 `SkuMapper.xml` 已确认是 `stock>=#{stock}` ✅。
+
+**⚠️ 补修发现 C（同日 · 被"再检查一遍"抓出）：yml 是「影子配置」，压根没生效** 🔴
+- **现象**：把 `acknowledge-mode: manual` 写进 `application-prod.yml` 后，**运行日志里仍是 `acknowledgeMode=AUTO`**，且成功 ack 之后紧跟一条 `channel error 406 PRECONDITION_FAILED unknown delivery tag`（**自动 + 手动双确认**）。
+- **根因**：mall-order 在 `OrderQueueConfig` 里**自定义了 `rabbitListenerContainerFactory` bean**，`@RabbitListener` 用的就是它；而 **`spring.rabbitmq.listener.simple.*` 只作用于 Spring Boot 自动配置的那个 factory** ⇒ **yml 里写什么都没用**（= **G16"改到影子 key"的同类**：配置在 jar 里，却**没有任何代码去读它**）。
+- **修复**：权威设置搬进**代码里的 factory** —— `setAcknowledgeMode(MANUAL)` + `setDefaultRequeueRejected(false)` + `RetryInterceptorBuilder.stateless().maxAttempts(3).recoverer(new RejectAndDontRequeueRecoverer())`；并把 yml 那段**删掉、换成指路注释**（避免以后再有人改错地方）。
+- **判据教训（又一次）**：`ack_required=true` **不能**用来判断"是否 manual ack"（AUTO 模式下 Spring 同样是 autoAck=false）；**真判据是容器日志里的 `acknowledgeMode=`**。
+- ℹ️ **对照**：`mall-seckill` **没有**自定义 factory（配置类里 4 个 bean 无 Factory）⇒ 它的 yml 那套**是生效的** ✅ ⇒ **"抄别人的配置"这次不成立 —— 必须先确认自己这条链路读的是哪个配置源**。
 
 ---
 
