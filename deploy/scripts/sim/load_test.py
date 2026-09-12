@@ -470,6 +470,9 @@ def _run_load(label: str, concurrency: int, duration: float, stop_flag: threadin
         "failed": bad,
         "hard_fail": stats.hard_fail,
         "rps": round(done / elapsed, 1),
+        # 🔴 闸门/限流限住时 `rps` 会把"被拒的快速失败"也算进去（它们毫秒级返回）
+        #    ⇒ 承载结论要看**成功 RPS**（2026-09-12 实测：agent 100 并发 rps 53.6 但成功仅 ~18/s）
+        "ok_rps": round(ok / elapsed, 1),
         "latency_ms": {
             "avg": round(statistics.mean(series) * 1000, 1) if series else 0.0,
             "p50": round(pct(series, 50) * 1000, 1),
@@ -826,7 +829,8 @@ def main() -> None:
             log(f"   {r['concurrency']:>4} 并发：成功 {r['ok']:>6} · 入口限流 {r['blocked']:>6}"
                 f" · **闸门满 {ai.get('busy_gate', 0):>6}** · 其它降级 {ai.get('degraded_other', 0):>5}"
                 f" · 频控 {ai.get('user_ratelimit', 0):>4} · 硬失败 {r['hard_fail']:>4}"
-                f" | TTFT p50 {ai.get('ttft_p50_ms', 0):>7}ms p99 {ai.get('ttft_p99_ms', 0):>7}ms")
+                f" | **成功 RPS {r.get('ok_rps', 0):>6}** · 总 RPS {r['rps']:>6}"
+                f" · TTFT p50 {ai.get('ttft_p50_ms', 0):>7}ms p99 {ai.get('ttft_p99_ms', 0):>7}ms")
         busy = sum((r.get("ai") or {}).get("busy_gate", 0) for r in results)
         blk = sum(r["blocked"] for r in results)
         log(f"   合计：入口限流 {blk} 次 · **闸门满 {busy} 次**（闸门 = `concurrent-max: 20`，全局单一 Semaphore）")
