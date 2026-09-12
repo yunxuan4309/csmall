@@ -572,6 +572,10 @@ services:
       NACOS_PASSWORD: ${NACOS_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       AI_API_KEY: ${AI_API_KEY}
+      # #67-③ AI 并发压测（D1）：jar 内 yml 读的是 `${AI_API_BASE_URL}`（application.yml:23），
+      # 而本文件原先**未透传**该变量 → override/`.env` 里给了值也进不了容器（压测会静默打到真实付费 API）。
+      # 默认值与 yml 保持一致（真实 DeepSeek）；压测时用 docker-compose.mock-llm.yml 覆盖为内网 mock。
+      AI_API_BASE_URL: ${AI_API_BASE_URL:-https://api.deepseek.com}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
       # #32 Agent 双路径开关（默认关 = 固定流水线）。改 .env 的 AI_AGENT_ENABLED=true 后
       # `docker compose up -d mall-ai` 即启用，**不用重编译 jar**；回滚同样只需改回 false。

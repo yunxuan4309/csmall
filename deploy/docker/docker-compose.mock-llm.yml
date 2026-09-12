@@ -1,0 +1,47 @@
+# =============================================================================
+# mall-ai 的 LLM 出口临时指向**内网 mock**（TODO #67 之 ③「第二层 AI 并发压测」）
+# =============================================================================
+# 目的：压测**只测服务端承载**，不调真实付费 LLM、不消耗预算。
+#
+# 老机用法（**低峰执行**）：
+#   1) 起 mock（在**新机**，它是内网压测执行位）：
+#        cd /tmp && nohup python3 mock_llm.py --port 9999 \
+#            --prompt-tokens 0 --completion-tokens 0 > /tmp/mock_llm.log 2>&1 &
+#        # 🔴 0 token 的用意：mock 的 usage 会被 `recordUsage` 累加进 `ai:daily_cost:<日期>`，
+#        #    单价 1 元/百万(入) + 2 元/百万(出)（yml:93-94）、预算 2 元/天（yml:92）
+#        #    ⇒ 一次用户请求约 3~4 次 LLM 调用 ≈ 0.0004 元 → **约 5000 次请求就打爆 2 元**，
+#        #    而 100 并发 × 45s 一档就有 ~4500 次 —— 不处理的话第一档半就会撞**预算墙**，
+#        #    且"预算超限"与"闸门满"**共用同一句文案**（ChatServiceImpl:481）→ 事后无法分辨。
+#        #    回 0 token = 零记账、零污染、无需删全局记账 key（§2.2.6 明令 `ai:daily_cost:*` 绝不删）。
+#   2) 老机挂 override 重建 mall-ai：
+#        cd /data/csmall
+#        cp docker-compose.yml docker-compose.yml.bak-mock-$(date +%Y%m%d_%H%M)
+#        # 把本文件与仓库版 docker-compose.yml 一起传上去，然后：
+#        docker compose -f docker-compose.yml -f docker-compose.mock-llm.yml up -d mall-ai
+#   3) 🔴 **压测前必须验证**（不验就是白压）：
+#        docker inspect csmall-ai --format '{{range .Config.Env}}{{println .}}{{end}}' | grep AI_API_BASE_URL
+#        # 期望：AI_API_BASE_URL=http://172.29.193.240:9999
+#        curl -s http://172.29.193.240:9999/     # mock 健康检查：total 计数应随压测增长
+#   4) 恢复（一次 recreate，~45s）：
+#        docker compose up -d mall-ai            # 不带 -f override 即恢复真实地址
+#        docker inspect csmall-ai --format '{{range .Config.Env}}{{println .}}{{end}}' | grep AI_API_BASE_URL
+#        # 期望：回到 https://api.deepseek.com（或该变量消失，走 yml 默认值）
+#
+# ⚠️ 两条链路各压一遍 = 改下面 `AI_AGENT_ENABLED` 两次（每次都要 recreate，约 45s）
+# ⚠️ 只在**低峰**做；测完务必恢复 —— 否则生产 AI 导购会一直对着 mock 说话
+services:
+  mall-ai:
+    environment:
+      # 指向新机的 mock（内网 172.29.193.240，不限速不计费；老机可达，实测 ping 0.29ms）
+      AI_API_BASE_URL: http://172.29.193.240:9999
+      AI_API_KEY: sk-mock
+      # 链路开关：true = Agent（工具轮 + 收敛轮，双轮 LLM）；false = 固定流水线（多轮 JSON + 生成）
+      # 压测顺序：**先 false（单轮少调用）再 true（双轮）**，两组的差值就是"Agent 多付出的承载代价"
+      AI_AGENT_ENABLED: "true"
+      # ---------------------------------------------------------------------------------
+      # 备选保障（默认**不启用**）：若某条路径仍会记账（例如 mock 忘了回 0 token），
+      # 可用环境变量临时把预算调大 —— 环境变量优先级**高于** jar 内 yml 的 `daily-budget: 2.0`
+      # （Spring Boot 松散绑定：cooxiao.ai.daily-budget ← COOXIAO_AI_DAILYBUDGET）。
+      # 注意这会暂时放宽一项安全限额，且**测完必须随 override 一起移除**。
+      # COOXIAO_AI_DAILYBUDGET: "50.0"
+      # ---------------------------------------------------------------------------------

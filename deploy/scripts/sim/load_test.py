@@ -91,6 +91,42 @@ LIMIT_TARGETS = {
     },
 }
 
+# =============================================================================
+# AI 档（TODO #67 之 ③「第二层 AI 并发压测」）—— 打 `/ai/chat/stream`（SSE 长连接）
+# =============================================================================
+# 前置（缺一不可，见 [[AI并发测试方案]] §五）：
+#   ① mall-ai 的 base-url 已指向内网 mock（`AI_API_BASE_URL=http://172.29.193.240:9999`）
+#      —— compose 原本**未透传**该变量，必须先加一行（D1），否则压的是**真实付费 API**
+#   ② mock 已单独自压过（`python3 mock_llm.py --self-test` + 固定并发压 9999 拿 P50/P99）
+#   ③ `ai-chat` 的 Sentinel 阈值已临时放开（默认 5 QPS → 不放开只会量到限流器）
+#   ④ 🔴 预算已临时调大（`COOXIAO_AI_DAILYBUDGET`）：mock 的 usage 会被计入
+#      `ai:daily_cost:<日期>`，2 元/天被打满后**每个请求都返回"服务繁忙"** →
+#      量到的是预算墙，不是并发闸门（且闸门与预算**共用同一句文案**，事后无法分辨）
+AI_STREAM_PATH = "/ai/chat/stream"
+
+# 逼近真实导购的问题（首条会触发工具轮：商品/推荐意图 + tool_choice=required）
+AI_QUESTIONS = (
+    "推荐一款 3000 元以内的手机",
+    "有没有适合学生党的笔记本",
+    "这款手机和另一款比哪个更值",
+    "帮我看看蓝牙耳机有什么好推荐",
+)
+
+# 🔴 **限流不是 HTTP 429**：`AiController.chatStreamBlock` 返回 **HTTP 200 + SSE event:error**
+#    ⇒ 必须按 body 文案判类；只看 HTTP 码会把"被限流"统计成"成功"
+#    （与 §〇.2 §G5 的「鉴权失败也是 HTTP 200」同一类陷阱）
+# 🔴 `busy` 与"预算超限"**共用同一句文案**（`ChatServiceImpl:481`）⇒ 见上方前置 ④
+AI_SIGNATURES = (
+    ("blocked", "AI 服务繁忙，请稍后再试。"),           # 入口 Sentinel 限流（ai-chat QPS）
+    ("busy", "服务繁忙，请稍后再试。"),                 # 并发闸门满（AiConcurrencyGuard）/ 预算超限
+    ("degraded", "AI 服务暂时不可用，请稍后重试。"),     # 其它异常（mock 异常 / 读超时）
+    ("degraded", "很抱歉，AI 服务暂时不可用"),
+)
+
+# 合成 state 码：让 AI 档复用 `Stats.by_state`，**不污染**真实 state 语义
+AI_STATE = {"ok": 200, "blocked": BLOCKED_STATE, "busy": -20, "degraded": -30, "ratelimit": -10}
+AI_STATE_NAME = {-20: "闸门满(busy)", -30: "其它降级", -10: "每用户频控"}
+
 # 假的、但**格式合法**的管理员账号（只为让 DTO 校验通过、从而触达 @SentinelResource）
 FAKE_ADMIN_USER = os.environ.get("SIM_FAKE_ADMIN_USER", "adminfake01")
 FAKE_ADMIN_PASS = os.environ.get("SIM_FAKE_ADMIN_PASS", "Sim123456")
@@ -173,6 +209,82 @@ class Api:
         return self.call("POST", "/admin/sso/login",
                          json={"username": username, "password": password})
 
+    # --- AI 流式对话（AI 档 · /ai/chat/stream：SSE 长连接，最主要的承载瓶颈）---
+    def ai_chat_stream(self, token_header: str, message: str,
+                       session_id: Optional[str] = None,
+                       timeout: float = 60.0) -> Dict[str, Any]:
+        """打 `/ai/chat/stream` **逐片读 SSE**，按 body 判类（不看 HTTP 码 —— 见 AI_SIGNATURES）。
+
+        返回 kind ∈ {ok, blocked, busy, degraded, ratelimit, error} + elapsed/ttft/chunks/events。
+        ⚠️ `sessionId` 传空时服务端会 `loadOrCreate` 新建会话（每请求一个新会话）；
+        传上次响应里的 `event: sessionId` 才是真实用户的多轮形态（本脚本按线程复用）。
+        """
+        headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+        if token_header:
+            headers["Authorization"] = token_header
+        payload: Dict[str, Any] = {"message": message}
+        if session_id:
+            payload["sessionId"] = session_id
+        res: Dict[str, Any] = {"kind": "error", "elapsed": 0.0, "ttft": 0.0, "chunks": 0,
+                               "events": Counter(), "session_id": None, "http": None,
+                               "state": None, "msg": "", "error": None}
+        t0 = time.perf_counter()
+        try:
+            with self.session.post(self.base + AI_STREAM_PATH, headers=headers, json=payload,
+                                   stream=True, timeout=timeout) as r:
+                res["http"] = r.status_code
+                ctype = (r.headers.get("Content-Type") or "").lower()
+                if "text/event-stream" not in ctype:
+                    # 未进 SSE 就返回了：每用户频控（`AiUserRateLimiter.checkRate` 在 controller
+                    # 内**先**抛 AiBusyException）→ 走全局异常处理器 → JSON 错误体
+                    try:
+                        body = json.loads(r.text)
+                    except ValueError:
+                        body = {"_raw": (r.text or "")[:200]}
+                    res["state"] = body.get("state")
+                    res["msg"] = str(body.get("message") or body.get("_raw") or "")[:120]
+                    res["kind"] = "ratelimit" if res["state"] == BLOCKED_STATE else "error"
+                    if res["kind"] == "error":
+                        res["error"] = f"非 SSE 响应：state={res['state']} {res['msg']}"
+                    res["elapsed"] = time.perf_counter() - t0
+                    return res
+
+                event = ""
+                for raw in r.iter_lines(chunk_size=1024):
+                    if not raw:
+                        continue
+                    line = raw.decode("utf-8", "replace").strip()
+                    if line.startswith("event:"):
+                        event = line[6:].strip()
+                        res["events"][event] += 1
+                    elif line.startswith("data:"):
+                        data = line[5:].strip()
+                        if data and res["ttft"] == 0.0:
+                            res["ttft"] = time.perf_counter() - t0
+                        if event == "chunk":
+                            res["chunks"] += 1
+                        elif event == "sessionId":
+                            res["session_id"] = data
+                        elif event == "error":
+                            res["msg"] = data
+
+                if res["msg"]:
+                    res["kind"] = "degraded"
+                    for kind, sig in AI_SIGNATURES:
+                        if sig in res["msg"]:
+                            res["kind"] = kind
+                            break
+                elif res["events"].get("done"):
+                    res["kind"] = "ok"
+                else:
+                    res["error"] = "无 event:done（连接提前断开）"
+                res["elapsed"] = time.perf_counter() - t0
+                return res
+        except Exception as e:  # noqa: BLE001 —— 网络异常也计入统计，不能中断压测
+            res["error"] = f"{type(e).__name__}: {e}"
+            res["elapsed"] = time.perf_counter() - t0
+            return res
+
 
 def acquire_tokens(api: Api, n_users: int) -> List[str]:
     tokens: List[str] = []
@@ -232,6 +344,10 @@ class Stats:
         self.by_state: Counter = Counter()
         self.by_http: Counter = Counter()
         self.err: Counter = Counter()
+        # AI 档专用（#67 之 ③）：TTFT 与正文分片数 —— 其它档恒为空/0，互不影响
+        self.ttft: List[float] = []
+        self.chunks = 0
+        self.ai_why: Counter = Counter()      # 失败原因直方图（AI 档）
 
     def add(self, state: Optional[int], http: Optional[int], elapsed: float) -> None:
         with self.lock:
@@ -245,6 +361,34 @@ class Stats:
             else:
                 self.by_state[str(state)] += 1
             self.by_http[str(http)] += 1
+
+    def add_ai(self, res: Dict[str, Any]) -> None:
+        """AI 档专用：**降级（blocked/busy/degraded）是被测现象，不算 hard_fail**。
+
+        承载测试要回答"第几个并发开始降级" —— 降级是**结论**而不是故障，所以只把
+        网络异常/协议破裂记进 hard_fail（安全阈值据此中止）。
+        🔴 同时记 `ai_why`（失败原因直方图）：只报"47.5% 硬失败"无法定位（2026-09-12 实测踩到），
+        必须把 http/state/首段文案一起留下来。
+        """
+        kind = res["kind"]
+        with self.lock:
+            self.lat.append(res["elapsed"])
+            if res["ttft"]:
+                self.ttft.append(res["ttft"])
+            self.chunks += res["chunks"]
+            if kind == "ok":
+                self.ok += 1
+            elif kind == "blocked":
+                self.blocked += 1
+            elif kind == "error":
+                self.hard_fail += 1
+                self.err["stream_error"] += 1
+            else:                                   # busy / degraded / ratelimit
+                self.by_state[str(AI_STATE.get(kind, -99))] += 1
+            if kind != "ok":
+                why = (f"{kind} http={res.get('http')} state={res.get('state')} "
+                       f"{str(res.get('msg') or res.get('error') or '')[:40]}")
+                self.ai_why[why] += 1
 
     def add_error(self, kind: str) -> None:
         with self.lock:
@@ -334,6 +478,16 @@ def _run_load(label: str, concurrency: int, duration: float, stop_flag: threadin
             "p99": round(pct(series, 99) * 1000, 1),
             "max": round((series[-1] if series else 0) * 1000, 1),
         },
+        "state_names": {k: AI_STATE_NAME.get(int(k), k)
+                        for k in stats.by_state if str(k).lstrip("-").isdigit()},
+        "ai": ({                                 # #67 之 ③：仅 AI 档会填充（其它档恒为 None）
+            "ttft_p50_ms": round(pct(sorted(stats.ttft), 50) * 1000, 1) if stats.ttft else 0.0,
+            "ttft_p99_ms": round(pct(sorted(stats.ttft), 99) * 1000, 1) if stats.ttft else 0.0,
+            "chunks_total": stats.chunks,
+            "busy_gate": stats.by_state.get("-20", 0),
+            "degraded_other": stats.by_state.get("-30", 0),
+            "user_ratelimit": stats.by_state.get("-10", 0),
+        } if stats.chunks else None),
         "by_state": dict(stats.by_state),
         "by_http": dict(stats.by_http),
         "exceptions": dict(stats.err),
@@ -342,6 +496,8 @@ def _run_load(label: str, concurrency: int, duration: float, stop_flag: threadin
     ok_pct = round(ok / done * 100, 2) if done else 0.0
     log(f"■ {label} {concurrency} 并发结束：RPS={result['rps']}  成功={ok_pct}%  "
         f"被限流={blocked}（{result['blocked_pct']}%）  p50={lm['p50']}ms  p99={lm['p99']}ms")
+    if stats.ai_why:
+        log(f"   AI 失败原因直方图：{dict(stats.ai_why)}")
     if result["by_state"]:
         log(f"   非成功/非限流的 state 分布：{result['by_state']}")
     if result["exceptions"]:
@@ -384,6 +540,31 @@ def step_limit(api: Api, target: str, concurrency: int, duration: float,
                      abort_on_hard_only=True, abort_pct=5.0)
 
 
+def step_ai(api: Api, concurrency: int, duration: float, tokens: List[str], think: float,
+            stop_flag: threading.Event, link: str) -> Dict[str, Any]:
+    """AI 档：压 `/ai/chat/stream`（SSE 长连接）。
+
+    与浏览档的**根本区别**：这里的"降级"（入口限流 / 闸门满 / 其它降级）**是被测指标本身**，
+    不是故障 —— 所以安全阈值只看 hard_fail（网络/协议），降级照单收下并分类计数。
+    `link` 只用于标签：`agent`（AI_AGENT_ENABLED=true，工具轮+收敛轮双轮）
+    vs `pipeline`（false，固定流水线多轮）。**两条链路各压一遍**才能拿到"双轮多付出的承载代价"。
+    """
+    tl = threading.local()          # 每线程复用自己的会话（真实用户是多轮，不是每问新建会话）
+
+    def hit(s: Stats, rnd: random.Random, wid: int) -> None:
+        tok = tokens[(wid + rnd.randint(0, len(tokens) - 1)) % len(tokens)]
+        r = api.ai_chat_stream(tok, AI_QUESTIONS[rnd.randrange(len(AI_QUESTIONS))],
+                               getattr(tl, "session", None))
+        if r["session_id"]:
+            tl.session = r["session_id"]
+        s.add_ai(r)
+        if think > 0:
+            time.sleep(rnd.uniform(0, think))
+
+    return _run_load(f"AI 档 {link}", concurrency, duration, stop_flag, hit,
+                     abort_on_hard_only=True, abort_pct=5.0)
+
+
 # =============================================================================
 # 自检（--check）
 # =============================================================================
@@ -419,6 +600,38 @@ def do_check(api: Api, n_users: int, mode: str, target: str) -> bool:
             g = state in (200, 20000)
             ok_all = ok_all and g
             log(f"{n}) {name} → HTTP {http} · state={state} · {el * 1000:.0f}ms · {'✅' if g else '🔴'}")
+    elif mode == "ai":
+        log(f"3) AI 档自检：连打 3 发 {AI_STREAM_PATH}（**逐片读 SSE、按 body 判类**）")
+        sid: Optional[str] = None
+        kinds: Counter = Counter()
+        for i in range(1, 4):
+            r = api.ai_chat_stream(tokens[i % len(tokens)],
+                                   AI_QUESTIONS[i % len(AI_QUESTIONS)], sid)
+            if r["session_id"]:
+                sid = r["session_id"]
+            kinds[r["kind"]] += 1
+            log(f"   #{i} kind={r['kind']} · http={r['http']} · {r['elapsed'] * 1000:.0f}ms"
+                f" · ttft={r['ttft'] * 1000:.0f}ms · 正文分片={r['chunks']}"
+                f" · 事件={dict(r['events'])}"
+                + (f" · msg={r['msg'][:40]}" if r["msg"] else "")
+                + (f" · err={r['error']}" if r["error"] else ""))
+        # 🔴 判据要严：必须**三发全 ok 且零异常**（"有 ok 就算过" 会把偶发 500 放过去 ——
+        #    2026-09-12 实测就是这样漏掉了一个 mock 侧 chunked 请求体 bug）
+        bad_kinds = {k: v for k, v in kinds.items() if k != "ok"}
+        ok_all = ok_all and kinds.get("ok", 0) == 3 and not bad_kinds
+        if kinds.get("ok", 0) == 0:
+            log("   🔴 三发都没有 ok → 依次查：① 容器内 base-url 是否已指向 mock（D1：compose 必须先加"
+                " `AI_API_BASE_URL` 透传）② mock 起了吗（`curl http://172.29.193.240:9999/`）"
+                " ③ 是否被限流/预算先拦住")
+        elif bad_kinds:
+            log(f"   🔴 有非 ok 结果 {bad_kinds} → **不要上阶梯**，先查 mall-ai 日志里的异常"
+                f"（`docker logs csmall-ai --since 10m | grep -A20 Exception`）")
+        if kinds.get("busy", 0) or kinds.get("blocked", 0) or kinds.get("ratelimit", 0):
+            log("   ⚠️ 一上来就出现降级/限流 → 压测前必须先放开 `ai-chat` 阈值与 `COOXIAO_AI_DAILYBUDGET`"
+                "（§五 前置 ③④），否则量到的是限流器/预算墙，**不是并发闸门**")
+        else:
+            log("   ✅ 三发全 ok、无降级 → 前置已就绪，可以上阶梯")
+        log(f"   分类统计：{dict(kinds)}")
     else:
         cfg = LIMIT_TARGETS[target]
         log(f"3) 限流档靶子：resource=**{cfg['resource']}** 规则 QPS={cfg['rule_qps']}（{cfg['who']}）")
@@ -460,8 +673,12 @@ def do_check(api: Api, n_users: int, mode: str, target: str) -> bool:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="CoolShark #48 可观测展示压测脚本（浏览 pass / 限流 block 两档）")
-    ap.add_argument("--mode", choices=("browse", "limit"), default="browse",
-                    help="browse=只读浏览（pass 曲线）；limit=打有流控规则的接口（block 曲线）")
+    ap.add_argument("--mode", choices=("browse", "limit", "ai"), default="browse",
+                    help="browse=只读浏览（pass 曲线）；limit=打有流控规则的接口（block 曲线）；"
+                         "ai=压 /ai/chat/stream（SSE 长连接，量'第几个并发开始降级'，#67 之 ③）")
+    ap.add_argument("--link", choices=("agent", "pipeline"), default="agent",
+                    help="ai 档标签：agent=AI_AGENT_ENABLED=true（工具轮+收敛轮双轮）；"
+                         "pipeline=false（固定流水线）。⚠️ 只影响标签，切链路要改容器环境变量")
     ap.add_argument("--target", choices=tuple(LIMIT_TARGETS), default="adminlogin",
                     help="limit 档的靶子（默认 adminlogin：能真正压出 block 且零业务数据）")
     ap.add_argument("--steps", default="20,50,100", help="并发阶梯（browse 默认 20,50,100）")
@@ -491,6 +708,9 @@ def main() -> None:
     log("=" * 78)
     if args.mode == "browse":
         log(f"CoolShark #48 压测 · **浏览档（pass 曲线）** · 只读 · base={args.base}")
+    elif args.mode == "ai":
+        log(f"CoolShark #67-③ 压测 · **AI 档（SSE 承载）** · 链路={args.link} · base={args.base}")
+        log("   ⚠️ `blocked`(入口 Sentinel 限流) 与 `busy`(并发闸门满) **是两件事，不能混着讲**")
     else:
         log(f"CoolShark #48 压测 · **限流档（block 曲线）** · 靶子={args.target}"
             f"（resource={cfg.get('resource')} · 规则 QPS={cfg.get('rule_qps')}）")
@@ -510,7 +730,26 @@ def main() -> None:
         sys.exit("🔴 没有可用 token → 先跑 `python3 simulate_data.py --preflight` 确认造数已建用户")
 
     stop_flag = threading.Event()
-    if args.mode == "browse":
+    if args.mode == "ai":
+        log(f"AI 档：{len(tokens)} 个用户 token × {AI_STREAM_PATH}")
+        log("   🔴 每用户频控 10 次/60s（AiUserRateLimiter）⇒ token 数**必须 ≥ 阶梯峰值**，"
+            "否则量到的是频控（state=-10）不是承载")
+        if len(tokens) < max(steps):
+            log(f"   ⚠️ token {len(tokens)} < 最大并发 {max(steps)} → 同用户在 60s 内会超 10 次，"
+                f"结果会掺入频控；建议 `--users` ≥ {max(steps)}（造数用独立前缀建用户池）")
+        # 🔴 频控决定"可持续 RPS 天花板"，而不是 token 数 vs 并发数 —— 量纲要算对：
+        #    每用户 10 次/60s（AiUserRateLimiter）⇒ 上限 RPS = N × 10 / 60
+        #    超过它的那部分请求会变成 `频控`(state=-10)，**不是**承载结论
+        cap_rps = len(tokens) * 10 / 60.0
+        log(f"   📐 频控可持续 RPS 上限 = {len(tokens)} 用户 × 10/60s ≈ **{cap_rps:.0f} req/s**"
+            f"（实际 RPS 超过它 → 多出来的会记成 `频控`，见汇总表）")
+        if cap_rps < 60:
+            log(f"   ⚠️ 上限仅 {cap_rps:.0f} req/s，偏低 → 建议 `--users` ≥ 600"
+                f"（AI 专用用户池，用独立前缀建，别动演示数据批次）")
+
+        def one(c: int, d: float) -> Dict[str, Any]:
+            return step_ai(api, c, d, tokens, args.think, stop_flag, args.link)
+    elif args.mode == "browse":
         spu_ids = discover_spu_ids(api, tokens[0])
         if not spu_ids:
             sys.exit("🔴 没发现任何真实 SPU id → 商品数据异常，先跑 `--check`")
@@ -536,8 +775,13 @@ def main() -> None:
             return step_limit(api, args.target, c, d, targets, stop_flag)
 
     if args.warmup > 0:
-        log(f"预热 {args.warmup:.0f}s（结果不计入统计）…")
+        # 🔴 预热用**独立** stop_flag：预热阶段触发安全阈值**不应**杀掉正式阶梯
+        #    （2026-09-12 实测踩到：预热 20 并发就被 47.5% 硬失败中止 → 正式阶梯一步没跑）
+        real_stop = stop_flag
+        stop_flag = threading.Event()
+        log(f"预热 {args.warmup:.0f}s（结果不计入统计；预热的中止不影响正式阶梯）…")
         one(max(2, min(steps)), args.warmup)
+        stop_flag = real_stop
         time.sleep(1)
 
     results: List[Dict[str, Any]] = []
@@ -569,6 +813,21 @@ def main() -> None:
         log(f"🎯 限流档要点：**被限流合计 {tot_blocked} 次** —— 这就是 Sentinel 的 block 曲线来源")
         if tot_blocked == 0:
             log("   ⚠️ 一次都没被限流 → RPS 没超过规则阈值，或该靶子被其它闸门（如 @Idempotent）先拦住了")
+    elif args.mode == "ai":
+        log(f"🎯 AI 档要点（链路 {args.link}）：**降级是结论、不是故障** —— 看'从第几档开始降级'")
+        for r in results:
+            ai = r.get("ai") or {}
+            log(f"   {r['concurrency']:>4} 并发：成功 {r['ok']:>6} · 入口限流 {r['blocked']:>6}"
+                f" · **闸门满 {ai.get('busy_gate', 0):>6}** · 其它降级 {ai.get('degraded_other', 0):>5}"
+                f" · 频控 {ai.get('user_ratelimit', 0):>4} · 硬失败 {r['hard_fail']:>4}"
+                f" | TTFT p50 {ai.get('ttft_p50_ms', 0):>7}ms p99 {ai.get('ttft_p99_ms', 0):>7}ms")
+        busy = sum((r.get("ai") or {}).get("busy_gate", 0) for r in results)
+        blk = sum(r["blocked"] for r in results)
+        log(f"   合计：入口限流 {blk} 次 · **闸门满 {busy} 次**（闸门 = `concurrent-max: 20`，全局单一 Semaphore）")
+        if busy == 0 and blk == 0:
+            log("   ⚠️ 全程 0 降级 → 并发还没顶到闸门，**或请求被别的墙挡住了**（先看硬失败与频控列）")
+        log("   🔴 判据：`blocked`=入口 Sentinel（§前置换开的那道）；`busy`=闸门满。"
+            "**入口限流也是 HTTP 200 + SSE error，不是 429**")
     else:
         log("🎬 录像收尾（§6.4 ④）：停压 → 录曲线回落 → 打开 SkyWalking Trace 看那一批请求的真实链路")
     log("=" * 78)
@@ -577,10 +836,12 @@ def main() -> None:
         payload = {
             "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
             "mode": args.mode, "target": args.target if args.mode == "limit" else None,
+            "link": args.link if args.mode == "ai" else None,
             "base": args.base, "steps": steps, "duration_per_step": args.duration,
             "users": len(tokens), "think": args.think,
             "results": results, "total_seconds": round(total_s, 1),
-            "note": "browse=只读浏览(需 token)；limit 默认 adminlogin=打有流控规则的接口看 block",
+            "note": "browse=只读浏览(需 token)；limit 默认 adminlogin=打有流控规则的接口看 block；"
+                    "ai=压 /ai/chat/stream 量并发降级点（blocked=入口限流 / busy=闸门满，两者不同）",
         }
         with open(args.json, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
