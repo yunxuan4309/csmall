@@ -321,10 +321,18 @@ def backfill(conn, batch: str) -> Dict[str, int]:
 def verify_backfill(conn, batch: str) -> List[str]:
     """回填校验（**方案的可行性边界之一：回填必须真的发生**）。
 
-    逐表比对"**应该标的行数**"与"**实际标了的行数**"，不一致即报（返回问题列表）：
+    逐表比对"**本批应标的行数**"与"**本批实际标了的行数**"，不一致即报（返回问题列表）：
       · 按主键回填的表：应标 = 登记条数（1:1）
-      · 按 user_id 回填的表：应标 = **属于模拟用户的行数**（可能一单多行，故不能拿登记条数比）
-    另外反向查"**误标**"：标了 SIM 却不属于任何模拟用户/主键 → 说明口径错了。
+      · 按 user_id 回填的表：应标 = **属于本批模拟用户的行数**（可能一单多行，故不能拿登记条数比）
+      · 子表按父订单：应标 = **本批订单下的子行数**（G7 的校验盲点修复）
+
+    🔴 **G11 修正（2026-09-12 正式造数实测）—— 多批次共存必误报**：
+      原实现把"实标行数"取成**全局** `data_source='SIM'` 计数，再与"本批应标"比 —— 库里一旦
+      并存 ≥2 个批次（本次实测：旧演示 20 用户 + AI 压测池 800 + 本批 125 = **945**），
+      **每张表都会报"标识数不符 / 误标"**：那一跑共报 **11 条，逐条都能用别的批次解释**，
+      而**真漏标是 0**（经独立按批次复核确认）。⇒ 现一律**按批次圈定范围**再计数
+      （主键表 `key IN 本批登记 pk` / user 表 `user_id IN 本批 user_ref` / 子表 `key IN 本批订单 id`），
+      跨批次的行只作 `ℹ️` **提示**、不再算问题。
     """
     with conn.cursor() as cur:
         cur.execute("SELECT db_name, table_name, pk_value, user_ref FROM cs_mall_sim.sim_entity "
@@ -341,11 +349,34 @@ def verify_backfill(conn, batch: str) -> List[str]:
 
         problems: List[str] = []
 
-        def _sim_count(db_name: str, table: str) -> int:
-            return _count_where(cur, f"{db_name}.{table}", "data_source=%s", (DATA_SOURCE_SIM,))
+        def _count_scoped(db_name: str, table: str, key_col: str,
+                          values: Sequence[Any], sim_only: bool) -> int:
+            """**本批范围内**（`key_col IN 本批登记值`）的计数；`sim_only=True` 只数已标 SIM 的。"""
+            n = 0
+            for part in _chunks(values):
+                ph = ",".join(["%s"] * len(part))
+                where = f"{key_col} IN ({ph})"
+                params: Tuple[Any, ...] = tuple(part)
+                if sim_only:
+                    where += " AND data_source=%s"
+                    # 🔴 顺序即语义：SQL 里 `IN (...)` 在前、`data_source=%s` 在后
+                    params = (*part, DATA_SOURCE_SIM)
+                n += _count_where(cur, f"{db_name}.{table}", where, params)
+            return n
 
-        # ① 按主键回填：登记 n 条 → 必须恰好标 n 行
-        for db_name, table, _key in BACKFILL_BY_PK:
+        def _report(full: str, label: str, should: int, got: int, extra: str = "") -> None:
+            if got < should:
+                problems.append(f"{full} 漏标：{label} {should} 行，只标了 {got} 行{extra}")
+            elif got > should:
+                problems.append(f"{full} 误标：本批范围内标了 {got} 行，但{label}只有 {should} 行{extra}")
+            else:
+                log(f"   ✅ {full:38s} {label} {should:5d} → 已标 {got:5d}")
+
+        # ① 按主键回填：本批**现存**行必须全部被标记
+        #    ⚠️ 不能拿"登记条数"当应标数：登记后行可能被**业务正常删除**（2026-09-12 实测：
+        #    下单会清掉该 SKU 的购物车行 → 139 条登记 / 136 条现存）→ 那 3 条按 pk 删不到
+        #    = 无残留，**不算漏标**；只作 ℹ️ 提示，免得把"业务删除"误判成"回填没做"。
+        for db_name, table, key_col in BACKFILL_BY_PK:
             values = by_pk.get((db_name, table))
             if not values:
                 continue
@@ -353,30 +384,23 @@ def verify_backfill(conn, batch: str) -> List[str]:
             if not has_column(conn, db_name, table, "data_source"):
                 problems.append(f"{full} 缺 data_source 列 → 迁移没执行？")
                 continue
-            got = _sim_count(db_name, table)
-            if got != len(values):
-                problems.append(f"{full} 标识数不符：登记 {len(values)} 行，实标 {got} 行")
-            else:
-                log(f"   ✅ {full:38s} 登记 {len(values):5d} → 已标 {got:5d}")
+            exists = _count_scoped(db_name, table, key_col, values, False)
+            if exists != len(values):
+                log(f"   ℹ️ {full:38s} 登记 {len(values):5d} / 现存 {exists:5d}"
+                    f"（{len(values) - exists} 行已被业务删除 → 清理按 pk 删不到 = 无残留）")
+            _report(full, "本批现存", exists,
+                    _count_scoped(db_name, table, key_col, values, True))
 
-        # ② 按 user_id 回填：属于模拟用户的行**应全部**被标记
+        # ② 按 user_id 回填：属于本批模拟用户的行**应全部**被标记
         if user_ids:
             for db_name, table in BACKFILL_BY_USER:
                 full = f"{db_name}.{table}"
                 if not has_column(conn, db_name, table, "data_source"):
                     problems.append(f"{full} 缺 data_source 列 → 迁移没执行？")
                     continue
-                should = 0
-                for part in _chunks(user_ids):
-                    ph = ",".join(["%s"] * len(part))
-                    should += _count_where(cur, full, f"user_id IN ({ph})", part)
-                got = _sim_count(db_name, table)
-                if got < should:
-                    problems.append(f"{full} 漏标：属于模拟用户 {should} 行，只标了 {got} 行")
-                elif got > should:
-                    problems.append(f"{full} 误标：标了 {got} 行，但只有 {should} 行属于模拟用户")
-                else:
-                    log(f"   ✅ {full:38s} 模拟用户 {should:5d} 行 → 已标 {got:5d}")
+                _report(full, "本批用户",
+                        _count_scoped(db_name, table, "user_id", user_ids, False),
+                        _count_scoped(db_name, table, "user_id", user_ids, True))
 
         # ③ 子表按父订单：属于本批订单的所有子行都应被标记
         #    （G7 的校验盲点修复：以前只校验"登记表里出现过的表"，
@@ -388,31 +412,30 @@ def verify_backfill(conn, batch: str) -> List[str]:
                 if not has_column(conn, db_name, table, "data_source"):
                     problems.append(f"{full} 缺 data_source 列 → 迁移没执行？")
                     continue
-                should = 0
-                for part in _chunks(order_ids):
-                    ph = ",".join(["%s"] * len(part))
-                    should += _count_where(cur, full, f"{key_col} IN ({ph})", part)
-                got = _sim_count(db_name, table)
-                if got < should:
-                    problems.append(f"{full} 漏标：属于本批订单 {should} 行，只标了 {got} 行")
-                elif got > should:
-                    problems.append(f"{full} 误标：标了 {got} 行，但只有 {should} 行属于本批订单")
-                else:
-                    log(f"   ✅ {full:38s} 本批订单下 {should:5d} 行 → 已标 {got:5d}")
+                _report(full, "本批订单下",
+                        _count_scoped(db_name, table, key_col, order_ids, False),
+                        _count_scoped(db_name, table, key_col, order_ids, True),
+                        extra="（按父订单兜底）")
 
-        # ④ 反向总检：标了 SIM 但**不属于本批次主键**的行（跨批次/历史残留的粗筛）
+        # ④ ℹ️ 跨批次提示（**不再算问题**）：库里标了 SIM 但不属于本批的行 → 属于**别的批次**
+        #    口径：全局已标 SIM 数 − 本批范围内已标数（**不能用分块 NOT IN**，那会把同一条行重复计）
+        hints: List[str] = []
         for db_name, table, key_col in BACKFILL_BY_PK:
             values = by_pk.get((db_name, table))
             if not values:
                 continue
-            n = 0
-            for part in _chunks(values):
-                ph = ",".join(["%s"] * len(part))
-                n += _count_where(cur, f"{db_name}.{table}",
-                                  f"data_source=%s AND {key_col} NOT IN ({ph})",
-                                  (DATA_SOURCE_SIM, *part))
-            if n:
-                problems.append(f"{db_name}.{table} 有 {n} 行标了 SIM 但不属于本批次（别的批次？）")
+            other = (_count_where(cur, f"{db_name}.{table}", "data_source=%s", (DATA_SOURCE_SIM,))
+                     - _count_scoped(db_name, table, key_col, values, True))
+            if other > 0:
+                hints.append(f"{db_name}.{table} +{other}")
+        if user_ids:
+            for db_name, table in BACKFILL_BY_USER:
+                other = (_count_where(cur, f"{db_name}.{table}", "data_source=%s", (DATA_SOURCE_SIM,))
+                         - _count_scoped(db_name, table, "user_id", user_ids, True))
+                if other > 0:
+                    hints.append(f"{db_name}.{table} +{other}")
+        if hints:
+            log(f"   ℹ️ 另有已标 SIM 的行属于**别的批次**（不是本批问题）：{', '.join(hints)}")
 
     return problems
 
@@ -1291,6 +1314,8 @@ def main() -> None:
     ap.add_argument("--clean", action="store_true", help="清理模式（默认 dry-run）")
     ap.add_argument("--batch", help="清理指定批次号")
     ap.add_argument("--apply", action="store_true", help="清理时真正执行 DELETE（默认只统计）")
+    ap.add_argument("--verify", action="store_true",
+                    help="只校验指定批次的回填结果（需 --batch）：按批次口径，不造数、不写库；有问题退出码 1")
     ap.add_argument("--base", default=BASE, help=f"网关地址（默认 {BASE}）")
     args = ap.parse_args()
 
@@ -1304,6 +1329,18 @@ def main() -> None:
             if not args.batch:
                 sys.exit("--clean 必须带 --batch sim_YYYYMMDD_HHMM")
             clean(conn, args.batch, args.apply)
+            return
+
+        if args.verify:
+            if not args.batch:
+                sys.exit("--verify 必须带 --batch sim_YYYYMMDD_HHMM")
+            problems = verify_backfill(conn, args.batch)
+            if problems:
+                log(f"⚠️ 批次 {args.batch} 回填校验未通过（{len(problems)} 条）：")
+                for p in problems:
+                    log(f"   - {p}")
+                sys.exit(1)
+            log(f"✅ 批次 {args.batch} 回填校验通过：登记 ⇄ data_source 标识 一致（按批次口径）")
             return
 
         catalog = preflight(conn, args.days, args.per_day, args.with_seckill, args.users)
