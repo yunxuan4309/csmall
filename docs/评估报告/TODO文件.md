@@ -13,18 +13,18 @@
 
 | 顺位 | 编号 | 事项 | 我已完成的部分 | 你要做的动作 | 预计 |
 |---|---|---|---|---|---|
-| **1** | **#55** | SSH 暴露面：允许密码登录 + 允许 root 登录，22 对 `0.0.0.0/0` | ✅ 可执行操作单（含顺序纪律 + 回滚）见 §55 | 用 `ecs-user` **sudo** 执行：先验密钥 → 备份 → 改配置 → **`sshd -t`** → `systemctl reload sshd` | **5 分钟** |
+| ~~1~~ | ~~**#55**~~ | ✅ **已收口（2026-09-12 · 无需动作）**：**root 账号本就是锁定的**（无密码可爆破）· `ecs-user` 保留密码登录属**接受项**（实测 247 次/6 天 爆破噪音，密码强 + 学习用途）· 副产品：**密钥登录已打通** | — | **无** | — |
 | **2** | **#65** | 普通订单**库存扣减 MQ 链路整条失效**（`stock` 永不减少 + 下单无库存校验） | ✅ 修复 + 回归测试 **3/3 绿**（见 §65） | 重建 `mall-order` → `docker compose up -d mall-order`（**先确认 `order_queue`/`order_queue_dlx` 0 积压**） | 30~60 分钟 |
 | **3** | **#54** | RabbitMQ 仍是 `guest/guest`（同 VPC 任何实例可拿 administrator） | ✅ compose 已补 `SPRING_RABBITMQ_*` + 两步操作单（见 §54） | 同步 compose → 建新用户 → 切服务 → **最后**删 `guest` | 15 分钟（两步） |
 | **4** | **#31** | 生产开启**向量检索**（RAG 真实运行，简历亮点） | ✅ 可行性评估完成：**三项前置实测通过**，且改为 env 覆盖**免重建**（见 §31） | **拍板开/不开**；开 = 改 `.env` + `recreate mall-ai` + 回归几条搜索 | 30 分钟 |
 | **5** | **#61** | 外部端到端探活（防"全 Up、health 200，业务却挂 24h"） | ✅ 脚本 `deploy/scripts/ops/e2e_probe.py` **真机验证 9/9 PASS**（见 §61） | 脚本放新机 + 挂 cron（§61 有现成 cron 行） | 10 分钟 |
 | **6** | **#67①** | 演示**录像** | ✅ [[演示录像操作手册]] 就绪（②~⑥ 已全部完成） | 按手册录 —— ⚠️ **建议先做完 #65 再录**（否则演示里库存/销量不动） | 1~2 小时 |
 
-> ⚠️ **推荐顺序：#55 → #65 → #54 → #31 → #61 → 录像**。
-> 理由：**#55** 最快且是安全窟窿 · **#65** 让"下单后库存/销量变化"这个演示卖点**真正成立** · **#31** 会**改变搜索排序**，必须在**录像定稿前**决定 · #54/#61 是成本小、收益稳的收尾。
+> ⚠️ **推荐顺序：#65 → #54 → #31 → #61 → 录像**（**#55 已于 2026-09-12 收口为"已评估·接受"，无需动作**）。
+> 理由：**#65** 让"下单后库存/销量变化"这个演示卖点**真正成立** · **#31** 会**改变搜索排序**，必须在**录像定稿前**决定 · #54/#61 是成本小、收益稳的收尾。
 
 ### ✅ 本次已关闭（2026-09-12，正文仍留在第六节）
-**#57**（Schema 漂移只读核实 → **0 处需要 ALTER**；两处"疑似坑"追到根因是 `database/` 快照滞后）· **#62**（`/ai/chat/stream` 并发 50% 500）· **#64**（预热 Job 查错 SKU）· **#66**（Sentinel 面板上报）· **#68**（造数前快照 → `--require-dump` 闸门）· **#69**（秒杀销量写错商品）· **#67 ②~⑥**。
+**#57**（Schema 漂移只读核实 → **0 处需要 ALTER**；两处"疑似坑"追到根因是 `database/` 快照滞后）· **#62**（`/ai/chat/stream` 并发 50% 500）· **#64**（预热 Job 查错 SKU）· **#66**（Sentinel 面板上报）· **#68**（造数前快照 → `--require-dump` 闸门）· **#69**（秒杀销量写错商品）· **#67 ②~⑥** · **#55**（SSH 暴露面 → ✅ **已评估·接受**：root **本就是锁定账号**、`ecs-user` 保留密码登录；副产品**密钥登录已打通**）。
 
 ---
 
@@ -61,7 +61,7 @@
 | **#51** | **容器 restart 策略改 `unless-stopped`**（实测 `on-failure` **不扛 daemon 重启** → 老机 20/21、新机 5/5 不恢复） | 🔴 P2 | §51 |
 | **#53** | **网关重试 / 优雅下线兜底**（③ 优雅下线已实现；①②④ 需重启网关窗口） | 🔴 P2（部分） | §53 |
 | **#54** | **RabbitMQ 凭据仍是 `guest/guest`**（服务侧变量名写错：应 `SPRING_RABBITMQ_*`） | 🔴 P2 | §54 |
-| **#55** | **SSH 允许密码 + 允许 root 登录（两台）** → 公网可爆破 | 🔴 **P1** | §55 |
+| **#55** | SSH 暴露面 → ✅ **已评估·接受（2026-09-12 实测）**：**root 本就是锁定账号**（`passwd -S root` = `L`、shadow = `*` ⇒ 无密码可爆破）；`ecs-user` 保留密码登录（实测 `Failed password` **247 次 / 6 天**，密码强 + 学习用途 ⇒ 接受）；副产品：**密钥登录已打通** | ✅ 已评估·接受 | §55 |
 | **#56** | 公开仓库暴露 IP/拓扑/弱凭据事实 | 🟡 P3（**已决定接受**） | §56 |
 | **#57** | ✅ **只读核实完成（2026-09-12）**：**14 处差异全部是"服务器比快照新"**（9 张表的 `data_source` / `oms_order.order_type` / 4 处 `gmt_modified` / `ams_permission.value` / `seckill_message_retry` 整表）⇒ **0 处需要 ALTER** | ✅ 已完成 | §57 |
 | **#65** | **普通订单库存扣减 MQ 链路整体失效** → `pms_sku.stock` 永不减少、下单无库存校验 | ✅ **已修复（代码+回归测试全绿，2026-09-12）· 待你部署 mall-order** | §65 |
@@ -182,11 +182,21 @@ docker exec csmall-rabbitmq rabbitmqctl delete_user guest
 📌 **另外两个可选收尾**：① `loopback_users.guest = true`（**2026-09-12 实测当前 `loopback_users=[]`** ⇒ guest **可远程登录**，这正是风险来源）；② 5672/15672 只绑私网（当前监听 `0.0.0.0`，公网靠安全组挡）。 
 
 
-### 55. SSH 暴露面：允许密码登录 + 允许 root 登录（两台）
+### 55. SSH 暴露面 → ✅ **已评估·接受并收口（2026-09-12）**
 
- 🔴 **P1（2026-09-09 推送前安全审查发现）**：两台 `sshd_config` 均为 `PermitRootLogin yes` + `PasswordAuthentication yes`（无 drop-in 覆盖），而安全组 **22 端口对 `0.0.0.0/0` 开放** → 公网可**直接暴力破解**（阿里云 ECS 是扫描最密集的目标之一）。**方案**：① `PasswordAuthentication no`（`ecs-user` / `ai-*` 均已配置密钥登录，不影响使用）；② `PermitRootLogin prohibit-password`；③ 可选：安全组把 22 收紧到固定来源 IP。**⚠️ 操作顺序**：先确认密钥登录可用（`ssh -i <key> ecs-user@<ip>`）→ `sshd -t` 校验语法 → `systemctl reload sshd`（**reload 不断开现有连接**，比 restart 安全）。
+> ✅ **2026-09-12 实测复核与收口决策（本节以此为准）**
+> - **root 部分：风险不存在。** 两台实测 `sudo passwd -S root` = **`root L`**、`/etc/shadow` 第二字段 = **`*`** ⇒ **root 账号被锁定、没有可用密码**（阿里云创建实例时只给了 `ecs-user` 密码）。因此 `PermitRootLogin yes` 是**一扇没有锁的门**，原结论"公网可**直接暴力破解**"对 root **不成立** —— 我此前**照抄旧结论、没先验证严重度**，此处更正。
+> - **`ecs-user` 部分：确实有爆破噪音，已量化。** 老机 `/var/log/auth.log`（**2026-09-06 起，约 6 天**）：**`Failed password` 247 次**（≈40/天）+ **`Invalid user` 80 次**；这**不含我方探测**（我方的探测在日志里是 `Connection reset ... [preauth]`，另一种形态）。
+> - **决策（用户 2026-09-12）**：**接受现状**（密码强度高 + 学习用途服务器）⇒ **本条关闭为「已评估·接受」**。
+> - **副产品（有实际收益）**：`csmall_ecs_key` 的公钥已装入**两台** `ecs-user` 的 `authorized_keys`（指纹 `SHA256:UCv9+VStmzsFj52cguuGj+Dsr50dsat3XqOapwY1eqY`，与本地私钥一致；落地证据 `/tmp/keyauth-evidence-OLD.txt` / `-NEW.txt`）⇒ **今后可用密钥免密登录**（本为"关密码登录"做准备，虽最终没关，密钥通道留下了）。
+> - **当前文件状态**：老机 `PermitRootLogin` 已改为 `prohibit-password`（L42/L134，**无害保留**，属纵深防御）；新机**未改**（root 已锁定，无必要）。`PasswordAuthentication` **两台都保持 `yes`**。
+> - **遗留物**：`/etc/ssh/sshd_config.bak-2026-09-12`、`bak2-2026-09-12`（留作记录，可随时删）。
+> - **若将来要收紧**（两条路，现在都不必做）：① 关 `PasswordAuthentication`（**密钥已可用 ✅**）；② 安全组把 22 收紧到固定来源 IP（更彻底，但换网络会连不上）。
+> - ⚠️ **两条判据教训（下次别重犯）**：① **Ubuntu 24.04 单元名是 `ssh` 不是 `sshd`**，且是 **socket 激活** —— 改端口 / `Match` 需 `systemctl daemon-reload` + `systemctl restart ssh.socket`（[Ubuntu bug 2069041 官方回复](https://lists.ubuntu.com/archives/foundations-bugs/2024-June/517043.html)）；generator 处理不当会让 sshd 以默认配置运行（[bug 2076023](https://lists.ubuntu.com/archives/foundations-bugs/2024-August/520089.html)）。② **验证"某指令是否生效"只能用 `sshd -T -C user=…,host=…,addr=…`（或真去试一次）**；"客户端看到的认证方式列表"**只反映 `PasswordAuthentication`，对 `PermitRootLogin` 不敏感**（我就误判在这上面）；"sshd PID 是否变化"也**无效**（sshd 是 `execve` 重执行、PID 不变）。
 
-**✅ 可执行操作单（2026-09-12 补 · 需 `ecs-user` / sudo，AI 账号无权限）**：
+ 🔴 **P1（2026-09-09 原始评估 · 严重度已更正 · 仅留档）**：两台 `sshd_config` 均为 `PermitRootLogin yes` + `PasswordAuthentication yes`（无 drop-in 覆盖），而安全组 **22 端口对 `0.0.0.0/0` 开放** → 公网可**直接暴力破解**（阿里云 ECS 是扫描最密集的目标之一）。**方案**：① `PasswordAuthentication no`（`ecs-user` / `ai-*` 均已配置密钥登录，不影响使用）；② `PermitRootLogin prohibit-password`；③ 可选：安全组把 22 收紧到固定来源 IP。**⚠️ 操作顺序**：先确认密钥登录可用（`ssh -i <key> ecs-user@<ip>`）→ `sshd -t` 校验语法 → `systemctl reload sshd`（**reload 不断开现有连接**，比 restart 安全）。
+
+**⛔ 以下操作单已作废（2026-09-12 收口）· 仅留档**：其中 `systemctl reload sshd` 的**单元名是错的**（Ubuntu 是 `ssh`），尖括号占位符也**不可直接粘贴**；正确做法与权威判据见上方"实测复核与收口决策"。
 
 ```bash
 # 0) 先确认“密钥登录”可用（另开一个窗口验证，别关当前会话！）
