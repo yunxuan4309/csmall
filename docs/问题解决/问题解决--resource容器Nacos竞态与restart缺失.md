@@ -56,6 +56,7 @@ Caused by: com.alibaba.nacos.api.exception.NacosException: Client not connected,
 ### 2.5 发现 restart 缺失（关键）
 
 - 服务器 compose 中 22 个服务**只有 5 个**（product/front/order/search/seckill）配置了 `restart: on-failure`
+  > ⚠️ **2026-09-12**：这是 **2026-08-03 快照** —— 现仓库 compose 已是**两机合并的 26 服务**单一文件，老机侧为 14 no + 6 on-failure（见 [[问题解决--容器构建与编排卫生]]）。另外本文 L67「resource 是唯一漏配」与 L59「等 6 个」**互相矛盾**（同一快照两个口径）⇒ **待人工核对取证后统一**。
 - **mall-resource 等 6 个应用服务没有 restart** → 崩溃后 Docker 一次都不重试（`RestartCount=0`），服务永久下线
 
 ## 三、根因分析
@@ -84,7 +85,8 @@ cd /data/csmall && docker compose config --quiet && docker compose up -d mall-re
 # 4. 验证
 docker ps --filter name=csmall-resource                       # Up
 docker inspect csmall-resource --format "{{.HostConfig.RestartPolicy.Name}}"   # unless-stopped
-curl -s http://localhost:9060/actuator/health                 # {"status":"UP"}
+curl -s http://localhost:9060/actuator/health
+# ⚠️ 2026-09-12 更正：微服务的 /actuator/health 被自身 SSO 安全链拦截 ⇒ 返回 HTTP 200 + state:401 的**假健康**，**不能当验收依据**（真健康走业务入口，见 TODO #40 / #61）                 # {"status":"UP"}
 curl -s "http://localhost:8848/nacos/v1/ns/instance/list?serviceName=mall-resource"  # hosts 非空、healthy:true
 ```
 
@@ -99,7 +101,7 @@ curl -s "http://localhost:8848/nacos/v1/ns/instance/list?serviceName=mall-resour
 
 1. **应用服务必须配 restart 策略**——否则一次瞬时故障就永久下线，"悄悄挂 2 天没人发现"
 2. **大版本部署避免整栈同时重启**——SkyWalking 全面接入 + 11 服务并发启动是本次竞态的诱因；可分批发灰度启动
-3. **restart 只解决"崩溃拉起"，不解决"运行但坏了"**——还需要健康检查探针 + 监控告警（一个 cron 每 5 分钟 curl 存活检测即可起步）
+3. **restart 只解决"崩溃拉起"，不解决"运行但坏了"**——还需要健康检查探针 + 监控告警（一个 cron 每 5 分钟 curl 存活检测即可起步）（✅ **2026-09-12 已落地**：#61 外部端到端探活 —— `deploy/scripts/ops/e2e_probe.py` + 新机 cron 每 5 分钟，9/9 PASS）
 4. **Nacos 2.x 注册是快速失败的**——gRPC 握手（9848 端口）在高压下可能超时，属于已知行为，运维上靠 restart 兜底
 5. **排查方法论**：先看崩溃日志（`docker logs`）再下结论——本例日志直接指向 `NacosException`，避免了在 Flyway/数据库方向浪费时间
 

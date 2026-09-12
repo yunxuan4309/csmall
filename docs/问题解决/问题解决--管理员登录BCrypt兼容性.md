@@ -53,6 +53,7 @@ admin 数据源回退读 YML 中的 `${my.server.addr}:3306`，而 `ALIYUN_SERVE
 ## 二、根因
 
 **Windows JDK BCrypt `$2a$` 哈希与 Debian JDK 21 BCrypt 实现不兼容。**
+> ⛔ **已被 2026-09-03 实验证伪**（见文首更正标注；真正的归因见 [[问题解决--BCrypt错误归因复盘]]）⇒ 本节保留供复盘，**不要当结论用**。
 
 Spring Security Crypto 的 BCrypt 实现依赖底层 `javax.crypto` 和 `java.security`，不同 JDK 发行版的内置安全 Provider（如 SunJCE、BC 等）在处理 `$2a$` 版本的 BCrypt 时行为可能不一致。
 

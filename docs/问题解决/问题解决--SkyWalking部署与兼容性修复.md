@@ -2,7 +2,7 @@
 
 > 日期：2026-07-31 ~ 2026-08-01
 > 服务器：阿里云 ECS 4C16G，Docker Compose
-> 涉及：21 个容器（新增 2 个 SkyWalking + 11 服务加 Agent）
+> 涉及：21 个容器（新增 2 个 SkyWalking + 11 服务加 Agent）（⚠️ 2026-09-12 口径澄清：调优前 **20** → 调优后 **22**（2026-07-31 快照）；今日老机为 **21** 容器 —— 差异来源见 [[项目上下文文档]]）
 
 ---
 
@@ -45,7 +45,7 @@ Agent 通过 `/data/csmall/skywalking-agent:/skywalking-agent:ro` 卷挂载。
 
 **根因**：`eclipse-temurin:21-jre-alpine` 使用 musl libc（非 glibc），SkyWalking Agent 中部分加密算法（MD5）与 musl 的 `MessageDigest` 实现不兼容。连 Nacos 配置中心校验都因为 MD5 失败而罢工。
 
-**修复**：11 个 Dockerfile 基础镜像从 `eclipse-temurin:21-jre-alpine` 改为 `eclipse-temurin:21-jre`（Debian）。副作用：镜像体积增加 ~50MB/服务，启动时间从 ~30s 增加到 ~9 分钟。
+**修复**：11 个 Dockerfile 基础镜像从 `eclipse-temurin:21-jre-alpine` 改为 `eclipse-temurin:21-jre`（Debian）。副作用：镜像体积增加 ~50MB/服务，启动时间从 ~30s 增加到 ~9 分钟（⚠️ 口径澄清：该 9 分钟是 **11 个服务并发启动、自镜像就绪到全部可用**的总耗时，**不是单服务**启动时间，与 §七 表口径一致）。
 
 ---
 
