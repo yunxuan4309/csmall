@@ -65,7 +65,7 @@ Caused by: com.alibaba.nacos.api.exception.NacosException: Client not connected,
 
 1. **启动竞态（根本原因）**：07-31 整栈 + SkyWalking 同时部署，4核16G 服务器负载过高，resource 的 Nacos gRPC 客户端连接（端口 **9848** = 主端口 8848 + 1000，需完成"能力握手"）被拖慢到 50s 仍未完成（客户端处于 `STARTING`）。Spring Cloud Alibaba 的 `NacosServiceRegistry.register()` 是**快速失败**的——客户端未就绪即抛异常，导致应用启动中止。Nacos 本身早已就绪，因此这是**时间敏感型竞态**，而非配置错误。
 
-2. **缺失 restart 策略（恶化因素）**：resource 是 11 个应用服务中唯一漏配 restart 的服务，崩溃后 Docker 不重试，直接永久下线 2 天。
+2. **缺失 restart 策略（恶化因素）**：resource 是**本次被发现的**那个（✅ 2026-09-12 按快照核对：11 个应用服务里只有 5 个配了 `restart: on-failure`，**其余 6 个都没配**，resource 只是第一个暴露问题的 —— 上文「mall-resource 等 6 个」才是准确口径，原文「唯一」有误），崩溃后 Docker 不重试，直接永久下线 2 天。
 
 **事后验证**：服务器空闲状态下重启 resource，**29 秒**启动成功、Nacos 注册干净无报错，证明配置正确、纯属负载下的竞态。
 
