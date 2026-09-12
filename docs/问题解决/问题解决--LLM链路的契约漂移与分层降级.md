@@ -68,7 +68,7 @@
 | # | 现象 | 排查 | 根因 | 处置 |
 |---|---|---|---|---|
 | **1** | 部署后立刻打接口 **503 `No servers available for service: mall-ai`** | 打印请求时刻与启动日志时刻 | `sleep 45` 早于实际启动：本次 **44.7s 启动 + 注册**，请求在 13:13:02 发出，实例 13:13:09 才注册完 → 正好卡在**"已反注册、还没重注册"的空窗** | **改为轮询日志判据 `Started MallAiWebApiApplication`**（或 grep 到再等 5s）；**不要靠固定睡眠** |
-| **2** | 偶发 **500**（`AccessDeniedException` + "响应已提交"） | ⭐ **3 次观测 + 3 组定量实验**：① 失败请求到 mall-ai 时**没有 JWT 解析日志**（匿名）；② **经网关 8 次 + 直连 4 次 + 流式并发 6 次 = 18/18 客户端全 200**；③ 并发实验里**客户端 6/6 全成功，日志却仍出现 2 次 `AccessDenied`** | **它是内部 ERROR 派发的次生现象**：某请求先失败（响应已提交，**典型是 SSE 流**）→ Tomcat 转 `/error` → Spring Security **在 ERROR 派发上又跑一遍过滤器链**，而 JWT 过滤器是 `OncePerRequestFilter`（**默认跳过 ERROR 派发**）→ 匿名 → `AuthorizationFilter` 拒绝 `/error` → 噪声 | 登记 **#62**：候选修法 = **放行 `DispatcherType.ERROR`**（属公共 Security 配置，需单独窗口 + 全服务回归）+ SSE 收尾容错；**与 #53 可能同源，建议同窗口** |
+| **2** | 偶发 **500**（`AccessDeniedException` + "响应已提交"） | ⭐ **3 次观测 + 3 组定量实验**：① 失败请求到 mall-ai 时**没有 JWT 解析日志**（匿名）；② **经网关 8 次 + 直连 4 次 + 流式并发 6 次 = 18/18 客户端全 200**；③ 并发实验里**客户端 6/6 全成功，日志却仍出现 2 次 `AccessDenied`** | **它是内部 ERROR 派发的次生现象**：某请求先失败（响应已提交，**典型是 SSE 流**）→ Tomcat 转 `/error` → Spring Security **在 ERROR 派发上又跑一遍过滤器链**，而 JWT 过滤器是 `OncePerRequestFilter`（**默认跳过 ERROR 派发**）→ 匿名 → `AuthorizationFilter` 拒绝 `/error` → 噪声 | 登记 **#62**：候选修法 = **放行 `DispatcherType.ERROR`**（属公共 Security 配置，需单独窗口 + 全服务回归）⇒ ✅ **已收口（2026-09-12）**：真实修法是 `.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()` —— **只放行 ERROR 不够**（见 [[问题解决--压测结论的可信性（先证伪干扰项与工具自身）]] §二）+ SSE 收尾容错；**与 #53 可能同源，建议同窗口** |
 | **3** | Agent 回答正确但 **`products: []`**（前端没商品卡片） | 对照"回答用了哪些商品"与工具轨迹 | 模型遇到**与历史相似的问题**时**直接引用历史商品作答**，本轮**没调工具** → 没有 hits | ① system 提示词加规则；② **首轮 `tool_choice=required`**（实验 M 证明支持；但**只对"商品意图"用** —— 永远 required 会让"你好"也去检索） |
 | **4** | 库存回答有**张冠李戴**风险（模型先猜 `spuId` 去查） | 看工具返回的 observation 里有什么 | `get_stock` 的 observation **没带商品名** → 模型只能靠猜的 id 自圆其说 | 工具先 `getSpuById` 确认，observation 增加 **`spuName`**；SPU 不存在**直接报错**（实测：模型编造的 `spuId=1001` 被工具优雅拒绝 → 审计 `ok=false` → **循环继续**，不炸） |
 
@@ -126,7 +126,7 @@ Agent 的正确性主要在 **循环控制 / 事件顺序 / 降级策略** —�
 |---|---|---|---|
 | **死参数** | `temperature`（`DeepSeekAiClient:82` / `:131`、`ChatServiceImpl:369` 的 SSE 分支 `0.7`） | 官方：**思考模式下 `temperature` 不生效**（设了不报错）→ 一直是死参数 | 删除或注释说明，避免后人以为"调了温度" |
 | **死配置** | `compare-model`（`AiProperties.java:22` + `application.yml:27`） | 全仓 grep `compareModel`/`compare-model` **只命中定义处与 yml 各一次** → **零引用**（`ProductCompareServiceImpl` 实际用 `chat-model`） | ✅ 删除（用户 2026-09-10 确认） |
-| **死代码** | `DeepSeekAiClient.embed / embedBatch`（约 55 行，含 `doEmbed`） | **无任何注入点使用 `AiClient` 的 embed**（`RagServiceImpl:48/84`、`VectorSyncServiceImpl:36/77/148` 都直接注入 `SiliconFlowEmbeddingClient`）；而 `DeepSeekAiClient.embed` 打的是 **DeepSeek baseUrl + 硅基流动的 model + DeepSeek 的 apiKey** → **三样对不上，真被调用必然失败** | 🟡 顺手清理（可延后），或至少 `@Deprecated` + 注明"embedding 请用 `SiliconFlowEmbeddingClient`" |
+| **死代码**（✅ **已删除**，见 §六·2.4 第 9 项） | `DeepSeekAiClient.embed / embedBatch`（约 55 行，含 `doEmbed`） | **无任何注入点使用 `AiClient` 的 embed**（`RagServiceImpl:48/84`、`VectorSyncServiceImpl:36/77/148` 都直接注入 `SiliconFlowEmbeddingClient`）；而 `DeepSeekAiClient.embed` 打的是 **DeepSeek baseUrl + 硅基流动的 model + DeepSeek 的 apiKey** → **三样对不上，真被调用必然失败** | 🟡 顺手清理（可延后），或至少 `@Deprecated` + 注明"embedding 请用 `SiliconFlowEmbeddingClient`" |
 
 ---
 
@@ -268,4 +268,4 @@ cooxiao:
 - **源文档（保留不动）**：[[AI模型名停用风险与thinking参数改造方案]]（#58 全过程 + 13 格实验 + 话术）· [[AI导购Agent实现详解]]（实现说明书：排障手册 / 4 条踩坑 / 决策清单）· [[AI导购Agent升级方案]]（计划与清单）
 - **原理与归档**：[[TODO第三批实现与原理-1]]（§一 选型 / §三 实现 / §五 13 格实验）· [[TODO已完成]]（§十四 #58 · §十六/§十七 #32）
 - **同族问题解决文档**：[[问题解决--搜索双索引与降级分层]]（**降级分层**的另一半：检索侧）· [[问题解决--资源治理与流量防护]]（#2+#34 限流 + 并发闸门 + 每用户频控）· [[问题解决--请求校验与静默失效]]（"设了但不生效"的另一种形态）· [[问题解决--AI导购模块部署]]（Nacos 双注册 / Dubbo 端口）· [[问题解决--本地双实例分布式锁验证方法]]（**同一类环境限制**：Mockito inline 无法 attach → 改手写假件；以及"验证方法本身要经得起推敲"）
-- **待办**：[[TODO文件]] **#62**（`DispatcherType.ERROR` 放行，P2）· **#65**（库存扣减 MQ 链路失效 —— 与本篇无关但同属"不崩但不对"）
+- **待办**：~~[[TODO文件]] **#62**（`DispatcherType.ERROR` 放行，P2）· **#65**（库存扣减 MQ 链路失效）~~ ✅ **两项均已收口（2026-09-12）**：#62 已修复验收、#65（含 #70 A~E）已部署验收 —— 与本篇无关但同属"不崩但不对"）

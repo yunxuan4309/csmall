@@ -66,7 +66,7 @@ R1~R4 加固（认证/持久化/内存上限/自定义 conf）
 bind 0.0.0.0            # 容器内监听（Docker 网络隔离，非裸奔）
 port 6379
 requirepass <密码>       # R1: 认证
-masterauth <密码>        # 主从/哨兵互连用（本项目单机暂用，为 #9 哨兵铺路）
+masterauth <密码>        # 主从/哨兵互连用（✅ **现状：#9 已跨机落地** —— 主从 + 3 哨兵、故障转移演练选主 6.1s / 客户端 9.1s 自愈，见 [[TODO已完成]] §十三）
 maxmemory 256mb         # R3: 内存硬顶（实测仅 21 键，256m 充裕）
 maxmemory-policy volatile-lru  # 只淘汰带 TTL 的键 → 保护永久购买标记 reseckill
 appendonly yes          # R2: AOF
@@ -208,7 +208,7 @@ if (isSeckillOrder(order)) {
 | 对账为什么分运行期+凌晨两层？ | 只放凌晨 → 白天漂移持续伤用户（看到有货买不到/超卖）；只放高峰期 → 全量比对有并发干扰。运行期轻量纠偏 + 凌晨彻底校准 |
 | 对账"以 DB 为准"为什么不超卖？ | 即使回补让 Redis 短暂偏大，DB 条件扣减 `seckill_stock>=qty` 仍是最终防线（rows==0 不成交） |
 | 对账会误伤合法预扣吗？ | 运行期 \|diff\|==1 连续 3 次才修，规避 Redis 刚 DECR/MQ 未扣的瞬时差 |
-| 多实例并发对账？ | 单机无此问题；秒杀集群化后需分布式锁（复用 #4 定时任务锁思路）|
+| 多实例并发对账？ | ✅ **已实现**：`SeckillReconcileTask` 已用 `RedisLockUtils`（`LOCK_ONLINE`/`LOCK_DAILY`）做**双实例互斥**（#4 定时任务锁思路）；原文「单机无此问题」为过期口径 |
 
 ### 4.9 面试话术
 

@@ -233,7 +233,7 @@ curl -s 'http://localhost:9200/cool_shark_mall_index2/_search'
 
 > ⚠️ 以上修复只在运行中的容器内生效。如果 ES 容器再次重建（`docker compose up -d`），IK 会再次丢失。
 
-**需以 `ecs-user` 登录服务器执行**：
+✅ **已落地（2026-09-12 复核）**：该挂载早已在 `deploy/docker/docker-compose.yml` 里（`/data/csmall/es-plugins/analysis-ik:/usr/share/elasticsearch/plugins/analysis-ik`），姊妹篇 [[问题解决--ES搜索数据恢复与IK字典修复]] §四 也已标 ✅ ⇒ 下面的操作步骤留作历史。（原文：~~需以 ecs-user 登录服务器执行~~）
 
 ```bash
 # 1. 宿主机创建插件目录

@@ -16,7 +16,7 @@
 
 | 方法 | 行号 | 问题 |
 |------|------|------|
-| `doRegister` | 50 | 缺少 @RequestBody |
+| `doRegister` | 50 | ~~缺少 @RequestBody~~ ✅ **已修复（2026-09-12 复核：全 26 项均已加 `@Valid @RequestBody`，见文末结论）** |
 | `renewPassword` | 76 | 缺少 @RequestBody |
 
 ---
