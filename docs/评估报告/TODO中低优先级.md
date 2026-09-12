@@ -487,6 +487,26 @@
 📄 **方案**：**[[AI并发测试方案]]**（③ 全册 + **§九 脚本强化 / §十 首轮实测**）+ [[Python模拟数据与数据隔离方案]]（§五 执行顺序 ① ② ④ ⑤ ⑥ · **§〇.2 §F 复核方法 F6~F8** · §G **G11**）+ [[演示录像操作手册]] + 🆕 执行记录 [[TODO第三批实现与原理-2]] 
 
 
+---
+
+### 🗓️ 今晚执行清单（2026-09-12 晚 · 目标：#67 的 ④⑤⑥ + #68 兜底）
+
+> **顺序是硬性的**：**#68（快照兜底）→ ④（秒杀真跑 + 恢复）→ ④复核 → ⑤（批次清理的 Redis 部分）→ ⑥（基线比对）**。低峰窗口、**一次只动一个东西**、每步留回滚点。
+> **执行位 = 新机** `/tmp/sim/`（脚本已同步，`simulate_data.py` md5 应为 `536d6091acb8d7fbee6dfd91a6720b7c`）；**凭据只走环境变量**（今日的 `/tmp/sim/.dbpw` 已按纪律删除，跑前重新传一次）。
+
+| # | 动作 | 命令要点 | 回滚 / 验收 |
+|---|---|---|---|
+| **0** | **备凭据**（新机） | 从老机 `/data/csmall/.env` 取 **`MYSQL_ROOT_PASSWORD`** 与 **`REDIS_PASSWORD`**（秒杀档要连 Redis）→ **经 stdin** 写入 `/tmp/sim/` 下的文件（`chmod 600`）；🔴 **`pwsh → ssh` 管道会带 CR**，落地后必须 `tr -d '\r'`（否则口令多一个不可见字符，报鉴权失败） | 跑完 `rm -f` 掉凭据文件 |
+| **1（#68）** | **快照先行**（老机，**须 `ecs-user`**） | `bash /data/csmall/backup/backup-db.sh` → **把文件名写进** `cs_mall_sim.sim_batch.dump_file` | 核对文件**存在且非空**（`ls -l` + `md5sum`）—— 这是 ④ **唯一的硬兜底** |
+| **2（#67④）** | **秒杀真跑**（新机） | ⚠️ **必须换新前缀 + 新号段**（复用 `testsim0912`/`1390100` 会撞预检）：<br>`SIM_DB_PASSWORD=… SIM_REDIS_PASSWORD=… SIM_USER_PREFIX=testsimsek SIM_PHONE_PREFIX=1391111 python3 /tmp/sim/simulate_data.py --days 1 --per-day 0 --users 5 --with-seckill --seckill-count 1`<br>（`--per-day 0` = 只建用户、**不跑漏斗**，让秒杀成为唯一变量） | 脚本**自动恢复**（Redis 三锁 + 预热库存 + DB 三值）→ 期望输出 `秒杀后恢复 1 次 / 校验未通过 0 次`；🔴 **绝不要加 `--no-seckill-restore`**；失败排查顺序：`--seckill-restore-wait`（默认 1.5s，MQ 异步回写要时间）→ 再看 **#68 的 dump** |
+| **3（④复核）** | **独立复核**（新机） | ① `python3 simulate_data.py --verify --batch <新批次>` ② `python3 verify_batch.py <新批次>` ③ 手工核 **`seckill.success`** / **`pms_sku.stock`** / **`pms_spu.sales`** / Redis 三锁与预热键 | 期望：**漏标 0**；`stock`/`sales` **回位原值**；三类锁**已不存在**；`success` 行已登记；⚠️ **金额不由服务端校验**（只认 `item.price`）⇒ "跑成功"≠"金额对"，务必看 `success` 行 |
+| **4（#67⑤）** | **批次清理补 Redis**（改代码） | 在 `clean()` 里补 **user 口径**的 Redis 精确删：按登记 user id 拼 `reseckill` / `ordered` / `orderLock`（**禁止 `--scan --pattern` 全删** —— 会误伤真实数据）；先 `--clean --batch <id>`（dry-run）看清单，再 `--apply` | dry-run 打印**将删的 key 清单**；`--apply` 后**全库 0 残留**（沿用 `clean()` 已有的 9 表自检 + 新增 Redis 自检） |
+| **5（#67⑥）** | **`sim_baseline` 基线比对** | 造数**前**写基线（各表行数 + 关键累加字段），清理**后**比对 → 差异必须**逐条可解释** | 差异项逐条归因并写进 `sim_batch.note`（DDL 已有，只差脚本写入） |
+| **6** | **收尾** | `docker ps` = **21** 容器全 Up · `AI_API_BASE_URL` 仍为 `https://api.deepseek.com` · `AI_AGENT_ENABLED=true` · 删凭据文件 · 若起过 mock 则停掉（新机 **9999 空闲 / 无 mock 进程**） | 与今天收尾同一套核对 |
+
+> 📌 **若今晚只够做一件事**：**做 1 + 2**（快照 + 秒杀真跑）—— 它同时收口 **#68** 与 **#67④**，价值最高；⑤⑥ 留到下次不影响主线。
+> 🔴 **两条已知陷阱（今天的实测教训）**：① **`--verify` 必须是今天之后的版本**（按批次口径），旧版会把别的批次算进来、报一堆假警报（今天实测 11 条）；② **秒杀会真扣 `stock`/`sales`**，而"**秒杀后恢复**"只按**脚本内快照**回写 ⇒ 中途失败（容器重启 / 网络断）**只能靠 #68 的 dump 救**，所以 1 必须在 2 之前。
+
 ### 60. Spring AI 引入评估（结论：暂不引入，前置 = Boot 全站升级）
 
  🟡 **P3（2026-09-10 评估，源自"模型配置能否适应更名/下架"的架构提问）**：
