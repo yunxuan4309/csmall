@@ -142,7 +142,7 @@
 | 构建 | `mvn -o -B -DskipTests -pl mall-seckill/mall-seckill-webapi -am package` → BUILD SUCCESS（21.9s） |
 | 测试 | `mvn -o -B -pl mall-seckill/mall-seckill-webapi -am -Dtest=MessageRetryTaskTest,RedisLockUtilsTest -Dsurefire.failIfNoSpecifiedTests=false test` → **9/9** |
 | 老机 | `jars/mall-seckill.jar` md5 `4a67ff76…` → `compose build mall-seckill` + `up -d` → 容器内 `/app/app.jar` md5 一致、`Started MallSeckillWebApiApplication in 64s` |
-| 新机 | `jars/mall-seckill.jar` 替换（旧件 root 所有 ⇒ `rm` 后 `cp`）→ ~~`compose build mall-seckill-2`~~（tag 仍 `:20260909`，**旧镜像按 id 保留可回滚**）→ `up -d`（⚠️ **2026-09-12 更正（G14）**：`mall-seckill-2` **故意没有 `build:` 段**（两台复用同一镜像）⇒ `docker compose build mall-seckill-2` **必然失败**且退出码被 `| tail -3` 吞掉；正确做法是构建共享的 **`mall-seckill`** 服务定义，再 `up -d mall-seckill-2`。以 [[第⑯批收口记录-2026-09-12]] §7.4 为准） → 容器内 md5 一致、`Started … in 78.6s` |
+| 新机 | `jars/mall-seckill.jar` 替换（旧件 root 所有 ⇒ `rm` 后 `cp`）→ ~~`compose build mall-seckill-2`~~（tag 仍 `:20260909`，**旧镜像按 id 保留可回滚**）→ `up -d`（⚠️ **2026-09-12 更正（G14）**：`mall-seckill-2` **故意没有 `build:` 段**（两台复用同一镜像）⇒ `docker compose build mall-seckill-2` **必然失败**且退出码被 `| tail -3` 吞掉；正确做法是构建共享的 **`mall-seckill`** 服务定义，再 `up -d mall-seckill-2`。以 [[第⑯批收口记录-2026-09-12-明细]] §7.4 为准） → 容器内 md5 一致、`Started … in 78.6s` |
 | **#69 证伪** | 采样"恢复窗口"内全量 `pms_spu.sales`：4 次动作命中 sku 6（内部 2=pms 2，无判别力）与 **sku 27（内部 5 → pms 15，有判别力）** ⇒ 销量只落**目标商品**、脚本"非目标 spu"告警 **0 次**（修复前 3 次实测次次告警）；终态 `SUM(sales)`=84 / `success`=59 / 残留订单 0 / 三类锁 0 |
 | **#64 证伪** | Job 日志覆盖 **12/12** sku；删掉 4 个永久 key 后 Job 于 **05:59:00** 打印 `11/12/13/14号sku库存数成功预热到缓存!`（= 带 TTL 的写分支），值取自 DB |
 | 顺带修掉 | 过时日志（`--with-seckill 未实现…本次跳过`）· 重复登记 `success` · `clean()` 残留自检全局口径 · `BASELINE_TABLES` 元组对当表名 · **预检挡下非法号段**（`162…` 不匹配 `^1[34589]…`，fail-fast 并给出原因） |
