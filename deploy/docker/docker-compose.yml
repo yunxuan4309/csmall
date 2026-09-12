@@ -593,6 +593,12 @@ services:
       # `docker compose up -d mall-ai` 即启用，**不用重编译 jar**；回滚同样只需改回 false。
       AI_AGENT_ENABLED: ${AI_AGENT_ENABLED:-false}
       AI_AGENT_MAX_ROUNDS: ${AI_AGENT_MAX_ROUNDS:-3}
+      # #31 向量检索开关（默认关 = ES 全文检索）。改 .env 的 AI_EMBEDDING_ENABLED=true 后
+      # `docker compose up -d mall-ai` 即启用，**不用重编译 jar**；回滚同样只需改回 false。
+      # ⚠️ 两种 relaxed-binding 写法都写上：G16 的教训是"配置改到影子 key 上 ⇒ 看似成功、实则零效果"，
+      #    多写一个不会有害，漏写一个就会静默不生效（届时启动日志会显示"自检：跳过（embedding-enabled=false）"）。
+      COOXIAO_AI_EMBEDDING_ENABLED: ${AI_EMBEDDING_ENABLED:-false}
+      COOXIAO_AI_EMBEDDINGENABLED: ${AI_EMBEDDING_ENABLED:-false}
       CUSTOM_FILE_UPLOAD_RESOURCE_HOST: http://8.156.77.197/
       JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -XX:+UseStringDeduplication"
     mem_limit: 1g
