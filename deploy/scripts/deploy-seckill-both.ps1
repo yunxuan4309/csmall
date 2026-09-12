@@ -14,6 +14,9 @@
 # 📌 本文件是 **UTF-8 with BOM**（PowerShell 5.1 读中文必需）——编辑时请保留 BOM，
 #    否则中文会按 ANSI 解析、脚本报「字符串缺少终止符」之类的怪错。
 
+# ⚠️ 踩坑记录（2026-09-12）：本仓库脚本里**不要用单字母函数名** —— PowerShell 的 `r`/`R` 是 `Invoke-History`
+#   的别名，`R $host @'...'@` 会被解析成"调用历史命令"，**静默空跑**（我因此让一段 5 步编排全部没执行，
+#   生产还停在"AI 指向 mock"的状态上）。本文件统一用 `Ssh-Run`。
 [CmdletBinding()]
 param(
     [switch]$CheckOnly,

@@ -415,7 +415,12 @@ ThreadingHTTPServer(("0.0.0.0", 9999), Handler).serve_forever()
 | 0 | 记录现场 | `docker inspect csmall-ai` 存下 `AI_API_BASE_URL`；Nacos 规则原文落盘 + 记 md5 | 结束时逐条比对回位 |
 | 1 | 起 mock（新机） | `python3 /tmp/mock_llm.py --port 9999 --prompt-tokens 0 --completion-tokens 0` | 🔴 **0 token** 是为了**不污染日预算**（§十 问题 5） |
 | 2 | 挂 override（老机） | `docker compose -f docker-compose.yml -f docker-compose.mock-llm.yml up -d mall-ai` | 先核对 override 里 base-url = 新机内网 |
-| 3 | 放开入口限流 | Nacos `ai-chat` 阈值 5 → 200 | ⚠️ **热改后立刻 GET 可能读到旧快照，等 1~2 秒再复核**（§十 的 3 个读数陷阱之一） |
+| 3 | 放开入口限流 | Nacos `ai-chat` 阈值 5 → 200 | ⚠️ **热改后立刻 GET 可能读到旧快照，等 1~2 秒再复核**（§十 的 3 个读数陷阱之一）<br>🔴🔴 **dataId 必须逐字对齐**：应用订阅的是 **`mall-ai-flow-rules`（无扩展名）**，而仓库文件叫 **`mall-ai-flow-rules.json`** —— 2026-09-12 我把配置 PUT 到带 `.json` 的 dataId：Nacos 返回 `true`、GET 也读到 200，**但应用毫无变化**（其 `notify-ok` 的 md5 仍是旧规则的）。判据：**改完必须看应用侧 `notify-ok` 的新 md5**（`docker logs csmall-ai \| grep notify-ok`），只看 Nacos 返回值会被骗。 |
+| 3b | **先验证限流真的放开了**（别急着压） | 小档探针：`--steps 50 --duration 20`，看**成功 RPS 是否 > 5** | 若成功 RPS 恒定 ~5 ⇒ 规则**没生效**（回去查 dataId + 应用日志 md5），此时压全阶梯纯属浪费 |
+
+> 🟡 **2026-09-12 首次尝试的状态（如实记录）**：mock 起停、compose override、Nacos 改/还原**均已跑通并核对**；但**阶梯未跑成** —— 我的编排脚本把函数命名为 `R`，而 PowerShell 里 **`r`/`R` 是 `Invoke-History` 的别名** ⇒ 5 段远程命令**全部空跑**（既没压测，**也没执行内嵌的还原**）。发现后**第一时间手工还原并逐项核对**（Nacos 回 5、影子配置删除、mall-ai 回真实出口、mock 停）。
+> ⇒ **两条纪律**：① 编排脚本**不用单字母/易撞别名的函数名**（用 `Ssh-Run`）；② **还原动作别内嵌在长作业里** —— 独立一步、执行后立刻核对（否则编排一坏，生产会一直指向 mock）。
+> ⏭️ **待重跑**：本项两个目标（75/150 档 + 单次占槽）**未受影响**，随时可开窗口重做。
 | 4 | 压测（新机） | `SIM_USER_PREFIX=testsimai python3 /tmp/load_test.py --mode ai --link pipeline --users 800 --steps 20,50,75,100,150 --duration 45 --json ~/ai2.json`；`--link agent` 再跑一遍（两条链路**不混着讲**） | 只看**成功 RPS**（§十 问题 7：总 RPS 会被毫秒级失败抬高） |
 | 5 | 量占槽 | 每档记录「成功数 / 峰值并发」+ p50/p99 ⇒ 反推**单次调用占槽** | 与 20/50 两档交叉验证；解释不了就如实写"仍未解释" |
 | 6 | 恢复 | Nacos 改回 5 → 移除 override → `docker compose -f docker-compose.yml up -d mall-ai` → **核对 base-url 已回真实地址** | 与步 0 现场逐条比对（`docker inspect` + Nacos md5） |
