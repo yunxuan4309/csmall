@@ -2,7 +2,7 @@
 
 > **状态**: ✅ 已执行完成（2026-08-22 确认：调优全部生效，§6.1 compose 已同步至 `/data/csmall/docker-compose.yml`）
 > **调优日期**: 2026-08-04
-> **服务器**: 阿里云 ECS 4C16G, Docker Compose 21 容器
+> **服务器**: 阿里云 ECS 4C16G, Docker Compose 21 容器（⚠️ 调优时点 2026-08-04、**仅老机**；现为**两机合并 26 服务 / 12 个应用实例** —— §4.2 的「11 个微服务」是当时口径）
 > **调优前内存**: 13Gi / 14Gi (93%)
 > **Seata+OAP 后**: 12Gi / 14Gi (86%) — 释放约 1 GiB
 > **微服务重建后**: 10Gi / 14Gi (71%) — 再释放约 2 GiB
@@ -141,7 +141,7 @@ skywalking-oap:
 |------|--------|--------|------|
 | -Xmx | 1024m | 512m | -512m |
 | -Xms | 512m | 256m | -256m |
-| RSS (容器内存) | 1.17 GiB | 0.28 GiB | **-0.89 GiB** |
+| RSS (容器内存) | 1.17 GiB | **1.08 GiB** | **-0.09 GiB** |（⚠️ 2026-09-12 更正：原写 0.28 GiB / -0.89 GiB，与 §5.1/§5.2 的实测（1.17 → 1.03 → 1.08）矛盾 ⇒ 以 §5.1 为准）
 | 内存占比 | 8.3% | 1.9% | -76% |
 
 ---
@@ -182,7 +182,7 @@ JAVA_TOOL_OPTIONS: "-XX:MaxDirectMemorySize=64m -XX:ReservedCodeCacheSize=64m -X
 | `ReservedCodeCacheSize=64m` | 限制 JIT Code Cache | ~30MB/服务 |
 | `UseStringDeduplication` | G1 字符串去重 | ~20MB/服务 |
 
-> ⚠️ 微服务需重建(Dockerfile ENTRYPOINT 不变, 仅追加 JAVA_TOOL_OPTIONS 环境变量), 调优前已完成 docker-compose.yml 编辑, 下次部署时自动生效。
+> ✅ **已完成 —— 2026-08-04 随微服务重建生效**（见 §4.3 / §七）。（原文：~~微服务需重建…下次部署时自动生效~~）
 
 ### 4.3 实际效果（微服务重建后预热 5 分钟）
 
@@ -255,7 +255,8 @@ mall-resource      ████ 0.43           ███ 0.33
 
 调优后的 `docker-compose.yml` 已上传到服务器 `/home/<AI账号>/docker-compose.yml` (本地同步: `deploy/docker/docker-compose.yml`)。
 
-微服务重建已通过 `docker compose -f /home/<AI账号>/docker-compose.yml --project-directory /data/csmall up -d` 完成。但 `/data/csmall/docker-compose.yml` 仍是旧版本。
+✅ **2026-08-22 确认：compose 已同步完成**（原文：~~微服务重建已通过 … 完成。但 /data/csmall/docker-compose.yml 仍是旧版本。~~）
+> ⚠️ 2026-09-12 补充：现为**两机共用的单一文件** `deploy/docker/docker-compose.yml`（两台服务器的 `/data/csmall/docker-compose.yml` 就是这一份）⇒ **不再存在两处版本差异**。
 
 **需手动执行**(以 ecs-user 登录, 下次方便时):
 
