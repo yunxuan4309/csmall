@@ -86,7 +86,7 @@
 | Flyway 配置 | `enabled: true` + `baseline-on-migrate: true` + `baseline-version: 0`；迁移目录 `<模块>/src/main/resources/db/migration/`（**mall-resource 无 `-webapi` 后缀**） |
 | 🔴 **五层命名（最易错）** | 同一个服务实测有 **5 个不同名字**，而 `docker restart` **只认容器名**：容器名 **`csmall-ums`** ｜ compose `service:` 名 `mall-ums` ｜ 镜像名 `csmall-mall-ums` ｜ SkyWalking 服务名 `mall-ums`（ENTRYPOINT `-DSW_AGENT_NAME=mall-ums`）｜ Maven 模块目录 `mall-ums/`。🔴 实测**老机 21 个容器里没有任何 `mall-*`** → 照文档旧写法执行会 `No such container` |
 | 数据基线 | `cs_mall_sim` **已建**（C-5 完成）· **`testsim%` = 0**（旧前缀 `test_sim_%` 亦为 0）· 全库 **0 外键** · 在售 SKU **36** 个 / `stock>0` 的 SKU **37** 个 / 库存合计 **1456** 件 |
-| 代码/分支 | `master` **ahead 3**（`6aafb1a` 交接章节 + `75f9dfb` 标识 + `0116001` §六；**未推送，等用户确认**）；⚠️ mall-ai 的"降级 + 启动自检"改动**仍未部署**（与本方案无关） |
+| 代码/分支 | `master` **ahead 3**（`6aafb1a` 交接章节 + `75f9dfb` 标识 + `0116001` §六；**未推送，等用户确认**）；⚠️ mall-ai 的"降级 + 启动自检"改动**已部署**（2026-09-12 更正：jar 时间晚于修复提交）（与本方案无关） |
 
 ### C. 待办清单（★ = **用户执行**，其余 AI 完成）
 
@@ -97,7 +97,7 @@
 | 2 | 🔴 **重建镜像并重建容器**让 Flyway 迁移生效<br>⚠️ **`docker restart` 无效！**（2026-09-11 实测踩到）—— 迁移文件在 **jar 里**，而 jar 是 `COPY` 烘进镜像的（`/data/csmall/dockerfiles/mall-*.Dockerfile` → `COPY mall-<svc>.jar /app/app.jar`，构建上下文 `/data/csmall/jars/`）。容器重启只是**用旧镜像跑旧 jar** → Flyway 报 `Schema is up to date. No migration necessary.` → 新迁移永不执行。<br>**正确步骤**：① 本地 `mvn -o -B -DskipTests -pl <4 个模块> -am package` ② scp 4 个 jar → `/data/csmall/jars/`（改名 `mall-ums.jar` / `mall-order.jar` / `mall-seckill.jar` / `mall-resource.jar`）③ 服务器 `docker compose build mall-ums mall-order mall-seckill mall-resource` ④ `docker compose up -d mall-ums mall-order mall-seckill mall-resource`<br>⚠️ 容器名是 `csmall-*`（`docker restart` 只认容器名）；⚠️ `/data/csmall/jars/` **ai-deepseek 不可写，须 ecs-user** | ★用户 | ✅ **已完成**（2026-09-11 19:05；4 库迁移 V3/V7/V6/V2 全部 success=1，9 列就位 —— 复核实录见 §F） |
 | 3 | 脚本改「**按登记表回填 `data_source`**」+ **撤回**借用字段（`tag=SIM`、订单项 `data={"sim":…}`） | AI | ✅ **已完成**（新增 `backfill()` / `verify_backfill()`；借用字段已撤回；顺带修掉 `oms_payment_record` 漏删） |
 | 4 | 执行前**只读核对**：9 张表是否已存在 `data_source`（存在则先决策，别硬跑迁移） | AI | ✅ **已完成**（实测 6 个 schema **0 个** `data_source` 列 → 迁移可安全执行） |
-| 5 | 在**老机**建影子库（跑 `init_sim_db.sql`） | ★用户 | ⏳ 待做 |
+| 5 | 在**老机**建影子库（跑 `init_sim_db.sql`） | ★用户 | ✅ **已完成（2026-09-11 晚：C-0~C-8 全部完成 + C-7 校准 + C-8 清理演练）** |
 | 6 | **即时快照**：老机执行 `/data/csmall/backup/backup-db.sh`（复用 #29 脚本；🔴 `ai-deepseek` 对 `/data/csmall/backup` **无写权限**（实测 `Permission denied`）→ **必须你用 `ecs-user` 执行**）<br>ℹ️ cron 每天 02:30 已有备份（`cs_mall_20260911_0230.sql.gz` 52K），但造数前需**当下**再打一份；实测六库 gz 后仅 ~52KB，成本可忽略 | ★用户 | ⏳ 待做 |
 | 7 | **校准写链路**：`--days 1 --per-day 50`（约 2~3 单）→ 校准注册正则 / 加购下单字段 / 订单登记 / 拿 token | ★用户跑 · AI 复核 | ⏳ 待做 |
 | 8 | **dry-run 清理演练**（清理 → 比对照基线） | ★用户 · AI 复核 | ⏳ 待做 |
